@@ -7,25 +7,42 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import butterknife.bindView
 import com.jakewharton.rxbinding.view.clicks
+import com.jakewharton.rxbinding.widget.textChanges
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.toast
 import com.unhappychoice.norimaki.model.AccessToken
 
 class SettingFragment: Fragment() {
+  val tokenEdit: EditText by bindView(R.id.token)
+  val saveButton: Button by bindView(R.id.save)
+
   override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
     val view = inflater.inflate(R.layout.fragment_setting, container, false)
+    return view
+  }
 
-    val token = view.findViewById(R.id.token) as EditText
-    val button = view.findViewById(R.id.save) as Button
+  override fun onResume() {
+    super.onResume()
+    setupBinding()
+  }
 
-    token.setText(AccessToken(activity).value())
+  private fun setupBinding() {
+    if (isSetupBinding) { return }
 
-    button.clicks()
-      .map { AccessToken(activity).store("${token.text}") }
+    tokenEdit.setText(AccessToken(activity).value())
+    tokenEdit.textChanges()
+      .doOnNext{ saveButton.setEnabled("$it" != "") }
+      .subscribe()
+
+    saveButton.clicks()
+      .map { AccessToken(activity).store("${tokenEdit.text}") }
       .doOnNext { activity.toast("Stored token: ${it.value()}") }
       .subscribe()
 
-    return view
+    isSetupBinding = true
   }
+
+  private var isSetupBinding = false
 }
