@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settingFragment"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="10dp"
+        android:text="API Token"
+        android:gravity="center_vertical"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="20dp"
+        android:text="Get From https://circleci.com/account/api"
+        android:autoLink="web"/>
+
+    <EditText
+        android:id="@+id/token"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"/>
+
+    <Button
+        android:id="@+id/save"
+        android:layout_gravity="center_horizontal"
+        android:layout_width="240dp"
+        android:layout_height="60dp"
+        android:text="Save"/>
+    
+</LinearLayout>
