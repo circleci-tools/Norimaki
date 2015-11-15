@@ -12,6 +12,7 @@ import com.jakewharton.rxbinding.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.adapter.BuildAdapter
 import com.unhappychoice.norimaki.api.CircleCIAPIClient
+import com.unhappychoice.norimaki.extension.toast
 import com.unhappychoice.norimaki.model.Build
 import rx.android.schedulers.AndroidSchedulers
 import rx.lang.kotlin.ReplaySubject
@@ -51,17 +52,17 @@ class RecentBuildsFragment: Fragment() {
       }
 
     loadMore()
-
     isSetupBinding = true
   }
 
-  private fun loadMore() {
+  private fun loadMore() =
     client.getRecentBuildsAcross(limit = 20, offset = page * 20)
+      .map { it.forEach { builds.onNext(it) } }
+      .observeOn(AndroidSchedulers.mainThread())
       .subscribe {
-        it.forEach { builds.onNext(it) }
         page++
+        activity.toast("Loaded recent builds")
       }
-  }
 
   private var inflater: LayoutInflater? = null
 
