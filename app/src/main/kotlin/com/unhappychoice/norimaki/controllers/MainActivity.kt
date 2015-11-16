@@ -36,7 +36,7 @@ public class MainActivity : ActionBarActivity() {
   }
 
   private fun hasFragments(): Boolean {
-    return fragmentManager.getBackStackEntryCount() != 0
+    return fragmentManager.getBackStackEntryCount() > 1
   }
 
   private fun showFinishConfirmation() {

@@ -39,7 +39,7 @@ class RecentBuildsFragment: Fragment() {
     buildList.addFooterView(footerView)
     buildList.adapter = adapter
     buildList.itemClicks()
-      .doOnNext { i -> activity.pushFragmentToStack(R.id.container, BuildFragment())}
+      .doOnNext { i -> activity.pushFragmentToStack(R.id.container, BuildFragment()) }
       .subscribe()
 
     loadButton.clicks()
