@@ -8,9 +8,11 @@ import android.view.ViewGroup
 import android.widget.ListView
 import butterknife.bindView
 import com.jakewharton.rxbinding.view.clicks
+import com.jakewharton.rxbinding.widget.itemClicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.adapter.BuildAdapter
 import com.unhappychoice.norimaki.api.CircleCIAPIClient
+import com.unhappychoice.norimaki.extension.pushFragmentToStack
 import com.unhappychoice.norimaki.extension.toast
 import com.unhappychoice.norimaki.model.Build
 import rx.android.schedulers.AndroidSchedulers
@@ -18,6 +20,7 @@ import rx.lang.kotlin.ReplaySubject
 
 class RecentBuildsFragment: Fragment() {
   override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    super.onCreateView(inflater, container, savedInstanceState)
     this.inflater = inflater
     return inflater.inflate(R.layout.fragment_recent_builds, container, false)
   }
@@ -35,6 +38,9 @@ class RecentBuildsFragment: Fragment() {
 
     buildList.addFooterView(footerView)
     buildList.adapter = adapter
+    buildList.itemClicks()
+      .doOnNext { i -> activity.pushFragmentToStack(R.id.container, BuildFragment())}
+      .subscribe()
 
     loadButton.clicks()
       .doOnNext { loadButton.setEnabled(false) }
