@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.ListView
 import butterknife.bindView
 import com.jakewharton.rxbinding.view.clicks
@@ -59,10 +58,11 @@ class RecentBuildsFragment: Fragment() {
     client.getRecentBuildsAcross(limit = 20, offset = page * 20)
       .map { it.forEach { builds.onNext(it) } }
       .observeOn(AndroidSchedulers.mainThread())
-      .subscribe {
-        page++
-        activity.toast("Loaded recent builds")
-      }
+      .doOnNext { page++ }
+      .subscribe(
+        { res -> activity.toast("Loaded recent builds") },
+        { e -> activity.toast("Error occured during loading builds") }
+      )
 
   private var inflater: LayoutInflater? = null
 
