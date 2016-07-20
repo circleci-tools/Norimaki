@@ -1,0 +1,17 @@
+machine:
+  timezone: Asia/Tokyo
+  java:
+    version: oraclejdk8
+  environment:
+    GRADLE_OPTS: '-Dorg.gradle.jvmargs="-Xmx2G -XX:+HeapDumpOnOutOfMemoryError"'
+
+dependencies:
+  pre:
+    - echo y | android update sdk --no-ui --all --filter tools,platform-tools,build-tools-23.0.3,extra-android-m2repository,extra-android-support
+  cache_directories:
+    - ~/.android
+    - ~/android
+test:
+  override:
+    - ./gradlew assembleRelease
+    - cp -r app/build/outputs $CIRCLE_ARTIFACTS
