@@ -4,8 +4,8 @@
         android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
-    <TextView
-            android:id="@+id/buildTitle"
+    <android.support.v7.widget.RecyclerView
+            android:id="@+id/stepsView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"/>
 </com.unhappychoice.norimaki.presentation.view.BuildView>
