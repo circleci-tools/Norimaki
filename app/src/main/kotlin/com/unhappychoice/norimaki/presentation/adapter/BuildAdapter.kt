@@ -10,14 +10,12 @@ import com.github.unhappychoice.circleci.response.Build
 import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
-import rx.subscriptions.CompositeSubscription
 
-class BuildAdapter(val context: Context): RecyclerView.Adapter<BuildAdapter.ViewHolder>() {
+class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.ViewHolder>() {
   val builds = Variable<List<Build>>(emptyList())
   val onClickItem = PublishSubject.create<Build>()
 

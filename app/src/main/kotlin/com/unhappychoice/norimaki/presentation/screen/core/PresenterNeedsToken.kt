@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.presentation.screen.core
 
-import android.content.Context
 import android.view.View
 import com.github.unhappychoice.circleci.CircleCIAPIClient
 import com.unhappychoice.norimaki.MainActivity
@@ -11,7 +10,7 @@ import mortar.MortarScope
 import mortar.ViewPresenter
 import javax.inject.Inject
 
-abstract class PresenterNeedsToken<T: View> : ViewPresenter<T>() {
+abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
   @Inject lateinit var activity: MainActivity
   val token by lazy { APITokenPreference(activity).token }
   val api by lazy { CircleCIAPIClient(token) }

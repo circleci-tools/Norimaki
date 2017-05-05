@@ -6,19 +6,16 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
-import rx.subscriptions.CompositeSubscription
 
-class BuildStepAdapter(val context: Context): RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
+class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
   val steps = Variable<List<BuildStep>>(emptyList())
   val onClickItem = PublishSubject.create<BuildStep>()
 

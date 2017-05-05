@@ -1,12 +1,11 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.unhappychoice.circleci.CircleCIAPIClient
 import com.github.unhappychoice.circleci.response.Build
 import com.unhappychoice.norimaki.ActivityComponent
-import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.*
-import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.extension.bindTo
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
+import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildView
@@ -17,7 +16,6 @@ import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
-import mortar.ViewPresenter
 import javax.inject.Inject
 
 class BuildScreen(val build: Build) : Screen() {

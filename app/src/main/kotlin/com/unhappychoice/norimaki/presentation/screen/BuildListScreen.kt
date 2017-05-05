@@ -1,19 +1,18 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.unhappychoice.circleci.CircleCIAPIClient
 import com.github.unhappychoice.circleci.response.Build
 import com.unhappychoice.norimaki.ActivityComponent
-import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.*
-import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.bindTo
+import com.unhappychoice.norimaki.extension.goTo
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import com.unhappychoice.norimaki.scope.ViewScope
 import dagger.Subcomponent
 import mortar.MortarScope
-import mortar.ViewPresenter
 import javax.inject.Inject
 
 class BuildListScreen : Screen() {
