@@ -6,7 +6,7 @@ import android.support.v7.app.AppCompatActivity
 import android.view.LayoutInflater
 import android.view.Menu
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
-import com.unhappychoice.norimaki.presentation.screen.BuildsScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.scope.ActivityScope
 import dagger.Provides
@@ -110,5 +110,5 @@ interface ActivityComponent {
 
   fun inject(activity: MainActivity)
   fun apiTokenScreenComponent(): APITokenScreen.Component
-  fun buildsScreenComponent(): BuildsScreen.Component
+  fun buildsScreenComponent(): BuildListScreen.Component
 }

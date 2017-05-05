@@ -1,13 +1,12 @@
 package com.unhappychoice.norimaki.extension
 
-import rx.Observable
-import rx.lang.kotlin.BehaviorSubject
-import rx.subjects.BehaviorSubject
+import io.reactivex.Observable
+import io.reactivex.subjects.BehaviorSubject
 import kotlin.reflect.KProperty
 
 class Variable<T>(value: T) {
   private var _value: T = value
-  private val _subject: BehaviorSubject<T> = BehaviorSubject(value)
+  private val _subject: BehaviorSubject<T> = BehaviorSubject.createDefault(value)
 
   var value: T by object {
     operator fun getValue(thisRef: Any?, property: KProperty<*>): T = _value
@@ -20,5 +19,5 @@ class Variable<T>(value: T) {
 
   fun asObservable(): Observable<T> = _subject
 
-  fun finalize() = _subject.onCompleted()
+  fun finalize() = _subject.onComplete()
 }

@@ -40,6 +40,6 @@ class APITokenScreen : Screen() {
       APITokenPreference(activity).token = token.value
     }
 
-    fun goToBuildList() = goTo(activity, BuildsScreen())
+    fun goToBuildList() = goTo(activity, BuildListScreen())
   }
 }
