@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import com.unhappychoice.norimaki.scope.ViewScope
@@ -32,14 +33,11 @@ class BuildScreen(val build: Build) : Screen() {
     @Provides @ViewScope fun provideBuild() = build
   }
 
-  @ViewScope class Presenter @Inject constructor() : ViewPresenter<BuildView>() {
-    @Inject lateinit var activity: MainActivity
+  @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildView>() {
     @Inject lateinit var build: Build
 
     val buildSubject = PublishSubject.create<Build>()
 
-    private val token by lazy { APITokenPreference(activity).token }
-    private val api by lazy { CircleCIAPIClient(token) }
     private val bag = CompositeDisposable()
 
     override fun onEnterScope(scope: MortarScope?) {

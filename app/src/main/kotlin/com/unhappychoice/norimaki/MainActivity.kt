@@ -72,7 +72,7 @@ class MainActivity : AppCompatActivity() {
   private fun getFlowContext(baseContext: Context): Context {
     return Flow.configure(baseContext, this)
       .dispatcher(KeyDispatcher.configure(this, Changer()).build())
-      .defaultKey(APITokenScreen())
+      .defaultKey(BuildListScreen())
       .keyParceler(GsonParceler())
       .install()
   }

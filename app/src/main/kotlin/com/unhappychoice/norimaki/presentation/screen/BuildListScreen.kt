@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import com.unhappychoice.norimaki.scope.ViewScope
@@ -23,10 +24,7 @@ class BuildListScreen : Screen() {
     fun inject(view: BuildListView)
   }
 
-  @ViewScope class Presenter @Inject constructor() : ViewPresenter<BuildListView>() {
-    @Inject lateinit var activity: MainActivity
-    private val token by lazy { APITokenPreference(activity).token }
-    private val api by lazy { CircleCIAPIClient(token) }
+  @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildListView>() {
     val builds = Variable<List<Build>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {
