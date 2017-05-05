@@ -16,6 +16,8 @@ import javax.inject.Inject
 
 class BuildListView(context: Context, attr: AttributeSet) : UseComponent, LinearLayout(context, attr) {
   @Inject lateinit var presenter: BuildListScreen.Presenter
+  private val adapter = BuildAdapter(context)
+  private val bag = CompositeDisposable()
 
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
@@ -33,13 +35,11 @@ class BuildListView(context: Context, attr: AttributeSet) : UseComponent, Linear
 
     adapter.onClickItem
       .subscribeNext { presenter.goToBuildView(it) }
+      .addTo(bag)
   }
 
   override fun onDetachedFromWindow() {
     presenter.dropView(this)
     super.onDetachedFromWindow()
   }
-
-  private val adapter = BuildAdapter(context)
-  private val bag = CompositeDisposable()
 }

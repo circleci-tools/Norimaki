@@ -17,6 +17,7 @@ import javax.inject.Inject
 
 class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, attr), UseComponent {
   @Inject lateinit var presenter: BuildScreen.Presenter
+  private val adapter = BuildStepAdapter(context)
   private val bag = CompositeDisposable()
 
   override fun onAttachedToWindow() {
@@ -40,6 +41,4 @@ class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, at
     presenter.dropView(this)
     super.onDetachedFromWindow()
   }
-
-  private val adapter = BuildStepAdapter(context)
 }

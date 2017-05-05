@@ -14,6 +14,7 @@ import dagger.Provides
 import dagger.Subcomponent
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.switchLatest
 import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import javax.inject.Inject
@@ -49,9 +50,8 @@ class BuildScreen(val build: Build) : Screen() {
     }
 
     fun getBuild() {
-      api.client().getBuild("unhappychoice", build.reponame!!, build.buildNum!!)
+      api.client().getBuild(build.username!!, build.reponame!!, build.buildNum!!)
         .subscribeOnIoObserveOnUI()
-        .withLog()
         .bindTo(buildSubject)
         .addTo(bag)
     }
