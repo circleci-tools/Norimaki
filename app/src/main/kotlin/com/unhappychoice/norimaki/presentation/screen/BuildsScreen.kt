@@ -1,4 +1,4 @@
-package com.unhappychoice.norimaki.screen.builds
+package com.unhappychoice.norimaki.presentation.screen
 
 import com.github.unhappychoice.circleci.CircleCIAPIClient
 import com.github.unhappychoice.circleci.response.Build
@@ -9,8 +9,10 @@ import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.screen.core.Screen
+import com.unhappychoice.norimaki.presentation.view.BuildsView
 import com.unhappychoice.norimaki.scope.ViewScope
-import com.unhappychoice.norimaki.screen.Screen
+import dagger.Subcomponent
 import mortar.MortarScope
 import mortar.ViewPresenter
 import javax.inject.Inject
@@ -18,7 +20,7 @@ import javax.inject.Inject
 class BuildsScreen : Screen() {
   override fun getLayoutResource() = R.layout.builds_view
 
-  @dagger.Component(dependencies = arrayOf(MainActivity.Component::class))
+  @Subcomponent()
   @ViewScope
   interface Component {
     fun inject(view: BuildsView)

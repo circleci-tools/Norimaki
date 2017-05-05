@@ -1,23 +1,29 @@
-package com.unhappychoice.norimaki.screen.accessToken
+package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
 import android.widget.LinearLayout
 import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.textChanges
+import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.view.core.UseComponent
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.api_token_view.view.*
 import javax.inject.Inject
 
-class APITokenView(context: Context?, attr: AttributeSet?) : LinearLayout(context, attr) {
+class APITokenView(context: Context?, attr: AttributeSet?) : LinearLayout(context, attr), UseComponent {
   @Inject lateinit var presenter: APITokenScreen.Presenter
   private val bag = CompositeDisposable()
 
+  override fun useComponent(activityComponent: ActivityComponent) = activityComponent.apiTokenScreenComponent()
+
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
+    inject()
     presenter.takeView(this)
 
     accessTokenTextView.setText(presenter.token.value)

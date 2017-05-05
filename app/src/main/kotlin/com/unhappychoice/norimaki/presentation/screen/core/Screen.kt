@@ -1,4 +1,4 @@
-package com.unhappychoice.norimaki.screen
+package com.unhappychoice.norimaki.presentation.screen.core
 
 import android.support.annotation.LayoutRes
 import flow.ClassKey

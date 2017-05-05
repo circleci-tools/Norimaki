@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.unhappychoice.norimaki.screen.accessToken.APITokenView
+<com.unhappychoice.norimaki.presentation.view.APITokenView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical"
     android:layout_width="match_parent"
@@ -23,4 +23,4 @@
         android:layout_height="wrap_content"
         android:text="@string/help_api_token"
         android:autoLink="web"/>
-</com.unhappychoice.norimaki.screen.accessToken.APITokenView>
+</com.unhappychoice.norimaki.presentation.view.APITokenView>
