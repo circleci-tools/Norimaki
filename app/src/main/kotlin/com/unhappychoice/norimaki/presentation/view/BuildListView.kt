@@ -4,6 +4,8 @@ import android.content.Context
 import android.support.v7.widget.LinearLayoutManager
 import android.util.AttributeSet
 import android.widget.LinearLayout
+import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
+import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
@@ -35,6 +37,11 @@ class BuildListView(context: Context, attr: AttributeSet) : UseComponent, Linear
 
     adapter.onClickItem
       .subscribeNext { presenter.goToBuildView(it) }
+      .addTo(bag)
+
+    buildsView.scrollEvents()
+      .filter { buildsView.isNearEnd() }
+      .subscribeNext { presenter.getBuilds() }
       .addTo(bag)
   }
 

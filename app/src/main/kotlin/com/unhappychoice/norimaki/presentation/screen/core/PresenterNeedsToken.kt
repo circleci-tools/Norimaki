@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.screen.core
 
+import android.os.Handler
 import android.view.View
 import com.github.unhappychoice.circleci.CircleCIAPIClient
 import com.github.unhappychoice.circleci.response.User
@@ -26,7 +27,7 @@ abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
   }
 
   private fun goToAPITokenView() {
-    goTo(activity, APITokenScreen())
+    Handler().postDelayed({ goTo(activity, APITokenScreen()) }, 500)
   }
 }
 
