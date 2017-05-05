@@ -32,11 +32,13 @@ fun <T : Any> Observable<T>.subscribeCompleted(fn: () -> Unit): Disposable =
 fun <T> Observable<T>.subscribeOnIoObserveOnUI(): Observable<T> =
   subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
 
+fun <T> Observable<T?>.filterNotNull(): Observable<T> =
+  filter { it != null }.map { it!! }
+
 fun <T> Observable<T>.withLog(name: String = "Anonymous"): Observable<T> =
   doOnNext { Log.d(name, "onNext: ${it?.toString()}") }
     .doOnError { Log.d(name, "onError: ${it?.toString()}") }
     .doOnComplete { Log.d(name, "onCompleted") }
 
 fun <T : Any> Observable<T>.bindTo(subject: Subject<T>): Disposable = subscribeNext { subject.onNext(it) }
-
 fun <T : Any> Observable<T>.bindTo(variable: Variable<T>): Disposable = subscribeNext { variable.value = it }

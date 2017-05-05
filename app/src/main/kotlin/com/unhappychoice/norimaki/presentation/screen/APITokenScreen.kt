@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.screen
 
+import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
@@ -15,15 +16,13 @@ import javax.inject.Inject
 
 class APITokenScreen : Screen() {
   override fun getLayoutResource() = R.layout.api_token_view
+  override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.apiTokenScreenComponent()
 
-  @Subcomponent()
-  @ViewScope
-  interface Component {
+  @Subcomponent @ViewScope interface Component {
     fun inject(view: APITokenView)
   }
 
-  @ViewScope
-  class Presenter @Inject constructor() : ViewPresenter<APITokenView>() {
+  @ViewScope class Presenter @Inject constructor() : ViewPresenter<APITokenView>() {
     @Inject lateinit var activity: MainActivity
     val token: Variable<String> = Variable("")
 

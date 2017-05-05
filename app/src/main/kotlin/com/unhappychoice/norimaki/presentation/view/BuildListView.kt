@@ -19,11 +19,9 @@ import javax.inject.Inject
 
 class BuildListView(context: Context, attr: AttributeSet) : UseComponent, LinearLayout(context, attr) {
   @Inject lateinit var presenter: BuildListScreen.Presenter
-  override fun useComponent(activityComponent: ActivityComponent) = activityComponent.buildsScreenComponent()
 
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
-    inject()
     presenter.takeView(this)
 
     buildsView.adapter = adapter
@@ -35,6 +33,9 @@ class BuildListView(context: Context, attr: AttributeSet) : UseComponent, Linear
         adapter.builds.value = it
         adapter.notifyDataSetChanged()
       }.addTo(bag)
+
+    adapter.onClickItem
+      .subscribeNext { presenter.goToBuildView(it) }
   }
 
   override fun onDetachedFromWindow() {

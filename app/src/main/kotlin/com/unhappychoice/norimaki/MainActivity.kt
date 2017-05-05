@@ -7,7 +7,9 @@ import android.view.LayoutInflater
 import android.view.Menu
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
+import com.unhappychoice.norimaki.presentation.view.core.UseComponent
 import com.unhappychoice.norimaki.scope.ActivityScope
 import dagger.Provides
 import flow.*
@@ -86,11 +88,20 @@ class MainActivity : AppCompatActivity() {
       outgoingState?.save(containerView.getChildAt(0))
       containerView.removeAllViews()
 
-      (incomingState.getKey<Any?>() as? Screen)?.let {
-        val view = LayoutInflater.from(this@MainActivity).inflate(it.getLayoutResource(), containerView, false)
+      val screen = incomingState.getKey<Any?>() as? Screen
+
+      screen?.getLayoutResource()?.let {
+        val inflater = LayoutInflater.from(this@MainActivity)
+        val view = inflater.inflate(it, containerView, false)
+        try {
+          (view as? UseComponent)?.inject(screen)
+        } catch (e: Exception) {
+          e.printStackTrace()
+        }
         containerView.addView(view)
         incomingState.restore(view)
       }
+
       callback.onTraversalCompleted()
     }
   }
@@ -110,5 +121,6 @@ interface ActivityComponent {
 
   fun inject(activity: MainActivity)
   fun apiTokenScreenComponent(): APITokenScreen.Component
-  fun buildsScreenComponent(): BuildListScreen.Component
+  fun buildListScreenComponent(): BuildListScreen.Component
+  fun buildScreenComponent(module: BuildScreen.Module): BuildScreen.Component
 }
