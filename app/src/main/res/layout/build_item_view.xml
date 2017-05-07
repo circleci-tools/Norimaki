@@ -3,19 +3,21 @@
         xmlns:android="http://schemas.android.com/apk/res/android"
         android:orientation="vertical"
         android:layout_width="match_parent"
-        android:layout_height="80dp">
+        android:layout_height="78dp">
     <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:background="@drawable/border_bottom">
         <FrameLayout
                 android:id="@+id/statusIndicator"
                 android:layout_height="match_parent"
                 android:layout_width="6dp"
+                android:layout_alignParentTop="true"
                 android:layout_alignParentStart="true"
                 android:layout_alignParentLeft="true"
-                android:layout_marginEnd="8dp"
-                android:layout_marginRight="8dp"
+                android:layout_alignParentBottom="true"
+                android:layout_marginEnd="@dimen/horizontal_margin"
+                android:layout_marginRight="@dimen/horizontal_margin"
                 android:visibility="visible"/>
 
         <View
@@ -24,9 +26,9 @@
                 android:layout_height="40dp"
                 android:layout_toRightOf="@id/statusIndicator"
                 android:layout_toEndOf="@id/statusIndicator"
-                android:layout_marginTop="12dp"
-                android:layout_marginRight="12dp"
-                android:layout_marginEnd="12dp"/>
+                android:layout_marginTop="@dimen/vertical_margin"
+                android:layout_marginRight="@dimen/horizontal_margin_small"
+                android:layout_marginEnd="@dimen/horizontal_margin_small"/>
 
         <RelativeLayout
                 android:id="@+id/texts"
@@ -36,8 +38,10 @@
                 android:layout_toEndOf="@+id/author"
                 android:layout_toLeftOf="@+id/meta"
                 android:layout_toStartOf="@+id/meta"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="12dp"
+                android:layout_marginTop="@dimen/vertical_margin"
+                android:layout_marginBottom="@dimen/vertical_margin"
+                android:layout_marginRight="@dimen/horizontal_margin_small"
+                android:layout_marginEnd="@dimen/horizontal_margin_small"
                 android:gravity="start">
             <TextView
                     android:id="@+id/commitTitle"
@@ -71,14 +75,14 @@
         <RelativeLayout
                 android:id="@+id/meta"
                 android:orientation="vertical"
-                android:layout_width="40dp"
+                android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_alignParentRight="true"
                 android:layout_alignParentEnd="true"
-                android:layout_marginTop="12dp"
-                android:layout_marginRight="16dp"
-                android:layout_marginEnd="16dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginTop="@dimen/vertical_margin"
+                android:layout_marginRight="@dimen/horizontal_margin"
+                android:layout_marginEnd="@dimen/horizontal_margin"
+                android:layout_marginBottom="@dimen/vertical_margin"
                 android:gravity="end"
                 android:paddingTop="3dp">
 
