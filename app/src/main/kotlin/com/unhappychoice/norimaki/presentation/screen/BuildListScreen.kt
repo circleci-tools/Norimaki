@@ -22,6 +22,7 @@ import javax.inject.Inject
 class BuildListScreen : Screen() {
   override fun getLayoutResource() = R.layout.build_list_view
   override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildListScreenComponent()
+  override fun getTitle(): String = "All builds"
 
   @Subcomponent @ViewScope interface Component {
     fun inject(view: BuildListView)

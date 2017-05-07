@@ -4,6 +4,7 @@ import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -22,6 +23,7 @@ import javax.inject.Inject
 class BuildScreen(val build: Build) : Screen() {
   override fun getLayoutResource() = R.layout.build_view
   override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildScreenComponent(Module())
+  override fun getTitle(): String = build.revisionString()
 
   @Subcomponent(modules = arrayOf(Module::class)) @ViewScope interface Component {
     fun inject(view: BuildView)

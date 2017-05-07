@@ -25,6 +25,7 @@ import javax.inject.Inject
 
 class BuildStepScreen(val buildStep: BuildStep) : Screen() {
   override fun getLayoutResource() = R.layout.build_step_view
+  override fun getTitle(): String = buildStep.name
 
   override fun getSubComponent(activityComponent: ActivityComponent) =
     activityComponent.stepScreenComponent(Module(buildStep))

@@ -6,11 +6,9 @@ import android.view.View
 import android.view.ViewGroup
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
-import flow.Direction
-import flow.KeyChanger
-import flow.State
-import flow.TraversalCallback
+import flow.*
 import kotlinx.android.synthetic.main.activity_main.*
 
 class ScreenChanger(val activity: MainActivity) : KeyChanger {
@@ -37,8 +35,22 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
       containerView.addView(it)
       incomingState.restore(it)
     }
+
     callback.onTraversalCompleted()
+
+    screen?.let { updateActionBar(it) }
   }
+
+  private fun updateActionBar(screen: Screen) {
+    activity.supportActionBar?.setHomeButtonEnabled(true)
+    activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
+    activity.supportActionBar?.setDisplayShowHomeEnabled(false)
+    activity.supportActionBar?.title = screen.getTitle()
+    activity.invalidateOptionsMenu()
+  }
+
+  private fun hasScreens(): Boolean =
+    Flow.get(activity).history.asIterable().filter { it !is APITokenScreen }.size > 1
 
   private fun Screen.injectPresenter(view: View) {
     try {

@@ -17,6 +17,7 @@ import javax.inject.Inject
 class APITokenScreen : Screen() {
   override fun getLayoutResource() = R.layout.api_token_view
   override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.apiTokenScreenComponent()
+  override fun getTitle() = "Set api token"
 
   @Subcomponent @ViewScope interface Component {
     fun inject(view: APITokenView)

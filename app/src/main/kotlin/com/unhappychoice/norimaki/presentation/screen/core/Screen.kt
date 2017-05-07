@@ -7,4 +7,5 @@ import flow.ClassKey
 abstract class Screen : ClassKey() {
   @LayoutRes abstract fun getLayoutResource(): Int
   abstract fun getSubComponent(activityComponent: ActivityComponent): Any
+  abstract fun getTitle(): String
 }
