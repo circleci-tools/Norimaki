@@ -8,6 +8,7 @@ import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.scope.ActivityScope
 import dagger.Provides
 import flow.Flow
@@ -92,4 +93,5 @@ interface ActivityComponent {
   fun apiTokenScreenComponent(): APITokenScreen.Component
   fun buildListScreenComponent(): BuildListScreen.Component
   fun buildScreenComponent(module: BuildScreen.Module): BuildScreen.Component
+  fun stepScreenComponent(module: BuildStepScreen.Module): BuildStepScreen.Component
 }

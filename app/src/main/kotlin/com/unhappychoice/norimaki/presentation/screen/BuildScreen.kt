@@ -1,9 +1,11 @@
 package com.unhappychoice.norimaki.presentation.screen
 
 import com.github.unhappychoice.circleci.response.Build
+import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.bindTo
+import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
@@ -33,7 +35,7 @@ class BuildScreen(val build: Build) : Screen() {
   @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildView>() {
     @Inject lateinit var build: Build
 
-    val buildSubject = PublishSubject.create<Build>()
+    val buildSubject: PublishSubject<Build> = PublishSubject.create<Build>()
 
     private val bag = CompositeDisposable()
 
@@ -52,6 +54,11 @@ class BuildScreen(val build: Build) : Screen() {
         .subscribeOnIoObserveOnUI()
         .bindTo(buildSubject)
         .addTo(bag)
+    }
+
+    fun goToBuildStepScreen(buildStep: BuildStep) {
+      if (buildStep.actions.isEmpty()) return
+      goTo(activity, BuildStepScreen(buildStep))
     }
   }
 }

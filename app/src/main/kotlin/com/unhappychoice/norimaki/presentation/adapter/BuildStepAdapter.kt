@@ -30,7 +30,7 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
   override fun getItemCount(): Int = steps.value.size
 
   override fun onCreateViewHolder(parent: ViewGroup?, viewType: Int): ViewHolder? {
-    val view = LayoutInflater.from(context).inflate(R.layout.step_item_view, parent, false)
+    val view = LayoutInflater.from(context).inflate(R.layout.build_step_list_item_view, parent, false)
     return ViewHolder(view)
   }
 

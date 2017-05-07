@@ -32,7 +32,7 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
   override fun getItemCount(): Int = builds.value.size
 
   override fun onCreateViewHolder(parent: ViewGroup?, viewType: Int): ViewHolder? {
-    val view = LayoutInflater.from(context).inflate(R.layout.build_item_view, parent, false)
+    val view = LayoutInflater.from(context).inflate(R.layout.build_list_item_view, parent, false)
     return ViewHolder(view)
   }
 

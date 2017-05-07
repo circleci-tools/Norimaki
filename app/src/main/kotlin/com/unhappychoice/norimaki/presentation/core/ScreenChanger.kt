@@ -56,5 +56,5 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
   private fun State.getScreen(): Screen? = getKey<Any?>() as? Screen
 
   private fun Screen.inflateView(): View =
-      LayoutInflater.from(activity).inflate(getLayoutResource(), containerView, false)
+    LayoutInflater.from(activity).inflate(getLayoutResource(), containerView, false)
 }

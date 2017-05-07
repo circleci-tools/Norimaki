@@ -34,6 +34,10 @@ class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, at
         adapter.steps.value = it
         adapter.notifyDataSetChanged()
       }.addTo(bag)
+
+    adapter.onClickItem
+      .subscribeNext { presenter.goToBuildStepScreen(it) }
+      .addTo(bag)
   }
 
   override fun onDetachedFromWindow() {
