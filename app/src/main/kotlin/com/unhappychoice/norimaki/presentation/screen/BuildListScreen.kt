@@ -1,10 +1,12 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import android.util.Log
 import com.github.unhappychoice.circleci.response.Build
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.*
+import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.goTo
+import com.unhappychoice.norimaki.extension.subscribeNext
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.screen.core.Loadable
 import com.unhappychoice.norimaki.presentation.screen.core.Paginatable
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken

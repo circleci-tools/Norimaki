@@ -1,7 +1,6 @@
 package com.unhappychoice.norimaki.presentation.adapter
 
 import android.content.Context
-import android.graphics.Color
 import android.support.v7.widget.RecyclerView
 import android.view.LayoutInflater
 import android.view.View
@@ -44,7 +43,7 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
   inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
     fun bind(build: Build) {
       repositoryTitle.text = build.repositoryString()
-      branchTitle.text =  build.revisionString()
+      branchTitle.text = build.revisionString()
       commitTitle.text = build.subject
       createdAt.text = build.queuedAt?.getTimeAgo()
       indicator.setBackgroundColor(build.statusColor())

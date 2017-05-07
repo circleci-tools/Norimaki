@@ -5,7 +5,6 @@ import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
-import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildView
@@ -14,7 +13,6 @@ import dagger.Provides
 import dagger.Subcomponent
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.switchLatest
 import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import javax.inject.Inject

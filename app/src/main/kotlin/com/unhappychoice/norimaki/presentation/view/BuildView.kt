@@ -9,13 +9,12 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.view.core.UseComponent
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.build_view.view.*
 import javax.inject.Inject
 
-class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, attr), UseComponent {
+class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, attr) {
   @Inject lateinit var presenter: BuildScreen.Presenter
   private val adapter = BuildStepAdapter(context)
   private val bag = CompositeDisposable()

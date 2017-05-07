@@ -3,17 +3,15 @@ package com.unhappychoice.norimaki
 import android.content.Context
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
-import android.view.LayoutInflater
 import android.view.Menu
+import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.core.Screen
-import com.unhappychoice.norimaki.presentation.view.core.UseComponent
 import com.unhappychoice.norimaki.scope.ActivityScope
 import dagger.Provides
-import flow.*
-import kotlinx.android.synthetic.main.activity_main.*
+import flow.Flow
+import flow.KeyDispatcher
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
 
@@ -71,39 +69,10 @@ class MainActivity : AppCompatActivity() {
 
   private fun getFlowContext(baseContext: Context): Context {
     return Flow.configure(baseContext, this)
-      .dispatcher(KeyDispatcher.configure(this, Changer()).build())
+      .dispatcher(KeyDispatcher.configure(this, ScreenChanger(this)).build())
       .defaultKey(BuildListScreen())
       .keyParceler(GsonParceler())
       .install()
-  }
-
-  private inner class Changer : KeyChanger {
-    override fun changeKey(
-      outgoingState: State?,
-      incomingState: State,
-      direction: Direction,
-      incomingContexts: MutableMap<Any, Context>,
-      callback: TraversalCallback
-    ) {
-      outgoingState?.save(containerView.getChildAt(0))
-      containerView.removeAllViews()
-
-      val screen = incomingState.getKey<Any?>() as? Screen
-
-      screen?.getLayoutResource()?.let {
-        val inflater = LayoutInflater.from(this@MainActivity)
-        val view = inflater.inflate(it, containerView, false)
-        try {
-          (view as? UseComponent)?.inject(screen)
-        } catch (e: Exception) {
-          e.printStackTrace()
-        }
-        containerView.addView(view)
-        incomingState.restore(view)
-      }
-
-      callback.onTraversalCompleted()
-    }
   }
 
   @dagger.Module

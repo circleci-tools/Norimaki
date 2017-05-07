@@ -8,7 +8,6 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
-import io.reactivex.Observable
 import mortar.MortarScope
 import mortar.ViewPresenter
 import javax.inject.Inject
