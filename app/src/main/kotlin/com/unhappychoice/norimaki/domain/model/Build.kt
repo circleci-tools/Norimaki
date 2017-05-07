@@ -12,3 +12,5 @@ fun Build.statusColor(): Int = when (status) {
   "infrastructure_fail", "timedout", "failed" -> Color.rgb(237, 92, 92)
   else -> Color.rgb(92, 211, 228)
 }
+
+fun Build.avatarUrl(): String = "https://github.com/${user?.get("login")}.png"

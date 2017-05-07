@@ -6,15 +6,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.response.Build
 import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.domain.model.repositoryString
-import com.unhappychoice.norimaki.domain.model.revisionString
-import com.unhappychoice.norimaki.domain.model.statusColor
+import com.unhappychoice.norimaki.domain.model.*
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.getTimeAgo
 import com.unhappychoice.norimaki.extension.subscribeNext
+import de.hdodenhof.circleimageview.CircleImageView
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
@@ -48,11 +48,15 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
       createdAt.text = build.queuedAt?.getTimeAgo()
       indicator.setBackgroundColor(build.statusColor())
 
+      Glide.with(context).load(build.avatarUrl())
+        .into(author)
+
       view.clicks()
         .subscribeNext { onClickItem.onNext(build) }
         .addTo(bag)
     }
 
+    private val author = view.findViewById(R.id.author) as CircleImageView
     private val indicator = view.findViewById(R.id.statusIndicator)
     private val repositoryTitle = view.findViewById(R.id.repositoryTitle) as TextView
     private val branchTitle = view.findViewById(R.id.branchTitle) as TextView
