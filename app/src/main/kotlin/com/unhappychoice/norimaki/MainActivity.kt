@@ -5,15 +5,19 @@ import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.core.Screen
+import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import com.unhappychoice.norimaki.scope.ActivityScope
 import dagger.Provides
 import flow.Flow
 import flow.KeyDispatcher
+import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
 
@@ -65,6 +69,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+    (getCurrentView() as? HasMenu)?.onCreateOptionsMenu(menu)
     return true
   }
 
@@ -72,16 +77,18 @@ class MainActivity : AppCompatActivity() {
     when (item?.itemId) {
       android.R.id.home -> Flow.get(this).goBack()
     }
+    (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
     return true
   }
 
-  private fun getFlowContext(baseContext: Context): Context {
-    return Flow.configure(baseContext, this)
+  private fun getFlowContext(baseContext: Context): Context =
+    Flow.configure(baseContext, this)
       .dispatcher(KeyDispatcher.configure(this, ScreenChanger(this)).build())
       .defaultKey(BuildListScreen())
       .keyParceler(GsonParceler())
       .install()
-  }
+
+  private fun getCurrentView(): View? = containerView.getChildAt(0)
 
   @dagger.Module
   class Module(val activity: MainActivity) {

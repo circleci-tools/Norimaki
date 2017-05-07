@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
+import com.unhappychoice.norimaki.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.core.Loadable
 import com.unhappychoice.norimaki.presentation.screen.core.Paginatable
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
@@ -57,6 +58,10 @@ class BuildListScreen : Screen() {
 
     fun goToBuildView(build: Build) {
       goTo(activity, BuildScreen(build))
+    }
+
+    fun changeAPIToken() {
+      goTo(activity, APITokenScreen())
     }
   }
 }
