@@ -5,9 +5,7 @@ import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.revisionString
-import com.unhappychoice.norimaki.extension.bindTo
-import com.unhappychoice.norimaki.extension.goTo
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
+import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildView
@@ -16,6 +14,7 @@ import dagger.Provides
 import dagger.Subcomponent
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.switchLatest
 import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import javax.inject.Inject
@@ -61,6 +60,24 @@ class BuildScreen(val build: Build) : Screen() {
     fun goToBuildStepScreen(buildStep: BuildStep) {
       if (buildStep.actions.isEmpty()) return
       goTo(activity, BuildStepScreen(buildStep))
+    }
+
+    fun rebuild() {
+      api.client().retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
+        .subscribeOnIoObserveOnUI()
+        .subscribeNext { goBack(activity) }
+        .addTo(bag)
+    }
+
+    fun rebuildWithoutCache() {
+      api.client().deleteCache(build.username!!, build.reponame!!)
+        .map {
+          api.client().retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
+            .subscribeOnIoObserveOnUI()
+        }.switchLatest()
+        .subscribeOnIoObserveOnUI()
+        .subscribeNext { goBack(activity) }
+        .addTo(bag)
     }
   }
 }
