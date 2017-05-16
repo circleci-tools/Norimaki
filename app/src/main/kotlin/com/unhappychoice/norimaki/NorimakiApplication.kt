@@ -1,18 +1,12 @@
 package com.unhappychoice.norimaki
 
 import android.support.multidex.MultiDexApplication
+import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import dagger.Provides
 import mortar.MortarScope
 import javax.inject.Singleton
 
 class NorimakiApplication : MultiDexApplication() {
-  override fun getSystemService(name: String?): Any? {
-    return when (scope.hasService(name)) {
-      true -> scope.getService(name)
-      false -> super.getSystemService(name)
-    }
-  }
-
   private val scope by lazy {
     MortarScope.buildRootScope()
       .withService(ApplicationComponent.name, component)
@@ -26,9 +20,17 @@ class NorimakiApplication : MultiDexApplication() {
       .apply { inject(this@NorimakiApplication) }
   }
 
+  override fun getSystemService(name: String?): Any? {
+    return when (scope.hasService(name)) {
+      true -> scope.getService(name)
+      false -> super.getSystemService(name)
+    }
+  }
+
   @dagger.Module
   class Module(val application: NorimakiApplication) {
     @Provides @Singleton fun provideApplication() = application
+    @Provides @Singleton fun providePusherService() = PusherService()
   }
 }
 
