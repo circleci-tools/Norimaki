@@ -52,7 +52,7 @@ class BuildStepScreen(val build: Build, val buildStep: BuildStep) : Screen() {
     }
 
     fun getActions() {
-      val actions = buildStep.actions.filter {it.outputUrl != null }
+      val actions = buildStep.actions.filter { it.outputUrl != null }
       Observable.concat(actions.map { getAction(it) })
         .subscribeOnIoObserveOnUI()
         .bindTo(logString)

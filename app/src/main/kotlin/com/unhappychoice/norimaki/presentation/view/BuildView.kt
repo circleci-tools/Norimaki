@@ -6,7 +6,6 @@ import android.util.AttributeSet
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.LinearLayout
-import com.unhappychoice.norimaki.extension.filterNotNull
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter

@@ -32,9 +32,7 @@ class BuildScreen(val build: Build) : Screen() {
     @Provides @ViewScope fun provideBuild() = build
   }
 
-  @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildView>() {
-    @Inject lateinit var build: Build
-
+  @ViewScope class Presenter @Inject constructor(val build: Build) : PresenterNeedsToken<BuildView>() {
     val steps = Variable<List<BuildStep>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {

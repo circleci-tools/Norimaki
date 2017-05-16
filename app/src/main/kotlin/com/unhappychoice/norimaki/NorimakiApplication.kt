@@ -42,7 +42,7 @@ class NorimakiApplication : MultiDexApplication() {
 
     private val apiService = CircleCIAPIClient(APITokenPreference(application).token).client()
     private val eventBus = EventBusService()
-    private val gson =  GsonBuilder()
+    private val gson = GsonBuilder()
       .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
       .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
       .create()

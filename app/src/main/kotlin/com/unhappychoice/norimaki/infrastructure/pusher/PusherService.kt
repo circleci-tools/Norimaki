@@ -37,12 +37,12 @@ class PusherService(val eventBus: EventBusService, val gson: Gson) {
 
   fun newActionEvents(build: Build): Observable<Action> =
     subscribe(build.channelName(), "newAction")
-      .map { gson.fromJson<List<Action>>(it, object: TypeToken<List<Action>>() {}.type) }
+      .map { gson.fromJson<List<Action>>(it, object : TypeToken<List<Action>>() {}.type) }
       .flatMap { Observable.fromIterable(it) }
 
   fun updateActionEvents(build: Build): Observable<Action> =
     subscribe(build.channelName(), "updateAction")
-      .map { gson.fromJson<List<Action>>(it, object: TypeToken<List<Action>>() {}.type) }
+      .map { gson.fromJson<List<Action>>(it, object : TypeToken<List<Action>>() {}.type) }
       .flatMap { Observable.fromIterable(it) }
 
   fun subscribe(channelName: String, eventName: String): Observable<String> =
