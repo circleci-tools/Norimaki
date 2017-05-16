@@ -12,7 +12,6 @@ import com.unhappychoice.norimaki.presentation.view.BuildView
 import com.unhappychoice.norimaki.scope.ViewScope
 import dagger.Provides
 import dagger.Subcomponent
-import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
 import io.reactivex.subjects.PublishSubject
@@ -38,20 +37,13 @@ class BuildScreen(val build: Build) : Screen() {
 
     val buildSubject: PublishSubject<Build> = PublishSubject.create<Build>()
 
-    private val bag = CompositeDisposable()
-
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
       getBuild()
     }
 
-    override fun onExitScope() {
-      bag.dispose()
-      super.onExitScope()
-    }
-
     fun getBuild() {
-      api.client().getBuild(build.username!!, build.reponame!!, build.buildNum!!)
+      api.getBuild(build.username!!, build.reponame!!, build.buildNum!!)
         .subscribeOnIoObserveOnUI()
         .bindTo(buildSubject)
         .addTo(bag)
@@ -63,17 +55,16 @@ class BuildScreen(val build: Build) : Screen() {
     }
 
     fun rebuild() {
-      api.client().retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
+      api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
         .subscribeOnIoObserveOnUI()
         .subscribeNext { goBack(activity) }
         .addTo(bag)
     }
 
     fun rebuildWithoutCache() {
-      api.client().deleteCache(build.username!!, build.reponame!!)
+      api.deleteCache(build.username!!, build.reponame!!)
         .map {
-          api.client().retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
-            .subscribeOnIoObserveOnUI()
+          api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
         }.switchLatest()
         .subscribeOnIoObserveOnUI()
         .subscribeNext { goBack(activity) }

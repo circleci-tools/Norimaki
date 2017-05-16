@@ -6,23 +6,30 @@ import android.support.v7.app.AppCompatActivity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
-import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import com.unhappychoice.norimaki.scope.ActivityScope
 import dagger.Provides
 import flow.Flow
 import flow.KeyDispatcher
+import io.reactivex.disposables.CompositeDisposable
 import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
+import javax.inject.Inject
 
 class MainActivity : AppCompatActivity() {
+  @Inject lateinit var api: CircleCIAPIClientV1
+  @Inject lateinit var eventBus: EventBusService
+
+  private val bag = CompositeDisposable()
+
   private val component: ActivityComponent by lazy {
     (applicationContext.getSystemService(ApplicationComponent.name) as ApplicationComponent)
       .activityComponent(Module(this))

@@ -15,7 +15,6 @@ import com.unhappychoice.norimaki.scope.ViewScope
 import dagger.Provides
 import dagger.Subcomponent
 import io.reactivex.Observable
-import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import okhttp3.OkHttpClient
@@ -43,16 +42,9 @@ class BuildStepScreen(val buildStep: BuildStep) : Screen() {
     @Inject lateinit var buildStep: BuildStep
     val logString: Variable<String> = Variable("")
 
-    private val bag = CompositeDisposable()
-
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
       getActions()
-    }
-
-    override fun onExitScope() {
-      bag.dispose()
-      super.onExitScope()
     }
 
     fun getActions() {

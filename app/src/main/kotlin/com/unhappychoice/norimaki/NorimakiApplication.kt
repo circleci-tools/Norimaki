@@ -1,7 +1,10 @@
 package com.unhappychoice.norimaki
 
 import android.support.multidex.MultiDexApplication
+import com.github.unhappychoice.circleci.CircleCIAPIClient
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
+import com.unhappychoice.norimaki.preference.APITokenPreference
 import dagger.Provides
 import mortar.MortarScope
 import javax.inject.Singleton
@@ -30,7 +33,12 @@ class NorimakiApplication : MultiDexApplication() {
   @dagger.Module
   class Module(val application: NorimakiApplication) {
     @Provides @Singleton fun provideApplication() = application
-    @Provides @Singleton fun providePusherService() = PusherService()
+    @Provides @Singleton fun provideEventBusService() = eventBus
+    @Provides @Singleton fun providePusherService() = PusherService(eventBus)
+    @Provides fun provideApiService() = apiService
+
+    private val apiService = CircleCIAPIClient(APITokenPreference(application).token).client()
+    private val eventBus = EventBusService()
   }
 }
 

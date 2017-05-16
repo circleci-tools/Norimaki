@@ -14,3 +14,8 @@ fun Build.statusColor(): Int = when (status) {
 }
 
 fun Build.avatarUrl(): String = "https://github.com/${user?.get("login")}.png"
+
+fun Build.uniqueId(): String = "${repositoryString()}/$buildNum"
+
+fun List<Build>.addDistinctByNumber(builds: List<Build>) = (builds + this).distinctBy { it.uniqueId() }
+fun List<Build>.sortByQueuedAt() = this.sortedByDescending { it.queuedAt }

@@ -29,11 +29,7 @@ class APITokenScreen : Screen() {
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
-      token.value = APITokenPreference(activity).token
-    }
-
-    override fun onExitScope() {
-      super.onExitScope()
+      token.value = APITokenPreference(activity.applicationContext).token
     }
 
     fun saveToken() {
