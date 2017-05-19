@@ -4,6 +4,7 @@ import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.channelName
 import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
@@ -39,6 +40,15 @@ class BuildScreen(val build: Build) : Screen() {
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
+
+      pusher.subscribe(build.channelName(), "newAction")
+        .subscribeNext { /* TBD */ }
+        .addTo(bag)
+
+      pusher.subscribe(build.channelName(), "updateAction")
+        .subscribeNext { /* TBD */ }
+        .addTo(bag)
+
       getBuild()
     }
 
@@ -51,7 +61,7 @@ class BuildScreen(val build: Build) : Screen() {
 
     fun goToBuildStepScreen(buildStep: BuildStep) {
       if (buildStep.actions.isEmpty()) return
-      goTo(activity, BuildStepScreen(buildStep))
+      goTo(activity, BuildStepScreen(build, buildStep))
     }
 
     fun rebuild() {

@@ -1,13 +1,12 @@
 package com.unhappychoice.norimaki.presentation.screen
 
+import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildAction
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.asSequence
-import com.unhappychoice.norimaki.extension.bindTo
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
+import com.unhappychoice.norimaki.domain.model.channelName
+import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
@@ -22,28 +21,33 @@ import okhttp3.Request
 import org.json.JSONArray
 import javax.inject.Inject
 
-class BuildStepScreen(val buildStep: BuildStep) : Screen() {
+class BuildStepScreen(val build: Build, val buildStep: BuildStep) : Screen() {
   override fun getLayoutResource() = R.layout.build_step_view
   override fun getTitle(): String = buildStep.name
 
   override fun getSubComponent(activityComponent: ActivityComponent) =
-    activityComponent.stepScreenComponent(Module(buildStep))
+    activityComponent.stepScreenComponent(Module(build, buildStep))
 
   @Subcomponent(modules = arrayOf(Module::class)) @ViewScope interface Component {
     fun inject(view: BuildStepView)
   }
 
   @dagger.Module
-  class Module(val buildStep: BuildStep) {
+  class Module(val build: Build, val buildStep: BuildStep) {
+    @Provides @ViewScope fun provideBuild() = build
     @Provides @ViewScope fun provideBuildStep() = buildStep
   }
 
-  @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildStepView>() {
-    @Inject lateinit var buildStep: BuildStep
+  @ViewScope class Presenter @Inject constructor(val build: Build, val buildStep: BuildStep) : PresenterNeedsToken<BuildStepView>() {
     val logString: Variable<String> = Variable("")
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
+
+      pusher.subscribe(build.channelName(), "appendAction")
+        .subscribeNext { /* TBD */ }
+        .addTo(bag)
+
       getActions()
     }
 

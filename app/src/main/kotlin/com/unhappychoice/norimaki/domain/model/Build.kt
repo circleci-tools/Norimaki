@@ -17,5 +17,7 @@ fun Build.avatarUrl(): String = "https://github.com/${user?.get("login")}.png"
 
 fun Build.uniqueId(): String = "${repositoryString()}/$buildNum"
 
+fun Build.channelName(): String = "private-$username@$reponame@$buildNum@vcs-github@0"
+
 fun List<Build>.addDistinctByNumber(builds: List<Build>) = (builds + this).distinctBy { it.uniqueId() }
 fun List<Build>.sortByQueuedAt() = this.sortedByDescending { it.queuedAt }
