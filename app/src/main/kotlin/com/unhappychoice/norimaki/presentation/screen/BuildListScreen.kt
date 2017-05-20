@@ -18,49 +18,49 @@ import mortar.MortarScope
 import javax.inject.Inject
 
 class BuildListScreen : Screen() {
-  override fun getLayoutResource() = R.layout.build_list_view
-  override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildListScreenComponent()
-  override fun getTitle(): String = "All builds"
+    override fun getLayoutResource() = R.layout.build_list_view
+    override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildListScreenComponent()
+    override fun getTitle(): String = "All builds"
 
-  @Subcomponent @ViewScope interface Component {
-    fun inject(view: BuildListView)
-  }
-
-  @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
-    override val isLoading = Variable(false)
-    override val page = Variable(0)
-    override val hasMore = Variable(true)
-    val builds = Variable<List<Build>>(listOf())
-
-    override fun onEnterScope(scope: MortarScope?) {
-      super.onEnterScope(scope)
-      getBuilds()
-
-      eventBus.buildListUpdated
-        .withLog("buildListUpdated")
-        .subscribeNext {
-          api.getRecentBuilds(offset = 0, limit = 20)
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-        }.addTo(bag)
+    @Subcomponent @ViewScope interface Component {
+        fun inject(view: BuildListView)
     }
 
-    fun getBuilds() {
-      if (isLoading.value || !hasMore.value) return
-      api.getRecentBuilds(offset = this.page.value * 20, limit = 20)
-        .startLoading()
-        .paginate()
-        .subscribeOnIoObserveOnUI()
-        .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-        .addTo(bag)
-    }
+    @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
+        override val isLoading = Variable(false)
+        override val page = Variable(0)
+        override val hasMore = Variable(true)
+        val builds = Variable<List<Build>>(listOf())
 
-    fun goToBuildView(build: Build) {
-      goTo(activity, BuildScreen(build))
-    }
+        override fun onEnterScope(scope: MortarScope?) {
+            super.onEnterScope(scope)
+            getBuilds()
 
-    fun changeAPIToken() {
-      goTo(activity, APITokenScreen())
+            eventBus.buildListUpdated
+                .withLog("buildListUpdated")
+                .subscribeNext {
+                    api.getRecentBuilds(offset = 0, limit = 20)
+                        .subscribeOnIoObserveOnUI()
+                        .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+                }.addTo(bag)
+        }
+
+        fun getBuilds() {
+            if (isLoading.value || !hasMore.value) return
+            api.getRecentBuilds(offset = this.page.value * 20, limit = 20)
+                .startLoading()
+                .paginate()
+                .subscribeOnIoObserveOnUI()
+                .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+                .addTo(bag)
+        }
+
+        fun goToBuildView(build: Build) {
+            goTo(activity, BuildScreen(build))
+        }
+
+        fun changeAPIToken() {
+            goTo(activity, APITokenScreen())
+        }
     }
-  }
 }

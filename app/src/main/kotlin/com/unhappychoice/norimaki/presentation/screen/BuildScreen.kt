@@ -19,68 +19,68 @@ import mortar.MortarScope
 import javax.inject.Inject
 
 class BuildScreen(val build: Build) : Screen() {
-  override fun getLayoutResource() = R.layout.build_view
-  override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildScreenComponent(Module())
-  override fun getTitle(): String = build.revisionString()
+    override fun getLayoutResource() = R.layout.build_view
+    override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildScreenComponent(Module())
+    override fun getTitle(): String = build.revisionString()
 
-  @Subcomponent(modules = arrayOf(Module::class)) @ViewScope interface Component {
-    fun inject(view: BuildView)
-  }
-
-  @dagger.Module
-  inner class Module {
-    @Provides @ViewScope fun provideBuild() = build
-  }
-
-  @ViewScope class Presenter @Inject constructor(val build: Build) : PresenterNeedsToken<BuildView>() {
-    val steps = Variable<List<BuildStep>>(listOf())
-
-    override fun onEnterScope(scope: MortarScope?) {
-      super.onEnterScope(scope)
-
-      pusher.newActionEvents(build)
-        .map { BuildStep(name = it.log.name, actions = listOf(it.log.toBuildAction())) }
-        .filterNotNull()
-        .subscribeNext { steps.value = steps.value + it }
-        .addTo(bag)
-
-      pusher.updateActionEvents(build)
-        .map { it.log.toBuildAction() }
-        .withLog("updateAction")
-        .subscribeNext { steps.value = steps.value.addAction(it) }
-        .addTo(bag)
-
-      getBuild()
+    @Subcomponent(modules = arrayOf(Module::class)) @ViewScope interface Component {
+        fun inject(view: BuildView)
     }
 
-    fun getBuild() {
-      api.getBuild(build.username!!, build.reponame!!, build.buildNum!!)
-        .subscribeOnIoObserveOnUI()
-        .subscribeNext { steps.value = steps.value + (it.steps ?: listOf()) }
-        .addTo(bag)
+    @dagger.Module
+    inner class Module {
+        @Provides @ViewScope fun provideBuild() = build
     }
 
-    fun goToBuildStepScreen(buildStep: BuildStep) {
-      if (buildStep.actions.isEmpty()) return
-      val stepIndex = steps.value.indexOf(buildStep)
-      goTo(activity, BuildStepScreen(build, buildStep, stepIndex))
-    }
+    @ViewScope class Presenter @Inject constructor(val build: Build) : PresenterNeedsToken<BuildView>() {
+        val steps = Variable<List<BuildStep>>(listOf())
 
-    fun rebuild() {
-      api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
-        .subscribeOnIoObserveOnUI()
-        .subscribeNext { goBack(activity) }
-        .addTo(bag)
-    }
+        override fun onEnterScope(scope: MortarScope?) {
+            super.onEnterScope(scope)
 
-    fun rebuildWithoutCache() {
-      api.deleteCache(build.username!!, build.reponame!!)
-        .map {
-          api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
-        }.switchLatest()
-        .subscribeOnIoObserveOnUI()
-        .subscribeNext { goBack(activity) }
-        .addTo(bag)
+            pusher.newActionEvents(build)
+                .map { BuildStep(name = it.log.name, actions = listOf(it.log.toBuildAction())) }
+                .filterNotNull()
+                .subscribeNext { steps.value = steps.value + it }
+                .addTo(bag)
+
+            pusher.updateActionEvents(build)
+                .map { it.log.toBuildAction() }
+                .withLog("updateAction")
+                .subscribeNext { steps.value = steps.value.addAction(it) }
+                .addTo(bag)
+
+            getBuild()
+        }
+
+        fun getBuild() {
+            api.getBuild(build.username!!, build.reponame!!, build.buildNum!!)
+                .subscribeOnIoObserveOnUI()
+                .subscribeNext { steps.value = steps.value + (it.steps ?: listOf()) }
+                .addTo(bag)
+        }
+
+        fun goToBuildStepScreen(buildStep: BuildStep) {
+            if (buildStep.actions.isEmpty()) return
+            val stepIndex = steps.value.indexOf(buildStep)
+            goTo(activity, BuildStepScreen(build, buildStep, stepIndex))
+        }
+
+        fun rebuild() {
+            api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
+                .subscribeOnIoObserveOnUI()
+                .subscribeNext { goBack(activity) }
+                .addTo(bag)
+        }
+
+        fun rebuildWithoutCache() {
+            api.deleteCache(build.username!!, build.reponame!!)
+                .map {
+                    api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
+                }.switchLatest()
+                .subscribeOnIoObserveOnUI()
+                .subscribeNext { goBack(activity) }
+                .addTo(bag)
+        }
     }
-  }
 }

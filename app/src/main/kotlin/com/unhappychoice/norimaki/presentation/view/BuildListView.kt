@@ -19,50 +19,50 @@ import kotlinx.android.synthetic.main.build_list_view.view.*
 import javax.inject.Inject
 
 class BuildListView(context: Context, attr: AttributeSet) : LinearLayout(context, attr), HasMenu {
-  @Inject lateinit var presenter: BuildListScreen.Presenter
-  private val adapter = BuildAdapter(context)
-  private val bag = CompositeDisposable()
+    @Inject lateinit var presenter: BuildListScreen.Presenter
+    private val adapter = BuildAdapter(context)
+    private val bag = CompositeDisposable()
 
-  override fun onCreateOptionsMenu(menu: Menu?) {
-    menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
-  }
-
-  override fun onOptionsItemSelected(item: MenuItem?) {
-    when (item?.itemId) {
-      MenuResource.LogOut.id -> presenter.changeAPIToken()
+    override fun onCreateOptionsMenu(menu: Menu?) {
+        menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
     }
-  }
 
-  private enum class MenuResource(val id: Int) {
-    LogOut(0)
-  }
+    override fun onOptionsItemSelected(item: MenuItem?) {
+        when (item?.itemId) {
+            MenuResource.LogOut.id -> presenter.changeAPIToken()
+        }
+    }
 
-  override fun onAttachedToWindow() {
-    super.onAttachedToWindow()
-    presenter.takeView(this)
+    private enum class MenuResource(val id: Int) {
+        LogOut(0)
+    }
 
-    buildsView.adapter = adapter
-    buildsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        presenter.takeView(this)
 
-    presenter.builds.asObservable()
-      .subscribeOnIoObserveOnUI()
-      .subscribeNext {
-        adapter.builds.value = it
-        adapter.notifyDataSetChanged()
-      }.addTo(bag)
+        buildsView.adapter = adapter
+        buildsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
 
-    adapter.onClickItem
-      .subscribeNext { presenter.goToBuildView(it) }
-      .addTo(bag)
+        presenter.builds.asObservable()
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext {
+                adapter.builds.value = it
+                adapter.notifyDataSetChanged()
+            }.addTo(bag)
 
-    buildsView.scrollEvents()
-      .filter { buildsView.isNearEnd() }
-      .subscribeNext { presenter.getBuilds() }
-      .addTo(bag)
-  }
+        adapter.onClickItem
+            .subscribeNext { presenter.goToBuildView(it) }
+            .addTo(bag)
 
-  override fun onDetachedFromWindow() {
-    presenter.dropView(this)
-    super.onDetachedFromWindow()
-  }
+        buildsView.scrollEvents()
+            .filter { buildsView.isNearEnd() }
+            .subscribeNext { presenter.getBuilds() }
+            .addTo(bag)
+    }
+
+    override fun onDetachedFromWindow() {
+        presenter.dropView(this)
+        super.onDetachedFromWindow()
+    }
 }

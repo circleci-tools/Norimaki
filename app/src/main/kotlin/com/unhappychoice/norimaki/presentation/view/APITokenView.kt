@@ -14,28 +14,28 @@ import kotlinx.android.synthetic.main.api_token_view.view.*
 import javax.inject.Inject
 
 class APITokenView(context: Context?, attr: AttributeSet?) : LinearLayout(context, attr) {
-  @Inject lateinit var presenter: APITokenScreen.Presenter
-  private val bag = CompositeDisposable()
+    @Inject lateinit var presenter: APITokenScreen.Presenter
+    private val bag = CompositeDisposable()
 
-  override fun onAttachedToWindow() {
-    super.onAttachedToWindow()
-    presenter.takeView(this)
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        presenter.takeView(this)
 
-    accessTokenTextView.setText(presenter.token.value)
-    accessTokenTextView.textChanges()
-      .map { it.toString() }
-      .bindTo(presenter.token)
-      .addTo(bag)
+        accessTokenTextView.setText(presenter.token.value)
+        accessTokenTextView.textChanges()
+            .map { it.toString() }
+            .bindTo(presenter.token)
+            .addTo(bag)
 
-    submitButton.clicks()
-      .subscribeNext {
-        presenter.saveToken()
-        presenter.goToBuildList()
-      }.addTo(bag)
-  }
+        submitButton.clicks()
+            .subscribeNext {
+                presenter.saveToken()
+                presenter.goToBuildList()
+            }.addTo(bag)
+    }
 
-  override fun onDetachedFromWindow() {
-    presenter.dropView(this)
-    super.onDetachedFromWindow()
-  }
+    override fun onDetachedFromWindow() {
+        presenter.dropView(this)
+        super.onDetachedFromWindow()
+    }
 }

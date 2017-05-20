@@ -20,51 +20,51 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
 class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.ViewHolder>() {
-  val builds = Variable<List<Build>>(emptyList())
-  val onClickItem = PublishSubject.create<Build>()
+    val builds = Variable<List<Build>>(emptyList())
+    val onClickItem = PublishSubject.create<Build>()
 
-  init {
-    setHasStableIds(true)
-  }
-
-  override fun getItemId(position: Int) = builds.value[position].uniqueId().hashCode().toLong()
-
-  override fun getItemCount(): Int = builds.value.size
-
-  override fun onCreateViewHolder(parent: ViewGroup?, viewType: Int): ViewHolder? {
-    val view = LayoutInflater.from(context).inflate(R.layout.build_list_item_view, parent, false)
-    return ViewHolder(view)
-  }
-
-  override fun onBindViewHolder(holder: ViewHolder?, position: Int) {
-    holder?.bind(builds.value[position])
-  }
-
-  inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
-    fun bind(build: Build) {
-      repositoryTitle.text = build.repositoryString()
-      branchTitle.text = build.revisionString()
-      commitTitle.text = build.subject
-      createdAt.text = build.queuedAt?.getTimeAgo()
-      indicator.setBackgroundColor(build.statusColor())
-
-      Glide.with(context).load(build.avatarUrl())
-        .into(author)
-
-      view.clicks()
-        .subscribeNext { onClickItem.onNext(build) }
-        .addTo(bag)
+    init {
+        setHasStableIds(true)
     }
 
-    private val author = view.findViewById(R.id.author) as CircleImageView
-    private val indicator = view.findViewById(R.id.statusIndicator)
-    private val repositoryTitle = view.findViewById(R.id.repositoryTitle) as TextView
-    private val branchTitle = view.findViewById(R.id.branchTitle) as TextView
-    private val commitTitle = view.findViewById(R.id.commitTitle) as TextView
-    private val createdAt = view.findViewById(R.id.createdAt) as TextView
-  }
+    override fun getItemId(position: Int) = builds.value[position].uniqueId().hashCode().toLong()
 
-  fun finalize() = bag.dispose()
+    override fun getItemCount(): Int = builds.value.size
 
-  private val bag = CompositeDisposable()
+    override fun onCreateViewHolder(parent: ViewGroup?, viewType: Int): ViewHolder? {
+        val view = LayoutInflater.from(context).inflate(R.layout.build_list_item_view, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder?, position: Int) {
+        holder?.bind(builds.value[position])
+    }
+
+    inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
+        fun bind(build: Build) {
+            repositoryTitle.text = build.repositoryString()
+            branchTitle.text = build.revisionString()
+            commitTitle.text = build.subject
+            createdAt.text = build.queuedAt?.getTimeAgo()
+            indicator.setBackgroundColor(build.statusColor())
+
+            Glide.with(context).load(build.avatarUrl())
+                .into(author)
+
+            view.clicks()
+                .subscribeNext { onClickItem.onNext(build) }
+                .addTo(bag)
+        }
+
+        private val author = view.findViewById(R.id.author) as CircleImageView
+        private val indicator = view.findViewById(R.id.statusIndicator)
+        private val repositoryTitle = view.findViewById(R.id.repositoryTitle) as TextView
+        private val branchTitle = view.findViewById(R.id.branchTitle) as TextView
+        private val commitTitle = view.findViewById(R.id.commitTitle) as TextView
+        private val createdAt = view.findViewById(R.id.createdAt) as TextView
+    }
+
+    fun finalize() = bag.dispose()
+
+    private val bag = CompositeDisposable()
 }

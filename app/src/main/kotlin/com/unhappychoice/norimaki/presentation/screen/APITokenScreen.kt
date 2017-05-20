@@ -15,27 +15,27 @@ import mortar.ViewPresenter
 import javax.inject.Inject
 
 class APITokenScreen : Screen() {
-  override fun getLayoutResource() = R.layout.api_token_view
-  override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.apiTokenScreenComponent()
-  override fun getTitle() = "Set api token"
+    override fun getLayoutResource() = R.layout.api_token_view
+    override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.apiTokenScreenComponent()
+    override fun getTitle() = "Set api token"
 
-  @Subcomponent @ViewScope interface Component {
-    fun inject(view: APITokenView)
-  }
-
-  @ViewScope class Presenter @Inject constructor() : ViewPresenter<APITokenView>() {
-    @Inject lateinit var activity: MainActivity
-    val token: Variable<String> = Variable("")
-
-    override fun onEnterScope(scope: MortarScope?) {
-      super.onEnterScope(scope)
-      token.value = APITokenPreference(activity.applicationContext).token
+    @Subcomponent @ViewScope interface Component {
+        fun inject(view: APITokenView)
     }
 
-    fun saveToken() {
-      APITokenPreference(activity).token = token.value
-    }
+    @ViewScope class Presenter @Inject constructor() : ViewPresenter<APITokenView>() {
+        @Inject lateinit var activity: MainActivity
+        val token: Variable<String> = Variable("")
 
-    fun goToBuildList() = goTo(activity, BuildListScreen())
-  }
+        override fun onEnterScope(scope: MortarScope?) {
+            super.onEnterScope(scope)
+            token.value = APITokenPreference(activity.applicationContext).token
+        }
+
+        fun saveToken() {
+            APITokenPreference(activity).token = token.value
+        }
+
+        fun goToBuildList() = goTo(activity, BuildListScreen())
+    }
 }

@@ -12,22 +12,22 @@ import kotlinx.android.synthetic.main.build_step_view.view.*
 import javax.inject.Inject
 
 class BuildStepView(context: Context, attr: AttributeSet) : LinearLayout(context, attr) {
-  @Inject lateinit var presenter: BuildStepScreen.Presenter
-  private val bag = CompositeDisposable()
+    @Inject lateinit var presenter: BuildStepScreen.Presenter
+    private val bag = CompositeDisposable()
 
-  override fun onAttachedToWindow() {
-    super.onAttachedToWindow()
-    presenter.takeView(this)
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        presenter.takeView(this)
 
-    presenter.logString.asObservable()
-      .subscribeOnIoObserveOnUI()
-      .subscribeNext { logText.text = it }
-      .addTo(bag)
-  }
+        presenter.logString.asObservable()
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { logText.text = it }
+            .addTo(bag)
+    }
 
-  override fun onDetachedFromWindow() {
-    bag.dispose()
-    presenter.dropView(this)
-    super.onDetachedFromWindow()
-  }
+    override fun onDetachedFromWindow() {
+        bag.dispose()
+        presenter.dropView(this)
+        super.onDetachedFromWindow()
+    }
 }
