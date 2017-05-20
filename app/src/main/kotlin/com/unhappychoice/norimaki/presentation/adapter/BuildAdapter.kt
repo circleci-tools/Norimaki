@@ -27,7 +27,7 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
     setHasStableIds(true)
   }
 
-  override fun getItemId(position: Int) = builds.value[position].hashCode().toLong()
+  override fun getItemId(position: Int) = builds.value[position].uniqueId().hashCode().toLong()
 
   override fun getItemCount(): Int = builds.value.size
 

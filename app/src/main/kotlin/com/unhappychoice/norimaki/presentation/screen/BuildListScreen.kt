@@ -3,11 +3,9 @@ package com.unhappychoice.norimaki.presentation.screen
 import com.github.unhappychoice.circleci.response.Build
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.goTo
-import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
-import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
+import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
+import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.Loadable
 import com.unhappychoice.norimaki.presentation.screen.core.Paginatable
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
@@ -15,7 +13,6 @@ import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import com.unhappychoice.norimaki.scope.ViewScope
 import dagger.Subcomponent
-import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import javax.inject.Inject
@@ -34,25 +31,27 @@ class BuildListScreen : Screen() {
     override val page = Variable(0)
     override val hasMore = Variable(true)
     val builds = Variable<List<Build>>(listOf())
-    private val bag = CompositeDisposable()
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
       getBuilds()
-    }
 
-    override fun onExitScope() {
-      bag.dispose()
-      super.onExitScope()
+      eventBus.buildListUpdated
+        .withLog("buildListUpdated")
+        .subscribeNext {
+          api.getRecentBuilds(offset = 0, limit = 20)
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+        }.addTo(bag)
     }
 
     fun getBuilds() {
       if (isLoading.value || !hasMore.value) return
-      api.client().getRecentBuilds(page.value * 20)
+      api.getRecentBuilds(offset = this.page.value * 20, limit = 20)
         .startLoading()
         .paginate()
         .subscribeOnIoObserveOnUI()
-        .subscribeNext { builds.value = builds.value + it }
+        .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
         .addTo(bag)
     }
 

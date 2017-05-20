@@ -6,9 +6,9 @@ import android.util.AttributeSet
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.LinearLayout
-import com.unhappychoice.norimaki.extension.filterNotNull
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
+import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
@@ -45,10 +45,8 @@ class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, at
     stepsView.adapter = adapter
     stepsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
 
-    presenter.buildSubject
-      .map { it.steps }
+    presenter.steps.asObservable()
       .subscribeOnIoObserveOnUI()
-      .filterNotNull()
       .subscribeNext {
         adapter.steps.value = it
         adapter.notifyDataSetChanged()

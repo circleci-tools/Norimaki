@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.domain.model
 
 import android.graphics.Color
+import com.github.unhappychoice.circleci.response.BuildAction
 import com.github.unhappychoice.circleci.response.BuildStep
 
 
@@ -14,6 +15,15 @@ fun BuildStep.statusColor(): Int = when {
   isCanceled() -> Color.rgb(137, 137, 137)
   isFailed() -> Color.rgb(237, 92, 92)
   else -> Color.rgb(66, 200, 138)
+}
+
+fun BuildStep.addAction(action: BuildAction): BuildStep = copy(actions = actions + action)
+
+fun List<BuildStep>.addAction(action: BuildAction): List<BuildStep> = map {
+  when (it.name) {
+    action.name -> it.addAction(action)
+    else -> it
+  }
 }
 
 private fun BuildStep.isCanceled() =

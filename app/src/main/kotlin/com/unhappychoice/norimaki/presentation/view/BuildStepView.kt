@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.widget.LinearLayout
 import com.unhappychoice.norimaki.extension.subscribeNext
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
@@ -19,6 +20,7 @@ class BuildStepView(context: Context, attr: AttributeSet) : LinearLayout(context
     presenter.takeView(this)
 
     presenter.logString.asObservable()
+      .subscribeOnIoObserveOnUI()
       .subscribeNext { logText.text = it }
       .addTo(bag)
   }
