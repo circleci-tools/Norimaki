@@ -5,10 +5,7 @@ import com.github.unhappychoice.circleci.response.BuildAction
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.asSequence
-import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
+import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
@@ -51,7 +48,7 @@ class BuildStepScreen(val build: Build, val buildStep: BuildStep, val stepIndex:
 
             pusher.appendActionEvents(build)
                 .filter { it.step == stepIndex }
-                .subscribeNext { logString.value = logString.value + it.out.message }
+                .subscribeNext { logString.value = logString.value + it.out.message.removeAnsiEscapeCode() }
                 .addTo(bag)
 
             getActions()
@@ -61,7 +58,7 @@ class BuildStepScreen(val build: Build, val buildStep: BuildStep, val stepIndex:
             val actions = buildStep.actions.filter { it.outputUrl != null }
             Observable.concat(actions.map { getAction(it) })
                 .subscribeOnIoObserveOnUI()
-                .subscribeNext { logString.value = logString.value + it }
+                .subscribeNext { logString.value = logString.value + it.removeAnsiEscapeCode() }
                 .addTo(bag)
         }
 
