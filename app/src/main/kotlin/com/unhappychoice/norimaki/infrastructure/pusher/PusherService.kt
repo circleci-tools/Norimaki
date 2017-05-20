@@ -14,6 +14,8 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.infrastructure.pusher.extension.privateChannelEvents
 import com.unhappychoice.norimaki.infrastructure.pusher.response.Action
+import com.unhappychoice.norimaki.infrastructure.pusher.response.ActionOut
+import com.unhappychoice.norimaki.infrastructure.pusher.response.OutAction
 import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
@@ -43,6 +45,11 @@ class PusherService(val eventBus: EventBusService, val gson: Gson) {
   fun updateActionEvents(build: Build): Observable<Action> =
     subscribe(build.channelName(), "updateAction")
       .map { gson.fromJson<List<Action>>(it, object : TypeToken<List<Action>>() {}.type) }
+      .flatMap { Observable.fromIterable(it) }
+
+  fun appendActionEvents(build: Build): Observable<OutAction> =
+    subscribe(build.channelName(), "appendAction")
+      .map { gson.fromJson<List<OutAction>>(it, object: TypeToken<List<OutAction>>() {}.type) }
       .flatMap { Observable.fromIterable(it) }
 
   fun subscribe(channelName: String, eventName: String): Observable<String> =

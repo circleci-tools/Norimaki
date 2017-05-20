@@ -13,6 +13,7 @@
                 android:id="@+id/logText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:lineSpacingMultiplier="1.2"
                 android:paddingBottom="@dimen/vertical_margin"
                 android:paddingEnd="@dimen/horizontal_margin"
                 android:paddingLeft="@dimen/horizontal_margin"

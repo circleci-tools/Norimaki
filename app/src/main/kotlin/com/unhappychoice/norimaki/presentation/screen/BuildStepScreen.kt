@@ -21,31 +21,35 @@ import okhttp3.Request
 import org.json.JSONArray
 import javax.inject.Inject
 
-class BuildStepScreen(val build: Build, val buildStep: BuildStep) : Screen() {
+class BuildStepScreen(val build: Build, val buildStep: BuildStep, val stepIndex: Int) : Screen() {
   override fun getLayoutResource() = R.layout.build_step_view
   override fun getTitle(): String = buildStep.name
 
   override fun getSubComponent(activityComponent: ActivityComponent) =
-    activityComponent.stepScreenComponent(Module(build, buildStep))
+    activityComponent.stepScreenComponent(Module(build, buildStep, stepIndex))
 
   @Subcomponent(modules = arrayOf(Module::class)) @ViewScope interface Component {
     fun inject(view: BuildStepView)
   }
 
   @dagger.Module
-  class Module(val build: Build, val buildStep: BuildStep) {
+  class Module(val build: Build, val buildStep: BuildStep, val stepIndex: Int) {
     @Provides @ViewScope fun provideBuild() = build
     @Provides @ViewScope fun provideBuildStep() = buildStep
+    @Provides @ViewScope fun provideStepIndex() = stepIndex
   }
 
-  @ViewScope class Presenter @Inject constructor(val build: Build, val buildStep: BuildStep) : PresenterNeedsToken<BuildStepView>() {
+  @ViewScope class Presenter @Inject constructor(
+    val build: Build, val buildStep: BuildStep, val stepIndex: Int
+  ) : PresenterNeedsToken<BuildStepView>() {
     val logString: Variable<String> = Variable("")
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
 
-      pusher.subscribe(build.channelName(), "appendAction")
-        .subscribeNext { /* TBD */ }
+      pusher.appendActionEvents(build)
+        .filter { it.step == stepIndex }
+        .subscribeNext { logString.value = logString.value + it.out.message }
         .addTo(bag)
 
       getActions()
@@ -55,7 +59,7 @@ class BuildStepScreen(val build: Build, val buildStep: BuildStep) : Screen() {
       val actions = buildStep.actions.filter { it.outputUrl != null }
       Observable.concat(actions.map { getAction(it) })
         .subscribeOnIoObserveOnUI()
-        .bindTo(logString)
+        .subscribeNext { logString.value = logString.value + it }
         .addTo(bag)
     }
 

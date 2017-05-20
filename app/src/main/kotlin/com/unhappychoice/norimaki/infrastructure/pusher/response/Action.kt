@@ -6,3 +6,10 @@ data class Action(
   val messages: String?,
   val log: ActionLog
 )
+
+data class OutAction(
+  val step: Int,
+  val index: Int,
+  val messages: String?,
+  val out: ActionOut
+)

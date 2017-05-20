@@ -46,6 +46,7 @@ class BuildScreen(val build: Build) : Screen() {
 
       pusher.updateActionEvents(build)
         .map { it.log.toBuildAction() }
+        .withLog("updateAction")
         .subscribeNext { steps.value = steps.value.addAction(it) }
         .addTo(bag)
 
@@ -61,7 +62,8 @@ class BuildScreen(val build: Build) : Screen() {
 
     fun goToBuildStepScreen(buildStep: BuildStep) {
       if (buildStep.actions.isEmpty()) return
-      goTo(activity, BuildStepScreen(build, buildStep))
+      val stepIndex = steps.value.indexOf(buildStep)
+      goTo(activity, BuildStepScreen(build, buildStep, stepIndex))
     }
 
     fun rebuild() {
