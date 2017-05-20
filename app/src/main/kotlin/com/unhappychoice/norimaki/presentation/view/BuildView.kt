@@ -45,22 +45,12 @@ class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, at
     stepsView.adapter = adapter
     stepsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
 
-    presenter.buildSubject
-      .map { it.steps }
+    presenter.steps.asObservable()
       .subscribeOnIoObserveOnUI()
-      .filterNotNull()
       .subscribeNext {
         adapter.steps.value = it
         adapter.notifyDataSetChanged()
       }.addTo(bag)
-
-    presenter.stepSubject
-      .subscribeOnIoObserveOnUI()
-      .subscribeNext {
-        adapter.steps.value = adapter.steps.value + it
-        adapter.notifyDataSetChanged()
-      }.addTo(bag)
-
 
     adapter.onClickItem
       .subscribeNext { presenter.goToBuildStepScreen(it) }

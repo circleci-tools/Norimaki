@@ -1,10 +1,10 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import android.util.Log
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.addAction
 import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
@@ -15,7 +15,6 @@ import dagger.Provides
 import dagger.Subcomponent
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
-import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import javax.inject.Inject
 
@@ -36,20 +35,20 @@ class BuildScreen(val build: Build) : Screen() {
   @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildView>() {
     @Inject lateinit var build: Build
 
-    val buildSubject: PublishSubject<Build> = PublishSubject.create<Build>()
-    val stepSubject: PublishSubject<BuildStep> = PublishSubject.create<BuildStep>()
+    val steps = Variable<List<BuildStep>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
 
       pusher.newActionEvents(build)
-        .map { BuildStep(name = it.log.name, actions = listOf()) }
+        .map { BuildStep(name = it.log.name, actions = listOf(it.log.toBuildAction())) }
         .filterNotNull()
-        .bindTo(stepSubject)
+        .subscribeNext { steps.value = steps.value + it }
         .addTo(bag)
 
       pusher.updateActionEvents(build)
-        .subscribeNext { Log.d("updateAction", it.toString()) }
+        .map { it.log.toBuildAction() }
+        .subscribeNext { steps.value = steps.value.addAction(it) }
         .addTo(bag)
 
       getBuild()
@@ -58,7 +57,7 @@ class BuildScreen(val build: Build) : Screen() {
     fun getBuild() {
       api.getBuild(build.username!!, build.reponame!!, build.buildNum!!)
         .subscribeOnIoObserveOnUI()
-        .bindTo(buildSubject)
+        .subscribeNext { steps.value = steps.value + (it.steps ?: listOf()) }
         .addTo(bag)
     }
 

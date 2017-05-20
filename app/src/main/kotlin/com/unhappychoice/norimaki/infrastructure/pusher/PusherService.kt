@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.infrastructure.pusher
 
-import android.util.Log
 import com.github.unhappychoice.circleci.response.Build
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -14,7 +13,7 @@ import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.infrastructure.pusher.extension.privateChannelEvents
-import com.unhappychoice.norimaki.infrastructure.pusher.response.NewAction
+import com.unhappychoice.norimaki.infrastructure.pusher.response.Action
 import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
@@ -36,14 +35,14 @@ class PusherService(val eventBus: EventBusService, val gson: Gson) {
       .addTo(bag)
   }
 
-  fun newActionEvents(build: Build): Observable<NewAction> =
+  fun newActionEvents(build: Build): Observable<Action> =
     subscribe(build.channelName(), "newAction")
-      .map { gson.fromJson<List<NewAction>>(it, object: TypeToken<List<NewAction>>() {}.type) }
+      .map { gson.fromJson<List<Action>>(it, object: TypeToken<List<Action>>() {}.type) }
       .flatMap { Observable.fromIterable(it) }
 
-  fun updateActionEvents(build: Build): Observable<NewAction> =
+  fun updateActionEvents(build: Build): Observable<Action> =
     subscribe(build.channelName(), "updateAction")
-      .map { gson.fromJson<List<NewAction>>(it, object: TypeToken<List<NewAction>>() {}.type) }
+      .map { gson.fromJson<List<Action>>(it, object: TypeToken<List<Action>>() {}.type) }
       .flatMap { Observable.fromIterable(it) }
 
   fun subscribe(channelName: String, eventName: String): Observable<String> =
