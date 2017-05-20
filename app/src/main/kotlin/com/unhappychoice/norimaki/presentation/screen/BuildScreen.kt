@@ -1,10 +1,10 @@
 package com.unhappychoice.norimaki.presentation.screen
 
+import android.util.Log
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.domain.model.channelName
 import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
@@ -37,16 +37,19 @@ class BuildScreen(val build: Build) : Screen() {
     @Inject lateinit var build: Build
 
     val buildSubject: PublishSubject<Build> = PublishSubject.create<Build>()
+    val stepSubject: PublishSubject<BuildStep> = PublishSubject.create<BuildStep>()
 
     override fun onEnterScope(scope: MortarScope?) {
       super.onEnterScope(scope)
 
-      pusher.subscribe(build.channelName(), "newAction")
-        .subscribeNext { /* TBD */ }
+      pusher.newActionEvents(build)
+        .map { BuildStep(name = it.log.name, actions = listOf()) }
+        .filterNotNull()
+        .bindTo(stepSubject)
         .addTo(bag)
 
-      pusher.subscribe(build.channelName(), "updateAction")
-        .subscribeNext { /* TBD */ }
+      pusher.updateActionEvents(build)
+        .subscribeNext { Log.d("updateAction", it.toString()) }
         .addTo(bag)
 
       getBuild()

@@ -7,7 +7,7 @@ import com.unhappychoice.norimaki.extension.withLog
 import io.reactivex.Observable
 
 fun Channel.privateChannelEvents(eventName: String): Observable<String> {
-  var listener: PrivateChannelEventListener?
+  var listener: PrivateChannelEventListener? = null
   return Observable.create<String> { observer ->
     listener = object : PrivateChannelEventListener {
       override fun onAuthenticationFailure(message: String?, e: Exception?) {
@@ -17,15 +17,19 @@ fun Channel.privateChannelEvents(eventName: String): Observable<String> {
       override fun onSubscriptionSucceeded(channelName: String?) {
         Log.d("Pusher", "Succeeded to subscribe $channelName")
       }
+
       override fun onEvent(channelName: String?, eventName: String?, data: String?) {
-        data?.let {
-          Log.d("Pusher", "[$channelName:$eventName] $it")
-          observer.onNext(it)
-        }
+        data?.let { observer.onNext(it) }
       }
     }
     bind(eventName, listener)
-  }.withLog("Pusher")
-    .doOnError { listener = null }
-    .doOnComplete { listener = null }
+  }
+    .doOnError {
+      unbind(eventName, listener)
+      listener = null
+    }
+    .doOnComplete {
+      unbind(eventName, listener)
+      listener = null
+    }
 }

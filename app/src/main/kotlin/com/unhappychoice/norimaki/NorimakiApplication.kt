@@ -2,6 +2,8 @@ package com.unhappychoice.norimaki
 
 import android.support.multidex.MultiDexApplication
 import com.github.unhappychoice.circleci.CircleCIAPIClient
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.preference.APITokenPreference
@@ -34,11 +36,16 @@ class NorimakiApplication : MultiDexApplication() {
   class Module(val application: NorimakiApplication) {
     @Provides @Singleton fun provideApplication() = application
     @Provides @Singleton fun provideEventBusService() = eventBus
-    @Provides @Singleton fun providePusherService() = PusherService(eventBus)
+    @Provides @Singleton fun providePusherService() = PusherService(eventBus, gson)
     @Provides fun provideApiService() = apiService
+    @Provides fun provideGson() = gson
 
     private val apiService = CircleCIAPIClient(APITokenPreference(application).token).client()
     private val eventBus = EventBusService()
+    private val gson =  GsonBuilder()
+      .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+      .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+      .create()
   }
 }
 

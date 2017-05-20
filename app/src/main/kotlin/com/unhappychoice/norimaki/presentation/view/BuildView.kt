@@ -54,6 +54,14 @@ class BuildView(context: Context, attr: AttributeSet) : LinearLayout(context, at
         adapter.notifyDataSetChanged()
       }.addTo(bag)
 
+    presenter.stepSubject
+      .subscribeOnIoObserveOnUI()
+      .subscribeNext {
+        adapter.steps.value = adapter.steps.value + it
+        adapter.notifyDataSetChanged()
+      }.addTo(bag)
+
+
     adapter.onClickItem
       .subscribeNext { presenter.goToBuildStepScreen(it) }
       .addTo(bag)

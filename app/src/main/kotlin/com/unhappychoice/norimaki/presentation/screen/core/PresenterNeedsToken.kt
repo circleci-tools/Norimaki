@@ -25,8 +25,11 @@ abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
   @Inject lateinit var eventBus: EventBusService
   @Inject lateinit var pusher: PusherService
 
+  companion object {
+    var currentUser: User? = null
+  }
+
   val token by lazy { APITokenPreference(activity).token }
-  var currentUser: User? = null
   val bag = CompositeDisposable()
 
   override fun onEnterScope(scope: MortarScope?) {
@@ -41,11 +44,13 @@ abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
 
   private fun authenticate() {
     if (token.isBlank()) return goToAPITokenView()
+    if (currentUser != null) return
 
     api.getMe()
       .subscribeOnIoObserveOnUI()
       .withLog("getMe")
       .doOnError { goToAPITokenView() }
+      .doOnNext { currentUser = it }
       .subscribeNext { eventBus.authenticated.onNext(Pair(token, it.pusherId)) }
       .addTo(bag)
   }

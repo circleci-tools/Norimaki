@@ -1,19 +1,27 @@
 package com.unhappychoice.norimaki.infrastructure.pusher
 
+import android.util.Log
+import com.github.unhappychoice.circleci.response.Build
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.pusher.client.Pusher
 import com.pusher.client.PusherOptions
+import com.pusher.client.channel.Channel
 import com.pusher.client.util.HttpAuthorizer
+import com.unhappychoice.norimaki.domain.model.channelName
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.infrastructure.pusher.extension.privateChannelEvents
+import com.unhappychoice.norimaki.infrastructure.pusher.response.NewAction
 import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 
-class PusherService(val eventBus: EventBusService) {
+class PusherService(val eventBus: EventBusService, val gson: Gson) {
   private var pusher: Pusher? = null
+  private var channels: MutableMap<String, Channel> = mutableMapOf()
   private val bag = CompositeDisposable()
   private val subscriptionBag = CompositeDisposable()
 
@@ -28,11 +36,18 @@ class PusherService(val eventBus: EventBusService) {
       .addTo(bag)
   }
 
+  fun newActionEvents(build: Build): Observable<NewAction> =
+    subscribe(build.channelName(), "newAction")
+      .map { gson.fromJson<List<NewAction>>(it, object: TypeToken<List<NewAction>>() {}.type) }
+      .flatMap { Observable.fromIterable(it) }
+
+  fun updateActionEvents(build: Build): Observable<NewAction> =
+    subscribe(build.channelName(), "updateAction")
+      .map { gson.fromJson<List<NewAction>>(it, object: TypeToken<List<NewAction>>() {}.type) }
+      .flatMap { Observable.fromIterable(it) }
+
   fun subscribe(channelName: String, eventName: String): Observable<String> =
-    pusher?.subscribePrivate(channelName)
-      ?.privateChannelEvents(eventName)
-      ?.withLog(eventName)
-      ?: Observable.empty<String>().withLog(eventName)
+    channelFor(channelName)?.privateChannelEvents(eventName) ?: Observable.empty<String>()
 
   private fun connect(token: String, pusherId: String) {
     close()
@@ -48,6 +63,12 @@ class PusherService(val eventBus: EventBusService) {
     subscriptionBag.clear()
     pusher?.disconnect()
     pusher = null
+    channels = mutableMapOf()
+  }
+
+  private fun channelFor(name: String): Channel? {
+    if (channels[name] != null) return channels[name]
+    return pusher?.subscribePrivate(name)?.also { channels.put(name, it) }
   }
 
   private fun apiKey() = "1cf6e0e755e419d2ac9a"
