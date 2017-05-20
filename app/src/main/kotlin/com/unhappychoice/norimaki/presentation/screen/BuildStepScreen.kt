@@ -48,7 +48,7 @@ class BuildStepScreen(val build: Build, val buildStep: BuildStep, val stepIndex:
 
             pusher.appendActionEvents(build)
                 .filter { it.step == stepIndex }
-                .subscribeNext { logString.value = logString.value + it.out.message.removeAnsiEscapeCode() }
+                .subscribeNext { logString.value = logString.value + it.out.message.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml() }
                 .addTo(bag)
 
             getActions()
@@ -58,7 +58,7 @@ class BuildStepScreen(val build: Build, val buildStep: BuildStep, val stepIndex:
             val actions = buildStep.actions.filter { it.outputUrl != null }
             Observable.concat(actions.map { getAction(it) })
                 .subscribeOnIoObserveOnUI()
-                .subscribeNext { logString.value = logString.value + it.removeAnsiEscapeCode() }
+                .subscribeNext { logString.value = logString.value + it.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml() }
                 .addTo(bag)
         }
 
