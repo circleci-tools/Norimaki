@@ -18,5 +18,8 @@ dependencies:
     - app/build
 test:
   override:
-    - ./gradlew assembleRelease
-    - cp -r app/build/outputs $CIRCLE_ARTIFACTS
+    - ./gradlew jacoco
+  post:
+   - scripts/ci/send-coverage-info.sh
+
+

@@ -1,7 +1,5 @@
 package com.unhappychoice.norimaki.extension
 
-import android.util.Log
-
 fun String.removeAnsiEscapeCode(): String = replace("\\033\\[\\d+?[A-T]".toRegex(), "")
 
 fun String.replaceAnsiColorCodeToHtml(): String =
