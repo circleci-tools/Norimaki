@@ -4,12 +4,12 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:paddingTop="@dimen/vertical_margin"
     android:paddingBottom="@dimen/vertical_margin"
-    android:paddingStart="@dimen/horizontal_margin"
     android:paddingEnd="@dimen/horizontal_margin"
+    android:paddingLeft="@dimen/horizontal_margin"
     android:paddingRight="@dimen/horizontal_margin"
-    android:paddingLeft="@dimen/horizontal_margin">
+    android:paddingStart="@dimen/horizontal_margin"
+    android:paddingTop="@dimen/vertical_margin">
 
     <android.support.design.widget.TextInputLayout
         android:layout_width="match_parent"
@@ -26,14 +26,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/vertical_margin"
-        android:text="@string/help_api_token"
-        android:autoLink="web"/>
+        android:autoLink="web"
+        android:text="@string/help_api_token"/>
 
     <Button
         android:id="@+id/submitButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/vertical_margin"
         android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/vertical_margin"
         android:text="Apply"/>
 </com.unhappychoice.norimaki.presentation.view.APITokenView>

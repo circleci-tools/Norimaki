@@ -1,7 +1,7 @@
 package com.unhappychoice.norimaki.presentation.screen.core
 
 import android.support.annotation.LayoutRes
-import com.unhappychoice.norimaki.ActivityComponent
+import com.unhappychoice.norimaki.di.component.ActivityComponent
 import flow.ClassKey
 
 abstract class Screen : ClassKey() {

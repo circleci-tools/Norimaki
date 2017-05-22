@@ -7,15 +7,14 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.unhappychoice.norimaki.di.component.ActivityComponent
+import com.unhappychoice.norimaki.di.component.ApplicationComponent
 import com.unhappychoice.norimaki.domain.service.EventBusService
+import com.unhappychoice.norimaki.di.module.ActivityModule
+import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
-import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
-import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
-import com.unhappychoice.norimaki.scope.ActivityScope
-import dagger.Provides
 import flow.Flow
 import flow.KeyDispatcher
 import io.reactivex.disposables.CompositeDisposable
@@ -32,7 +31,7 @@ class MainActivity : AppCompatActivity() {
 
     private val component: ActivityComponent by lazy {
         (applicationContext.getSystemService(ApplicationComponent.name) as ApplicationComponent)
-            .activityComponent(Module(this))
+            .activityComponent(ActivityModule(this))
             .apply { inject(this@MainActivity) }
     }
 
@@ -97,23 +96,4 @@ class MainActivity : AppCompatActivity() {
             .install()
 
     private fun getCurrentView(): View? = containerView.getChildAt(0)
-
-    @dagger.Module
-    class Module(val activity: MainActivity) {
-        @Provides @ActivityScope fun provideActivity() = activity
-    }
-}
-
-@dagger.Subcomponent(modules = arrayOf(MainActivity.Module::class))
-@ActivityScope
-interface ActivityComponent {
-    companion object {
-        val name = "activity_component"
-    }
-
-    fun inject(activity: MainActivity)
-    fun apiTokenScreenComponent(): APITokenScreen.Component
-    fun buildListScreenComponent(): BuildListScreen.Component
-    fun buildScreenComponent(module: BuildScreen.Module): BuildScreen.Component
-    fun stepScreenComponent(module: BuildStepScreen.Module): BuildStepScreen.Component
 }

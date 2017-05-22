@@ -1,38 +1,38 @@
 package com.unhappychoice.norimaki.presentation.screen
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
-import com.unhappychoice.norimaki.ActivityComponent
+import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.di.component.ActivityComponent
+import com.unhappychoice.norimaki.di.module.screen.BuildScreenModule
 import com.unhappychoice.norimaki.domain.model.addAction
 import com.unhappychoice.norimaki.domain.model.revisionString
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
+import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildView
-import com.unhappychoice.norimaki.scope.ViewScope
-import dagger.Provides
-import dagger.Subcomponent
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
 import mortar.MortarScope
-import javax.inject.Inject
 
 class BuildScreen(val build: Build) : Screen() {
-    override fun getLayoutResource() = R.layout.build_view
-    override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildScreenComponent(Module())
     override fun getTitle(): String = build.revisionString()
+    override fun getLayoutResource() = R.layout.build_view
+    override fun getSubComponent(activityComponent: ActivityComponent) =
+        activityComponent.buildScreenComponent(BuildScreenModule(build))
 
-    @Subcomponent(modules = arrayOf(Module::class)) @ViewScope interface Component {
-        fun inject(view: BuildView)
-    }
 
-    @dagger.Module
-    inner class Module {
-        @Provides @ViewScope fun provideBuild() = build
-    }
-
-    @ViewScope class Presenter @Inject constructor(val build: Build) : PresenterNeedsToken<BuildView>() {
+    class Presenter(
+        val build: Build,
+        activity: MainActivity,
+        api: CircleCIAPIClientV1,
+        eventBus: EventBusService,
+        pusher: PusherService
+    ) : PresenterNeedsToken<BuildView>(activity, api, eventBus, pusher) {
         val steps = Variable<List<BuildStep>>(listOf())
 
         override fun onEnterScope(scope: MortarScope?) {

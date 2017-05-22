@@ -10,8 +10,8 @@ import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.extension.withLog
+import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
-import com.unhappychoice.norimaki.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
@@ -19,12 +19,12 @@ import mortar.MortarScope
 import mortar.ViewPresenter
 import javax.inject.Inject
 
-abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
-    @Inject lateinit var activity: MainActivity
-    @Inject lateinit var api: CircleCIAPIClientV1
-    @Inject lateinit var eventBus: EventBusService
-    @Inject lateinit var pusher: PusherService
-
+abstract class PresenterNeedsToken<T : View>(
+    open val activity: MainActivity,
+    open val api: CircleCIAPIClientV1,
+    open val eventBus: EventBusService,
+    open val pusher: PusherService
+) : ViewPresenter<T>() {
     companion object {
         var currentUser: User? = null
     }

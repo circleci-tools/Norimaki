@@ -1,32 +1,36 @@
 package com.unhappychoice.norimaki.presentation.screen
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.github.unhappychoice.circleci.response.Build
-import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.di.component.ActivityComponent
+import com.unhappychoice.norimaki.di.module.screen.BuildListScreenModule
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
+import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.screen.core.Loadable
 import com.unhappychoice.norimaki.presentation.screen.core.Paginatable
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
-import com.unhappychoice.norimaki.scope.ViewScope
-import dagger.Subcomponent
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
-import javax.inject.Inject
 
 class BuildListScreen : Screen() {
-    override fun getLayoutResource() = R.layout.build_list_view
-    override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.buildListScreenComponent()
     override fun getTitle(): String = "All builds"
+    override fun getLayoutResource() = R.layout.build_list_view
+    override fun getSubComponent(activityComponent: ActivityComponent) =
+        activityComponent.buildListScreenComponent(BuildListScreenModule())
 
-    @Subcomponent @ViewScope interface Component {
-        fun inject(view: BuildListView)
-    }
-
-    @ViewScope class Presenter @Inject constructor() : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
+    class Presenter(
+        activity: MainActivity,
+        api: CircleCIAPIClientV1,
+        eventBus: EventBusService,
+        pusher: PusherService
+    ) : PresenterNeedsToken<BuildListView>(activity, api, eventBus, pusher), Loadable, Paginatable {
         override val isLoading = Variable(false)
         override val page = Variable(0)
         override val hasMore = Variable(true)

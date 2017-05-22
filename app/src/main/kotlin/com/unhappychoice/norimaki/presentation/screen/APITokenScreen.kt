@@ -1,30 +1,27 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.di.component.ActivityComponent
+import com.unhappychoice.norimaki.di.module.screen.APITokenScreenModule
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
-import com.unhappychoice.norimaki.preference.APITokenPreference
+import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
-import com.unhappychoice.norimaki.scope.ViewScope
+import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import dagger.Subcomponent
 import mortar.MortarScope
 import mortar.ViewPresenter
 import javax.inject.Inject
 
 class APITokenScreen : Screen() {
-    override fun getLayoutResource() = R.layout.api_token_view
-    override fun getSubComponent(activityComponent: ActivityComponent) = activityComponent.apiTokenScreenComponent()
     override fun getTitle() = "Set api token"
+    override fun getLayoutResource() = R.layout.api_token_view
+    override fun getSubComponent(activityComponent: ActivityComponent) =
+        activityComponent.apiTokenScreenComponent(APITokenScreenModule())
 
-    @Subcomponent @ViewScope interface Component {
-        fun inject(view: APITokenView)
-    }
-
-    @ViewScope class Presenter @Inject constructor() : ViewPresenter<APITokenView>() {
-        @Inject lateinit var activity: MainActivity
+    class Presenter(val activity: MainActivity) : ViewPresenter<APITokenView>() {
         val token: Variable<String> = Variable("")
 
         override fun onEnterScope(scope: MortarScope?) {
