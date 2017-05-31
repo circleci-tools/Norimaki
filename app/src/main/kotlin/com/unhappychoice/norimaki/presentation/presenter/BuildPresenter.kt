@@ -1,16 +1,12 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
-import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.addAction
-import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
-import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
-import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
@@ -18,13 +14,7 @@ import mortar.MortarScope
 import javax.inject.Inject
 
 @ViewScope
-class BuildPresenter @Inject constructor(
-    val build: Build,
-    activity: MainActivity,
-    api: CircleCIAPIClientV1,
-    eventBus: EventBusService,
-    pusher: PusherService
-) : PresenterNeedsToken<BuildView>(activity, api, eventBus, pusher) {
+class BuildPresenter @Inject constructor(val build: Build) : PresenterNeedsToken<BuildView>() {
     val steps = Variable<List<BuildStep>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {

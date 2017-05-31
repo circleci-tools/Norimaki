@@ -1,17 +1,22 @@
 package com.unhappychoice.norimaki.presentation.presenter.core
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.extension.withLog
+import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import io.reactivex.rxkotlin.addTo
+import javax.inject.Inject
 
-abstract class PresenterNeedsToken<T : android.view.View>(
-    open val activity: com.unhappychoice.norimaki.MainActivity,
-    open val api: com.github.unhappychoice.circleci.CircleCIAPIClientV1,
-    open val eventBus: com.unhappychoice.norimaki.domain.service.EventBusService,
-    open val pusher: com.unhappychoice.norimaki.infrastructure.pusher.PusherService
-) : mortar.ViewPresenter<T>() {
+abstract class PresenterNeedsToken<T : android.view.View> : mortar.ViewPresenter<T>() {
+    @Inject lateinit var activity: MainActivity
+    @Inject lateinit var api: CircleCIAPIClientV1
+    @Inject lateinit var eventBus: EventBusService
+    @Inject lateinit var pusher: PusherService
+
     companion object {
         var currentUser: com.github.unhappychoice.circleci.response.User? = null
     }

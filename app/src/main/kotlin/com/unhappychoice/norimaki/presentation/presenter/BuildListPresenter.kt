@@ -1,31 +1,22 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.github.unhappychoice.circleci.response.Build
-import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
-import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
-import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
-import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
-import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import javax.inject.Inject
 
 @ViewScope
-class BuildListPresenter @Inject constructor(
-    activity: MainActivity,
-    api: CircleCIAPIClientV1,
-    eventBus: EventBusService,
-    pusher: PusherService
-) : PresenterNeedsToken<BuildListView>(activity, api, eventBus, pusher), Loadable, Paginatable {
+class BuildListPresenter @Inject constructor() : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
