@@ -1,10 +1,13 @@
 package com.unhappychoice.norimaki.presentation.presenter.core
 
-interface Paginatable {
-    val page: com.unhappychoice.norimaki.extension.Variable<Int>
-    val hasMore: com.unhappychoice.norimaki.extension.Variable<Boolean>
+import com.unhappychoice.norimaki.extension.Variable
+import io.reactivex.Observable
 
-    fun <T> io.reactivex.Observable<List<T>>.paginate(): io.reactivex.Observable<List<T>> = doOnNext {
+interface Paginatable {
+    val page: Variable<Int>
+    val hasMore: Variable<Boolean>
+
+    fun <T> Observable<List<T>>.paginate(): Observable<List<T>> = doOnNext {
         hasMore.value = it.isNotEmpty()
         page.value = page.value + 1
     }

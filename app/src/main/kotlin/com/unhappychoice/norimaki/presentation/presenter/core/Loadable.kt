@@ -4,9 +4,9 @@ import com.unhappychoice.norimaki.extension.Variable
 import io.reactivex.Observable
 
 interface Loadable {
-    val isLoading: com.unhappychoice.norimaki.extension.Variable<Boolean>
+    val isLoading: Variable<Boolean>
 
-    fun <T> io.reactivex.Observable<T>.startLoading(): io.reactivex.Observable<T> {
+    fun <T> io.reactivex.Observable<T>.startLoading(): Observable<T> {
         isLoading.value = true
         return this
             .doOnError { isLoading.value = false }
