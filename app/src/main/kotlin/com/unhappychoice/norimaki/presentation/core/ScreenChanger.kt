@@ -4,8 +4,8 @@ import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import com.unhappychoice.norimaki.ActivityComponent
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.di.component.ActivityComponent
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import flow.*

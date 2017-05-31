@@ -7,15 +7,15 @@ import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.textChanges
 import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
+import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.api_token_view.view.*
 import javax.inject.Inject
 
-class APITokenView(context: Context?, attr: AttributeSet?) : LinearLayout(context, attr) {
-    @Inject lateinit var presenter: APITokenScreen.Presenter
-    private val bag = CompositeDisposable()
+class APITokenView(context: Context?, attr: AttributeSet?) : BaseView(context, attr) {
+    @Inject lateinit var presenter: APITokenPresenter
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

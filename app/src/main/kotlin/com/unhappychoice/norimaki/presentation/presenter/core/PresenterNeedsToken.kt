@@ -1,4 +1,4 @@
-package com.unhappychoice.norimaki.presentation.screen.core
+package com.unhappychoice.norimaki.presentation.presenter.core
 
 import android.os.Handler
 import android.view.View
@@ -10,8 +10,8 @@ import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.extension.withLog
+import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
-import com.unhappychoice.norimaki.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
@@ -44,13 +44,13 @@ abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
 
     private fun authenticate() {
         if (token.isBlank()) return goToAPITokenView()
-        if (currentUser != null) return
+        if (PresenterNeedsToken.Companion.currentUser != null) return
 
         api.getMe()
             .subscribeOnIoObserveOnUI()
             .withLog("getMe")
             .doOnError { goToAPITokenView() }
-            .doOnNext { currentUser = it }
+            .doOnNext { PresenterNeedsToken.Companion.currentUser = it }
             .subscribeNext { eventBus.authenticated.onNext(Pair(token, it.pusherId)) }
             .addTo(bag)
     }
