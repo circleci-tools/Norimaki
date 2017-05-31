@@ -11,6 +11,7 @@ import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
+import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.disposables.CompositeDisposable
@@ -19,7 +20,7 @@ import kotlinx.android.synthetic.main.build_list_view.view.*
 import javax.inject.Inject
 
 class BuildListView(context: Context, attr: AttributeSet) : LinearLayout(context, attr), HasMenu {
-    @Inject lateinit var presenter: BuildListScreen.Presenter
+    @Inject lateinit var presenter: BuildListPresenter
     private val adapter = BuildAdapter(context)
     private val bag = CompositeDisposable()
 

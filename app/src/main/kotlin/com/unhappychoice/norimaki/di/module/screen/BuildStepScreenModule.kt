@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
+import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import dagger.Provides
 
@@ -17,5 +18,5 @@ class BuildStepScreenModule(val build: Build, val buildStep: BuildStep, val step
         api: CircleCIAPIClientV1,
         eventBus: EventBusService,
         pusher: PusherService
-    ) = BuildStepScreen.Presenter(build, buildStep, stepIndex, activity, api, eventBus, pusher)
+    ) = BuildStepPresenter(build, buildStep, stepIndex, activity, api, eventBus, pusher)
 }

@@ -6,6 +6,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
+import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import dagger.Provides
 
@@ -16,5 +17,5 @@ class BuildScreenModule(val build: Build) {
         api: CircleCIAPIClientV1,
         eventBus: EventBusService,
         pusher: PusherService
-    ) = BuildScreen.Presenter(build, activity, api, eventBus, pusher)
+    ) = BuildPresenter(build, activity, api, eventBus, pusher)
 }
