@@ -8,14 +8,17 @@ import com.unhappychoice.norimaki.domain.model.addAction
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
+import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
 import mortar.MortarScope
+import javax.inject.Inject
 
-class BuildPresenter(
+@ViewScope
+class BuildPresenter @Inject constructor(
     val build: Build,
     activity: MainActivity,
     api: CircleCIAPIClientV1,

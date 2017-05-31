@@ -9,8 +9,8 @@ import android.view.View
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.unhappychoice.norimaki.di.component.ActivityComponent
 import com.unhappychoice.norimaki.di.component.ApplicationComponent
-import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.di.module.ActivityModule
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen

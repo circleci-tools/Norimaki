@@ -10,7 +10,6 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
-import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo

@@ -12,7 +12,6 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
-import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo

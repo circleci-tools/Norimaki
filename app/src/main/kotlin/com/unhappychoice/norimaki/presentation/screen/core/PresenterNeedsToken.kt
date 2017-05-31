@@ -17,7 +17,6 @@ import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import mortar.ViewPresenter
-import javax.inject.Inject
 
 abstract class PresenterNeedsToken<T : View>(
     open val activity: MainActivity,

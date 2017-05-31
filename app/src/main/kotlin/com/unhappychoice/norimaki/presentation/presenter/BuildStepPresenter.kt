@@ -8,6 +8,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
+import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
@@ -16,8 +17,10 @@ import mortar.MortarScope
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import javax.inject.Inject
 
-class BuildStepPresenter(
+@ViewScope
+class BuildStepPresenter @Inject constructor(
     val build: Build,
     val buildStep: BuildStep,
     val stepIndex: Int,

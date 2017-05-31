@@ -5,14 +5,15 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
 import mortar.MortarScope
 import mortar.ViewPresenter
+import javax.inject.Inject
 
-class APITokenPresenter(
-    val activity: MainActivity
-) : ViewPresenter<APITokenView>() {
+@ViewScope
+class APITokenPresenter @Inject constructor(val activity: MainActivity) : ViewPresenter<APITokenView>() {
     val token: Variable<String> = Variable("")
 
     override fun onEnterScope(scope: MortarScope?) {
