@@ -12,16 +12,16 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
+import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.build_list_view.view.*
 import javax.inject.Inject
 
-class BuildListView(context: Context, attr: AttributeSet) : LinearLayout(context, attr), HasMenu {
+class BuildListView(context: Context, attr: AttributeSet) : BaseView(context, attr), HasMenu {
     @Inject lateinit var presenter: BuildListPresenter
     private val adapter = BuildAdapter(context)
-    private val bag = CompositeDisposable()
 
     override fun onCreateOptionsMenu(menu: Menu?) {
         menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
