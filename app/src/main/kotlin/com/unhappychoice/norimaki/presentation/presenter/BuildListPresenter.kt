@@ -11,9 +11,9 @@ import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.core.Loadable
-import com.unhappychoice.norimaki.presentation.screen.core.Paginatable
-import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
+import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
+import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope

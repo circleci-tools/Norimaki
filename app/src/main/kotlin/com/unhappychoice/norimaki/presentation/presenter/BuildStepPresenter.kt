@@ -9,7 +9,7 @@ import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
-import com.unhappychoice.norimaki.presentation.screen.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
