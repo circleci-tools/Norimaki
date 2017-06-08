@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">Norimaki</string>
-    <string name="help_api_token">You need to get Circle CI API token from here https://circleci.com/account/api
-    </string>
-</resources>
