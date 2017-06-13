@@ -28,4 +28,4 @@ deployment:
     branch: master
     commands:
       - ./gradlew assembleRelease
-
+      - ./gradlew publishApkRelease

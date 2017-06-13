@@ -15,6 +15,7 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
 apply plugin: 'jacoco'
+apply plugin: 'com.github.triplet.play'
 
 kapt {
     generateStubs = true
@@ -68,24 +69,21 @@ android {
     compileSdkVersion 25
     buildToolsVersion '25.0.3'
 
+    playAccountConfigs {
+        defaultAccountConfig {
+            serviceAccountEmail = 'unhappychoice@gmail.com'
+            pk12File = decodeFileFromBase64Env("PLAY_ACCOUNT_P12_BASE64", "norimaki", "p12")
+        }
+    }
     defaultConfig {
         applicationId "com.unhappychoice.norimaki"
         minSdkVersion 16
         targetSdkVersion 25
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
-        versionName "1.0"
+        versionName "1.0.0"
         multiDexEnabled true
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-    }
-    buildTypes {
-        release {
-            minifyEnabled false
-            testCoverageEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            if (System.getenv("CI")) {
-                signingConfig signingConfigs.release
-            }
-        }
+        playAccountConfig = playAccountConfigs.defaultAccountConfig
     }
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
@@ -113,11 +111,23 @@ android {
         }
     }
     signingConfigs {
-        if (System.getenv("CI")) {
-            storeFile decodeKeyStoreFileFromBase64Env('RELEASE_KEYSTORE_BASE64')
-            storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
-            keyAlias System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
-            keyPassword System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
+        release {
+            if (System.getenv("CI")) {
+                storeFile decodeFileFromBase64Env('RELEASE_KEYSTORE_BASE64', "tmp_ks_", ".jks")
+                storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
+                keyPassword System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            testCoverageEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (System.getenv("CI")) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
@@ -149,19 +159,19 @@ task jacoco(type: JacocoReport, dependsOn: "testDebugUnitTest") {
     executionData = files('build/jacoco/testDebugUnitTest.exec')
 }
 
-static decodeKeyStoreFileFromBase64Env(String name) {
-    String keyStoreBase64 = System.getenv(name)
-    if (keyStoreBase64 == null) return null
-    File tempKeyStoreFile = File.createTempFile("tmp_ks_", ".jks", File.createTempDir())
+static decodeFileFromBase64Env(String name, String fileName, String ext) {
+    String base64String = System.getenv(name)
+    if (base64String == null) return null
+    File tempFile = File.createTempFile(fileName, ext, File.createTempDir())
     FileOutputStream fos = null
     try {
-        fos = new FileOutputStream(tempKeyStoreFile)
-        fos.write(keyStoreBase64.decodeBase64())
+        fos = new FileOutputStream(tempFile)
+        fos.write(base64String.decodeBase64())
         fos.flush()
     } finally {
         if (fos != null) {
             fos.close()
         }
     }
-    return tempKeyStoreFile
+    return tempFile
 }
