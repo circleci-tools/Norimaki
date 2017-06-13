@@ -4,7 +4,9 @@ machine:
     version: oraclejdk8
   environment:
     GRADLE_OPTS: '-Dorg.gradle.jvmargs="-Xmx2G -XX:+HeapDumpOnOutOfMemoryError"'
-
+general:
+  artifacts:
+    - "app/build"
 dependencies:
   pre:
     - scripts/ci/install-android-licenses.sh
