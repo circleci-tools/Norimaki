@@ -21,5 +21,9 @@ test:
     - ./gradlew jacoco
   post:
    - scripts/ci/send-coverage-info.sh
-
+deployment:
+  master:
+    branch: master
+    commands:
+      - ./gradlew assembleRelease
 
