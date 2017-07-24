@@ -69,6 +69,27 @@ android {
     compileSdkVersion 25
     buildToolsVersion '25.0.3'
 
+    signingConfigs {
+        release {
+            if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
+                storeFile decodeFileFromBase64Env('RELEASE_KEYSTORE_BASE64', "tmp_ks_", ".jks")
+                storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
+                keyPassword System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            testCoverageEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
+                signingConfig signingConfigs.release
+                debuggable false
+            }
+        }
+    }
     playAccountConfigs {
         defaultAccountConfig {
             serviceAccountEmail = 'unhappychoice@gmail.com'
@@ -107,27 +128,6 @@ android {
         unitTests.all {
             jacoco {
                 includeNoLocationClasses = true
-            }
-        }
-    }
-    signingConfigs {
-        release {
-            if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
-                storeFile decodeFileFromBase64Env('RELEASE_KEYSTORE_BASE64', "tmp_ks_", ".jks")
-                storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
-                keyPassword System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
-            }
-        }
-    }
-    buildTypes {
-        release {
-            minifyEnabled false
-            testCoverageEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
-                signingConfig signingConfigs.release
-                debuggable false
             }
         }
     }
