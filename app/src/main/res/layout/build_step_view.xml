@@ -3,24 +3,34 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#212121"
-    android:orientation="vertical">
+    android:background="?android:windowBackground"
+    android:orientation="vertical"
+    android:theme="@style/Theme.AppCompat">
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="vertical">
 
-        <TextView
-            android:id="@+id/logText"
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingMultiplier="1.2"
-            android:paddingBottom="@dimen/vertical_margin"
-            android:paddingEnd="@dimen/horizontal_margin"
-            android:paddingLeft="@dimen/horizontal_margin"
-            android:paddingRight="@dimen/horizontal_margin"
-            android:paddingStart="@dimen/horizontal_margin"
-            android:paddingTop="@dimen/vertical_margin"
-            android:textColor="#fff0f0f0"/>
+            android:fillViewport="true">
+
+            <TextView
+                android:id="@+id/logText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:lineSpacingMultiplier="1.2"
+                android:paddingBottom="@dimen/vertical_margin"
+                android:paddingEnd="@dimen/horizontal_margin"
+                android:paddingLeft="@dimen/horizontal_margin"
+                android:paddingRight="@dimen/horizontal_margin"
+                android:paddingStart="@dimen/horizontal_margin"
+                android:paddingTop="@dimen/vertical_margin"
+                android:textAppearance="@style/TextAppearance.AppCompat.Body1"
+                android:textIsSelectable="true" />
+        </HorizontalScrollView>
     </ScrollView>
 </com.unhappychoice.norimaki.presentation.view.BuildStepView>
