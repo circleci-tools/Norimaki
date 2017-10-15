@@ -1,0 +1,76 @@
+version: 2
+
+restore_cache: &restore_cache
+  restore_cache:
+    keys:
+      - jars-{{ checksum "build.gradle" }}-{{ checksum  "app/build.gradle" }}
+      - builds-{{ .Revision }}
+      - app-builds-{{ .Revision }}
+jobs:
+  build:
+    working_directory: ~/norimaki
+    docker:
+      - image: circleci/android:api-25-alpha
+    environment:
+      JVM_OPTS: -Xmx3200m
+    steps:
+      - checkout
+      - *restore_cache
+      - run:
+          name: Download Dependencies
+          command: ./gradlew dependencies
+      - run:
+          name: Build
+          command: ./gradlew assembleDebugUnitTest
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: jars-{{ checksum "build.gradle" }}-{{ checksum  "app/build.gradle" }}
+      - save_cache:
+          paths:
+            - ~/norimaki/build
+          key: builds-{{ .Revision }}
+      - save_cache:
+          paths:
+            - ~/norimaki/app/build
+          key: app-builds-{{ .Revision }}
+
+  test:
+    working_directory: ~/norimaki
+    docker:
+      - image: circleci/android:api-25-alpha
+    environment:
+      JVM_OPTS: -Xmx3200m
+    steps:
+      - checkout
+      - *restore_cache
+      - run:
+          name: Run Tests
+          command: ./gradlew jacoco
+      - run:
+          name: Send coverage
+          command: ./scripts/ci/send-coverage-info.sh
+  deploy:
+    working_directory: ~/norimaki
+    docker:
+      - image: circleci/android:api-25-alpha
+    environment:
+      JVM_OPTS: -Xmx3200m
+    steps:
+      - checkout
+      - *restore_cache
+      - run:
+          name: Publish APK
+          command: ./gradlew publishApkRelease
+
+workflows:
+  version: 2
+  test-and-deploy:
+    jobs:
+      - build
+      - test: { requires: [build] }
+      - deploy:
+          filters:
+            branches:
+              only: master
+          requires: [test]
