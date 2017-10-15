@@ -99,7 +99,7 @@ android {
     playAccountConfigs {
         defaultAccountConfig {
             serviceAccountEmail = 'unhappychoice@gmail.com'
-            pk12File = decodeFileFromBase64Env("PLAY_ACCOUNT_P12_BASE64", "norimaki", "p12")
+            jsonFile = decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", "json")
         }
     }
     defaultConfig {
