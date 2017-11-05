@@ -28,7 +28,6 @@ class BuildPresenter @Inject constructor(val build: Build) : PresenterNeedsToken
 
         pusher.updateActionEvents(build)
             .map { it.log.toBuildAction() }
-            .withLog("updateAction")
             .subscribeNext { steps.value = steps.value.addAction(it) }
             .addTo(bag)
 
@@ -44,8 +43,7 @@ class BuildPresenter @Inject constructor(val build: Build) : PresenterNeedsToken
 
     fun goToBuildStepScreen(buildStep: BuildStep) {
         if (buildStep.actions.isEmpty()) return
-        val stepIndex = steps.value.indexOf(buildStep)
-        goTo(activity, BuildStepScreen(build, buildStep, stepIndex))
+        goTo(activity, BuildStepScreen(build, buildStep))
     }
 
     fun rebuild() {

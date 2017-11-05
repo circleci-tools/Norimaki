@@ -19,6 +19,8 @@ fun BuildStep.statusColor(): Int = when {
 
 fun BuildStep.addAction(action: BuildAction): BuildStep = copy(actions = actions + action)
 
+fun BuildStep.step(): Int? = actions.firstOrNull()?.step
+
 fun List<BuildStep>.addAction(action: BuildAction): List<BuildStep> = map {
     when (it.name) {
         action.name -> it.addAction(action)

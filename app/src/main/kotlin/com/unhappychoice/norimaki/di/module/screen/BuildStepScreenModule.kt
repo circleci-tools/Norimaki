@@ -6,8 +6,7 @@ import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import dagger.Provides
 
 @dagger.Module
-class BuildStepScreenModule(val build: Build, val buildStep: BuildStep, val stepIndex: Int) {
+class BuildStepScreenModule(val build: Build, val buildStep: BuildStep) {
     @Provides @ViewScope fun provideBuild(): Build = build
     @Provides @ViewScope fun provideBuildStep(): BuildStep = buildStep
-    @Provides @ViewScope fun provideStepIndex(): Int = stepIndex
 }
