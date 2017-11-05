@@ -29,7 +29,9 @@ abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
         var currentUser: User? = null
     }
 
-    val token by lazy { APITokenPreference(activity).token }
+    val token
+        get() = APITokenPreference(activity).token
+
     val bag = CompositeDisposable()
 
     override fun onEnterScope(scope: MortarScope?) {

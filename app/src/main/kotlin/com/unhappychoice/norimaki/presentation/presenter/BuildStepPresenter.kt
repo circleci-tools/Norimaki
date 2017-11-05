@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildAction
 import com.github.unhappychoice.circleci.response.BuildStep
+import com.unhappychoice.norimaki.domain.model.step
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
@@ -18,8 +19,7 @@ import javax.inject.Inject
 @ViewScope
 class BuildStepPresenter @Inject constructor(
     val build: Build,
-    val buildStep: BuildStep,
-    val stepIndex: Int
+    val buildStep: BuildStep
 ) : PresenterNeedsToken<BuildStepView>() {
     val logString: Variable<String> = Variable("")
 
@@ -27,8 +27,12 @@ class BuildStepPresenter @Inject constructor(
         super.onEnterScope(scope)
 
         pusher.appendActionEvents(build)
-            .filter { it.step == stepIndex }
-            .subscribeNext { logString.value = logString.value + it.out.message.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml() }
+            .withLog("action1")
+            .filter { it.step == buildStep.step() }
+            .withLog("action2")
+            .map { it.out.message.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml() }
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { logString.value = logString.value + it }
             .addTo(bag)
 
         getActions()
@@ -37,8 +41,9 @@ class BuildStepPresenter @Inject constructor(
     fun getActions() {
         val actions = buildStep.actions.filter { it.outputUrl != null }
         Observable.concat(actions.map { getAction(it) })
+            .map { it.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml() }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { logString.value = logString.value + it.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml() }
+            .subscribeNext { logString.value = logString.value + it }
             .addTo(bag)
     }
 

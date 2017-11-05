@@ -16,9 +16,8 @@ class ApplicationModule(val application: NorimakiApplication) {
     @Provides @Singleton fun provideEventBusService() = eventBus
     @Provides @Singleton fun providePusherService() = PusherService(eventBus, gson)
     @Provides @Singleton fun provideGson() = gson
-    @Provides fun provideApiService() = apiService
+    @Provides fun provideApiService() = CircleCIAPIClient(APITokenPreference(application).token).client()
 
-    private val apiService = CircleCIAPIClient(APITokenPreference(application).token).client()
     private val eventBus = EventBusService()
     private val gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
