@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.presenter.core
 
 import android.os.Handler
 import android.view.View
+import com.github.salomonbrys.kodein.instance
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.github.unhappychoice.circleci.response.User
 import com.unhappychoice.norimaki.MainActivity
@@ -16,14 +17,12 @@ import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
-import mortar.ViewPresenter
-import javax.inject.Inject
 
-abstract class PresenterNeedsToken<T : View> : ViewPresenter<T>() {
-    @Inject lateinit var activity: MainActivity
-    @Inject lateinit var api: CircleCIAPIClientV1
-    @Inject lateinit var eventBus: EventBusService
-    @Inject lateinit var pusher: PusherService
+abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
+    val activity: MainActivity by instance()
+    val api: CircleCIAPIClientV1 by instance()
+    val eventBus: EventBusService by instance()
+    val pusher: PusherService by instance()
 
     companion object {
         var currentUser: User? = null
