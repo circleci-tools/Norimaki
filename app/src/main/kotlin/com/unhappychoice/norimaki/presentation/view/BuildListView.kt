@@ -5,7 +5,7 @@ import android.support.v7.widget.LinearLayoutManager
 import android.util.AttributeSet
 import android.view.Menu
 import android.view.MenuItem
-import android.widget.LinearLayout
+import com.github.salomonbrys.kodein.instance
 import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
 import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext
@@ -14,13 +14,11 @@ import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
-import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.build_list_view.view.*
-import javax.inject.Inject
 
-class BuildListView(context: Context, attr: AttributeSet) : BaseView(context, attr), HasMenu {
-    @Inject lateinit var presenter: BuildListPresenter
+class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListView>(context, attr), HasMenu {
+    override val presenter: BuildListPresenter by instance()
     private val adapter = BuildAdapter(context)
 
     override fun onCreateOptionsMenu(menu: Menu?) {

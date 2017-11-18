@@ -5,9 +5,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import com.unhappychoice.norimaki.MainActivity
-import com.unhappychoice.norimaki.di.component.ActivityComponent
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
+import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import flow.*
 import kotlinx.android.synthetic.main.activity_main.*
 
@@ -31,7 +31,7 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         val screen = incomingState.getScreen()
 
         screen?.inflateView()?.let {
-            screen.injectPresenter(it)
+            inject(screen, it)
             containerView.addView(it)
             incomingState.restore(it)
         }
@@ -52,13 +52,12 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
     private fun hasScreens(): Boolean =
         Flow.get(activity).history.asIterable().filter { it !is APITokenScreen }.size > 1
 
-    private fun Screen.injectPresenter(view: View) {
+    private fun inject(screen: Screen, view: View) {
         try {
-            val activityComponent = activity.getSystemService(ActivityComponent.name) as ActivityComponent
-            val screenComponent = getSubComponent(activityComponent)
-            screenComponent.javaClass.getMethod("inject", view.javaClass).apply {
-                isAccessible = true
-                invoke(screenComponent, view)
+            (view as? BaseView<*>)?.let { baseView ->
+                val module = screen.module(activity.module)
+                baseView.inject(module)
+                baseView.presenter.inject(module)
             }
         } catch (e: Exception) {
             e.printStackTrace()

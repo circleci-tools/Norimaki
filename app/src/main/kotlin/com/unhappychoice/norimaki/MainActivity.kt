@@ -6,39 +6,30 @@ import android.support.v7.app.AppCompatActivity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
-import com.unhappychoice.norimaki.di.component.ActivityComponent
-import com.unhappychoice.norimaki.di.component.ApplicationComponent
-import com.unhappychoice.norimaki.di.module.ActivityModule
-import com.unhappychoice.norimaki.domain.service.EventBusService
+import com.github.salomonbrys.kodein.Kodein
+import com.unhappychoice.norimaki.di.activityModule
+import com.unhappychoice.norimaki.di.applicationModule
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
-import io.reactivex.disposables.CompositeDisposable
 import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
-import javax.inject.Inject
 
 class MainActivity : AppCompatActivity() {
-    @Inject lateinit var api: CircleCIAPIClientV1
-    @Inject lateinit var eventBus: EventBusService
-
-    private val bag = CompositeDisposable()
-
-    private val component: ActivityComponent by lazy {
-        (applicationContext.getSystemService(ApplicationComponent.name) as ApplicationComponent)
-            .activityComponent(ActivityModule(this))
-            .apply { inject(this@MainActivity) }
+    val module by lazy {
+        Kodein {
+            import(applicationModule(application as NorimakiApplication))
+            import(activityModule(this@MainActivity))
+        }
     }
 
     private val scope: MortarScope by lazy {
         MortarScope.buildChild(applicationContext)
             .withService(BundleServiceRunner.SERVICE_NAME, BundleServiceRunner())
-            .withService(ActivityComponent.name, component)
             .build("activity_scope")
     }
 

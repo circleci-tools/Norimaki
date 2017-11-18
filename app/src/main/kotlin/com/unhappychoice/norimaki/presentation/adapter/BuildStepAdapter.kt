@@ -49,9 +49,9 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
                 .addTo(bag)
         }
 
-        private val indicator = view.findViewById(R.id.statusIndicator)
-        private val buildTitle = view.findViewById(R.id.buildTitle) as TextView
-        private val time = view.findViewById(R.id.time) as TextView
+        private val indicator = view.findViewById<View>(R.id.statusIndicator)
+        private val buildTitle = view.findViewById<TextView>(R.id.buildTitle)
+        private val time = view.findViewById<TextView>(R.id.time)
     }
 
     fun finalize() = bag.dispose()

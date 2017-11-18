@@ -56,12 +56,12 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
                 .addTo(bag)
         }
 
-        private val author = view.findViewById(R.id.author) as CircleImageView
-        private val indicator = view.findViewById(R.id.statusIndicator)
-        private val repositoryTitle = view.findViewById(R.id.repositoryTitle) as TextView
-        private val branchTitle = view.findViewById(R.id.branchTitle) as TextView
-        private val commitTitle = view.findViewById(R.id.commitTitle) as TextView
-        private val createdAt = view.findViewById(R.id.createdAt) as TextView
+        private val author = view.findViewById<CircleImageView>(R.id.author)
+        private val indicator = view.findViewById<View>(R.id.statusIndicator)
+        private val repositoryTitle = view.findViewById<TextView>(R.id.repositoryTitle)
+        private val branchTitle = view.findViewById<TextView>(R.id.branchTitle)
+        private val commitTitle = view.findViewById<TextView>(R.id.commitTitle)
+        private val createdAt = view.findViewById<TextView>(R.id.createdAt)
     }
 
     fun finalize() = bag.dispose()

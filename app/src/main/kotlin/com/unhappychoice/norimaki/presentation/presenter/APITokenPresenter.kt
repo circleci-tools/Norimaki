@@ -1,19 +1,18 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 
+import com.github.salomonbrys.kodein.instance
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
-import com.unhappychoice.norimaki.presentation.core.scope.ViewScope
+import com.unhappychoice.norimaki.presentation.presenter.core.Presenter
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
 import mortar.MortarScope
-import mortar.ViewPresenter
-import javax.inject.Inject
 
-@ViewScope
-class APITokenPresenter @Inject constructor(val activity: MainActivity) : ViewPresenter<APITokenView>() {
+class APITokenPresenter: Presenter<APITokenView>() {
+    val activity: MainActivity by instance()
     val token: Variable<String> = Variable("")
 
     override fun onEnterScope(scope: MortarScope?) {
