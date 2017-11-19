@@ -1,8 +1,10 @@
 package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
+import android.os.Parcelable
 import android.support.v7.widget.LinearLayoutManager
 import android.util.AttributeSet
+import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
 import com.github.salomonbrys.kodein.instance
@@ -21,6 +23,10 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
     override val presenter: BuildListPresenter by instance()
     private val adapter = BuildAdapter(context)
 
+    private enum class MenuResource(val id: Int) {
+        LogOut(0)
+    }
+
     override fun onCreateOptionsMenu(menu: Menu?) {
         menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
     }
@@ -31,8 +37,9 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         }
     }
 
-    private enum class MenuResource(val id: Int) {
-        LogOut(0)
+    override fun dispatchRestoreInstanceState(container: SparseArray<Parcelable>?) {
+        super.dispatchRestoreInstanceState(container)
+        buildsView.restoreHierarchyState(container)
     }
 
     override fun onAttachedToWindow() {
@@ -41,6 +48,8 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
 
         buildsView.adapter = adapter
         buildsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+
+        adapter.builds.value = presenter.builds.value
 
         presenter.builds.asObservable()
             .subscribeOnIoObserveOnUI()

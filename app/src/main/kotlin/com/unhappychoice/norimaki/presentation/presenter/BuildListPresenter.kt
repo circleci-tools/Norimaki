@@ -3,7 +3,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.response.Build
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
-import com.unhappychoice.norimaki.extension.*
+import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.goTo
+import com.unhappychoice.norimaki.extension.subscribeNext
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
@@ -24,7 +27,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         getBuilds()
 
         eventBus.buildListUpdated
-            .withLog("buildListUpdated")
             .subscribeNext {
                 api.getRecentBuilds(offset = 0, limit = 20)
                     .subscribeOnIoObserveOnUI()
