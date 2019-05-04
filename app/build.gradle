@@ -20,6 +20,7 @@ apply plugin: 'com.github.triplet.play'
 repositories {
     mavenCentral()
     jcenter()
+    google()
     maven { url("https://jitpack.io") }
     maven { url('https://oss.sonatype.org/content/repositories/snapshots/') }
 }
@@ -60,8 +61,8 @@ dependencies {
 }
 
 android {
-    compileSdkVersion 26
-    buildToolsVersion '26.0.2'
+    compileSdkVersion 29
+    buildToolsVersion '29.0.0'
 
     signingConfigs {
         release {
@@ -98,7 +99,7 @@ android {
     defaultConfig {
         applicationId "com.unhappychoice.norimaki"
         minSdkVersion 16
-        targetSdkVersion 25
+        targetSdkVersion 29
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
         versionName "1.0.3"
         multiDexEnabled true
