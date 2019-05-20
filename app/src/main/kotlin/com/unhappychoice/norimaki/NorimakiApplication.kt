@@ -1,6 +1,6 @@
 package com.unhappychoice.norimaki
 
-import android.support.multidex.MultiDexApplication
+import androidx.multidex.MultiDexApplication
 import mortar.MortarScope
 
 class NorimakiApplication : MultiDexApplication() {

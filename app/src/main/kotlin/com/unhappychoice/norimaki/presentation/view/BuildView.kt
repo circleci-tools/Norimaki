@@ -1,10 +1,11 @@
 package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
-import android.support.v7.widget.LinearLayoutManager
 import android.util.AttributeSet
 import android.view.Menu
 import android.view.MenuItem
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.github.salomonbrys.kodein.instance
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -41,7 +42,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         presenter.takeView(this)
 
         stepsView.adapter = adapter
-        stepsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+        stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
         presenter.steps.asObservable()
             .subscribeOnIoObserveOnUI()

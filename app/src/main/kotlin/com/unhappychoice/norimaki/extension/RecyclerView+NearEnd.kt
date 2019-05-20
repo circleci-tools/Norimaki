@@ -1,7 +1,7 @@
 package com.unhappychoice.norimaki.extension
 
-import android.support.v7.widget.LinearLayoutManager
-import android.support.v7.widget.RecyclerView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 
 fun RecyclerView.isNearEnd(): Boolean {
     val layoutManager = layoutManager as LinearLayoutManager

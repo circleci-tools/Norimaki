@@ -2,11 +2,12 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.os.Parcelable
-import android.support.v7.widget.LinearLayoutManager
 import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.github.salomonbrys.kodein.instance
 import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
 import com.unhappychoice.norimaki.extension.isNearEnd
@@ -47,7 +48,7 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         presenter.takeView(this)
 
         buildsView.adapter = adapter
-        buildsView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+        buildsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
         adapter.builds.value = presenter.builds.value
 

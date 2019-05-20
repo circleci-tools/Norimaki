@@ -27,16 +27,15 @@ repositories {
 
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile "com.android.support:appcompat-v7:25.3.1"
-    compile "com.android.support:design:25.3.1"
-    compile 'com.android.support:multidex:1.0.1'
-    compile "com.android.support:recyclerview-v7:25.3.1"
-    compile 'com.android.support:support-v4:25.3.1'
+    compile "androidx.appcompat:appcompat:1.0.2"
+    compile 'androidx.multidex:multidex:2.0.1'
+    compile "androidx.recyclerview:recyclerview:1.0.0"
     compile 'com.github.bumptech.glide:glide:3.7.0'
     compile 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
     compile 'com.github.salomonbrys.kodein:kodein:4.1.0'
     compile 'com.github.unhappychoice:circleci:0.2.1'
     compile 'com.github.unhappychoice:rxsnackbar:0.1.2'
+    compile 'com.google.android.material:material:1.0.0'
     compile 'com.google.code.gson:gson:2.7'
     compile "com.jakewharton.rxbinding2:rxbinding-kotlin:$rx_version"
     compile "com.jakewharton.rxbinding2:rxbinding-support-v4-kotlin:$rx_version"
