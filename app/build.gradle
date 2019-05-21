@@ -26,37 +26,37 @@ repositories {
 }
 
 dependencies {
-    compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile "androidx.appcompat:appcompat:1.0.2"
-    compile 'androidx.multidex:multidex:2.0.1'
-    compile "androidx.recyclerview:recyclerview:1.0.0"
-    compile 'com.github.bumptech.glide:glide:3.7.0'
-    compile 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
-    compile 'com.github.salomonbrys.kodein:kodein:4.1.0'
-    compile 'com.github.unhappychoice:circleci:0.2.1'
-    compile 'com.github.unhappychoice:rxsnackbar:0.1.2'
-    compile 'com.google.android.material:material:1.0.0'
-    compile 'com.google.code.gson:gson:2.7'
-    compile "com.jakewharton.rxbinding2:rxbinding-kotlin:$rx_version"
-    compile "com.jakewharton.rxbinding2:rxbinding-support-v4-kotlin:$rx_version"
-    compile "com.jakewharton.rxbinding2:rxbinding-appcompat-v7-kotlin:$rx_version"
-    compile "com.jakewharton.rxbinding2:rxbinding-design-kotlin:$rx_version"
-    compile "com.jakewharton.rxbinding2:rxbinding-recyclerview-v7-kotlin:$rx_version"
-    compile 'com.squareup.flow:flow:1.0.0-alpha3'
-    compile 'com.squareup.mortar:mortar:0.20'
-    compile 'com.pusher:pusher-java-client:1.4.0'
-    compile 'de.hdodenhof:circleimageview:2.1.0'
-    compile "io.reactivex.rxjava2:rxkotlin:$rx_version"
-    compile "io.reactivex.rxjava2:rxandroid:$rx_version"
-    compile 'jp.takuji31.koreference:koreference:1.1.0'
-    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-    testCompile 'junit:junit:4.12'
-    testCompile ("com.nhaarman:mockito-kotlin:1.4.0") { exclude group: 'org.jetbrains.kotlin' }
-    testCompile ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
-    testCompile ("io.polymorphicpanda.kspec:kspec-core:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
-    testCompile ("io.polymorphicpanda.kspec:kspec-junit-runner:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
-    testCompile 'org.robolectric:robolectric:3.3.2'
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:1.0.2"
+    implementation 'androidx.multidex:multidex:2.0.1'
+    implementation "androidx.recyclerview:recyclerview:1.0.0"
+    implementation 'com.github.bumptech.glide:glide:4.3.1'
+    implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
+    implementation 'com.github.salomonbrys.kodein:kodein:4.1.0'
+    implementation 'com.github.unhappychoice:circleci:0.2.1'
+    implementation 'com.github.unhappychoice:rxsnackbar:0.1.2'
+    implementation 'com.google.android.material:material:1.0.0'
+    implementation 'com.google.code.gson:gson:2.7'
+    implementation "com.jakewharton.rxbinding2:rxbinding-kotlin:$rx_version"
+    implementation "com.jakewharton.rxbinding2:rxbinding-support-v4-kotlin:$rx_version"
+    implementation "com.jakewharton.rxbinding2:rxbinding-appcompat-v7-kotlin:$rx_version"
+    implementation "com.jakewharton.rxbinding2:rxbinding-design-kotlin:$rx_version"
+    implementation "com.jakewharton.rxbinding2:rxbinding-recyclerview-v7-kotlin:$rx_version"
+    implementation 'com.squareup.flow:flow:1.0.0-alpha3'
+    implementation 'com.squareup.mortar:mortar:0.20'
+    implementation 'com.pusher:pusher-java-client:1.4.0'
+    implementation 'de.hdodenhof:circleimageview:2.1.0'
+    implementation "io.reactivex.rxjava2:rxkotlin:$rx_version"
+    implementation "io.reactivex.rxjava2:rxandroid:$rx_version"
+    implementation 'jp.takuji31.koreference:koreference:1.1.0'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+    testImplementation 'junit:junit:4.12'
+    testImplementation ("com.nhaarman:mockito-kotlin:1.4.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("io.polymorphicpanda.kspec:kspec-core:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("io.polymorphicpanda.kspec:kspec-junit-runner:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation 'org.robolectric:robolectric:3.3.2'
 }
 
 android {
@@ -66,10 +66,10 @@ android {
     signingConfigs {
         release {
             if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
-                storeFile decodeFileFromBase64Env('RELEASE_KEYSTORE_BASE64', "tmp_ks_", ".jks")
-                storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
-                keyPassword System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
+                storeFile = decodeFileFromBase64Env('RELEASE_KEYSTORE_BASE64', "tmp_ks_", ".jks")
+                storePassword = System.getenv('RELEASE_KEYSTORE_PASSWORD')
+                keyAlias = System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
+                keyPassword = System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
             }
         }
     }
@@ -85,7 +85,7 @@ android {
             testCoverageEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
-                signingConfig signingConfigs.release
+                signingConfig = signingConfigs.release
             }
         }
     }
@@ -124,9 +124,11 @@ android {
         exclude 'META-INF/rxkotlin.properties'
     }
     testOptions {
-        unitTests.all {
-            jacoco {
-                includeNoLocationClasses = true
+        unitTests {
+            all {
+                jacoco {
+                    includeNoLocationClasses = true
+                }
             }
         }
     }
