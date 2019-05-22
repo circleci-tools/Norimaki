@@ -8,7 +8,7 @@ class NorimakiApplication : MultiDexApplication() {
         MortarScope.buildRootScope().build("root_scope")
     }
 
-    override fun getSystemService(name: String?): Any? {
+    override fun getSystemService(name: String): Any? {
         return when (scope.hasService(name)) {
             true -> scope.getService(name)
             false -> super.getSystemService(name)

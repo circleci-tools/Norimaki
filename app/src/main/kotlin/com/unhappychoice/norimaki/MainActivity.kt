@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
             .build("activity_scope")
     }
 
-    override fun getSystemService(name: String?): Any? {
+    override fun getSystemService(name: String): Any? {
         return when (scope.hasService(name)) {
             true -> scope.getService(name)
             false -> super.getSystemService(name)
@@ -55,7 +55,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    override fun onSaveInstanceState(outState: Bundle?) {
+    override fun onSaveInstanceState(outState: Bundle) {
         BundleServiceRunner.getBundleServiceRunner(this).onSaveInstanceState(outState)
         super.onSaveInstanceState(outState)
     }
