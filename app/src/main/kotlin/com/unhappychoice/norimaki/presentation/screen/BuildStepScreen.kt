@@ -1,10 +1,12 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.salomonbrys.kodein.*
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
+import org.kodein.di.Kodein
+import org.kodein.di.generic.bind
+import org.kodein.di.generic.singleton
 
 class BuildStepScreen(val build: Build, val buildStep: BuildStep) : Screen() {
     override fun getTitle(): String = buildStep.name

@@ -3,13 +3,13 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.Context
 import android.text.Html
 import android.util.AttributeSet
-import com.github.salomonbrys.kodein.instance
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.build_step_view.view.*
+import org.kodein.di.generic.instance
 
 class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepView>(context, attr) {
     override val presenter: BuildStepPresenter by instance()

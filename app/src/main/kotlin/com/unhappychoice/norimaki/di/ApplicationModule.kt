@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.di
 
-import com.github.salomonbrys.kodein.*
 import com.github.unhappychoice.circleci.CircleCIAPIClient
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1
 import com.google.gson.FieldNamingPolicy
@@ -10,6 +9,8 @@ import com.unhappychoice.norimaki.NorimakiApplication
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
+import org.kodein.di.Kodein
+import org.kodein.di.generic.*
 
 fun applicationModule(application: NorimakiApplication) = Kodein.Module {
     bind<NorimakiApplication>() with provider { application }

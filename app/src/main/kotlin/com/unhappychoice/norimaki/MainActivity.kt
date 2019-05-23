@@ -6,7 +6,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import com.github.salomonbrys.kodein.Kodein
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.di.applicationModule
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
@@ -18,6 +17,7 @@ import flow.KeyDispatcher
 import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
+import org.kodein.di.Kodein
 
 class MainActivity : AppCompatActivity() {
     val module by lazy {

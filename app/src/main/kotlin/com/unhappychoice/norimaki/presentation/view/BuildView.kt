@@ -6,7 +6,6 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.github.salomonbrys.kodein.instance
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
@@ -15,6 +14,7 @@ import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.build_view.view.*
+import org.kodein.di.generic.instance
 
 class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(context, attr), HasMenu {
     override val presenter: BuildPresenter by instance()

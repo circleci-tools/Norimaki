@@ -56,8 +56,8 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         try {
             (view as? BaseView<*>)?.let { baseView ->
                 val module = screen.module(activity.module)
-                baseView.inject(module)
-                baseView.presenter.inject(module)
+                baseView.kodein = module
+                baseView.presenter.kodein = module
             }
         } catch (e: Exception) {
             e.printStackTrace()
