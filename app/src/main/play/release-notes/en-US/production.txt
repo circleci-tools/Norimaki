@@ -1,0 +1,1 @@
+- Fix build list won't save its scrolling state
