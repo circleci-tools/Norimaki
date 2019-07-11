@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.salomonbrys.kodein.instance
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildAction
 import com.github.unhappychoice.circleci.response.BuildStep
@@ -14,6 +13,7 @@ import mortar.MortarScope
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
+import org.kodein.di.generic.instance
 
 class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     val build: Build by instance()

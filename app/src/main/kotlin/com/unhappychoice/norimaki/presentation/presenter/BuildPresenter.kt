@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.salomonbrys.kodein.instance
 import com.github.unhappychoice.circleci.response.Build
 import com.github.unhappychoice.circleci.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.addAction
@@ -11,6 +10,7 @@ import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
 import mortar.MortarScope
+import org.kodein.di.generic.instance
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()

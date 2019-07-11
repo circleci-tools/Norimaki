@@ -2,11 +2,10 @@ package com.unhappychoice.norimaki
 
 import android.content.Context
 import android.os.Bundle
-import android.support.v7.app.AppCompatActivity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import com.github.salomonbrys.kodein.Kodein
+import androidx.appcompat.app.AppCompatActivity
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.di.applicationModule
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
@@ -18,6 +17,7 @@ import flow.KeyDispatcher
 import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
+import org.kodein.di.Kodein
 
 class MainActivity : AppCompatActivity() {
     val module by lazy {
@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
             .build("activity_scope")
     }
 
-    override fun getSystemService(name: String?): Any? {
+    override fun getSystemService(name: String): Any? {
         return when (scope.hasService(name)) {
             true -> scope.getService(name)
             false -> super.getSystemService(name)
@@ -55,7 +55,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    override fun onSaveInstanceState(outState: Bundle?) {
+    override fun onSaveInstanceState(outState: Bundle) {
         BundleServiceRunner.getBundleServiceRunner(this).onSaveInstanceState(outState)
         super.onSaveInstanceState(outState)
     }

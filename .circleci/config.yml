@@ -10,7 +10,7 @@ jobs:
   build:
     working_directory: ~/norimaki
     docker:
-      - image: circleci/android:api-25-alpha
+      - image: circleci/android:api-29
     environment:
       JVM_OPTS: -Xmx3200m
     steps:
@@ -38,7 +38,7 @@ jobs:
   test:
     working_directory: ~/norimaki
     docker:
-      - image: circleci/android:api-25-alpha
+      - image: circleci/android:api-29
     environment:
       JVM_OPTS: -Xmx3200m
     steps:
@@ -53,7 +53,7 @@ jobs:
   deploy:
     working_directory: ~/norimaki
     docker:
-      - image: circleci/android:api-25-alpha
+      - image: circleci/android:api-29
     environment:
       JVM_OPTS: -Xmx3200m
     steps:

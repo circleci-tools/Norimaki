@@ -37,7 +37,7 @@ fun <T> Observable<T?>.filterNotNull(): Observable<T> =
 
 fun <T> Observable<T>.withLog(name: String = "Anonymous"): Observable<T> =
     doOnNext { Log.d(name, "onNext: ${it?.toString()}") }
-        .doOnError { Log.d(name, "onError: ${it?.toString()}") }
+        .doOnError { Log.d(name, "onError: $it") }
         .doOnComplete { Log.d(name, "onCompleted") }
 
 fun <T : Any> Observable<T>.bindTo(subject: Subject<T>): Disposable = subscribeNext { subject.onNext(it) }
