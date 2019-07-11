@@ -12,7 +12,7 @@ import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import org.kodein.di.Kodein
 import org.kodein.di.generic.*
 
-fun applicationModule(application: NorimakiApplication) = Kodein.Module {
+fun applicationModule(application: NorimakiApplication) = Kodein.Module("application") {
     bind<NorimakiApplication>() with provider { application }
     bind<EventBusService>() with singleton { EventBusService() }
     bind<PusherService>() with singleton { PusherService(instance(), instance()) }
