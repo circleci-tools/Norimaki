@@ -18,8 +18,11 @@ import com.unhappychoice.norimaki.infrastructure.pusher.response.OutAction
 import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.subjects.PublishSubject
 
-class PusherService(val eventBus: EventBusService, val gson: Gson) {
+class PusherService(eventBus: EventBusService, val gson: Gson) {
+    val buildListUpdated: PublishSubject<Unit> = PublishSubject.create()
+
     private var pusher: Pusher? = null
     private var channels: MutableMap<String, Channel> = mutableMapOf()
     private val bag = CompositeDisposable()
@@ -60,7 +63,7 @@ class PusherService(val eventBus: EventBusService, val gson: Gson) {
 
         subscribe("private-$pusherId", "call")
             .map { Unit }
-            .bindTo(eventBus.buildListUpdated)
+            .bindTo(buildListUpdated)
             .addTo(subscriptionBag)
     }
 

@@ -26,7 +26,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         super.onEnterScope(scope)
         getBuilds()
 
-        eventBus.buildListUpdated
+        pusher.buildListUpdated
             .subscribeNext {
                 api.getRecentBuilds(offset = 0, limit = 20)
                     .subscribeOnIoObserveOnUI()

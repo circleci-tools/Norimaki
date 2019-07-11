@@ -45,13 +45,13 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
 
     private fun authenticate() {
         if (token.isBlank()) return goToAPITokenView()
-        if (PresenterNeedsToken.Companion.currentUser != null) return
+        if (currentUser != null) return
 
         api.getMe()
             .subscribeOnIoObserveOnUI()
             .withLog("getMe")
             .doOnError { goToAPITokenView() }
-            .doOnNext { PresenterNeedsToken.Companion.currentUser = it }
+            .doOnNext { currentUser = it }
             .subscribeNext { eventBus.authenticated.onNext(Pair(token, it.pusherId)) }
             .addTo(bag)
     }
