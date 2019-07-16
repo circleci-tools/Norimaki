@@ -5,7 +5,6 @@
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
     android:background="#FFFFFF"
     tools:context=".MainActivity">
 
@@ -19,7 +18,7 @@
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="?attr/actionBarSize"
-                android:background="#CE000000"
+                android:background="#212121"
                 android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
                 app:elevation="4dp"
                 app:popupTheme="@style/ThemeOverlay.AppCompat.Light"/>
@@ -33,33 +32,10 @@
         </FrameLayout>
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
-    <com.google.android.material.navigation.NavigationView
+    <com.unhappychoice.norimaki.presentation.view.NavigationView
         android:id="@+id/navigationView"
         android:layout_width="280dp"
         android:layout_height="match_parent"
-        android:layout_gravity="start"
-        android:fitsSystemWindows="true">
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-            <de.hdodenhof.circleimageview.CircleImageView
-                android:id="@+id/profileImageView"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_alignParentTop="true"
-                android:layout_alignParentStart="true"
-                android:layout_alignParentLeft="true"/>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/projectsView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_alignTop="@id/profileImageView"
-                android:layout_alignParentRight="true"
-                android:layout_alignParentLeft="true"
-                android:layout_alignParentStart="true"
-                android:layout_alignParentEnd="true"
-                android:layout_alignParentBottom="true"/>
-        </RelativeLayout>
-    </com.google.android.material.navigation.NavigationView>
+        android:layout_gravity="start">
+    </com.unhappychoice.norimaki.presentation.view.NavigationView>
 </androidx.drawerlayout.widget.DrawerLayout>

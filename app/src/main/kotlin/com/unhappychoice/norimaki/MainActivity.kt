@@ -48,18 +48,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        setSupportActionBar(toolbar)
-
-        val actionBarDrawerToggle = ActionBarDrawerToggle(
-            this,
-            drawerLayout,
-            toolbar,
-            R.string.drawer_open,
-            R.string.drawer_close
-        )
-        drawerLayout.addDrawerListener(actionBarDrawerToggle)
-        actionBarDrawerToggle.syncState()
+        setupView()
     }
 
     override fun onDestroy() {
@@ -89,6 +78,22 @@ class MainActivity : AppCompatActivity() {
         }
         (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
         return true
+    }
+
+    private fun setupView() {
+        setContentView(R.layout.activity_main)
+        setSupportActionBar(toolbar)
+
+        val actionBarDrawerToggle = ActionBarDrawerToggle(
+            this,
+            drawerLayout,
+            toolbar,
+            R.string.drawer_open,
+            R.string.drawer_close
+        )
+        drawerLayout.addDrawerListener(actionBarDrawerToggle)
+        actionBarDrawerToggle.syncState()
+        navigationView.kodein = module
     }
 
     private fun getFlowContext(baseContext: Context): Context =
