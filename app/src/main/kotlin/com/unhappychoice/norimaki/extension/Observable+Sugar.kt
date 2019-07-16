@@ -8,7 +8,7 @@ import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.Subject
 
-fun <T : Any> Observable<T>.subscribeNext(fn: (T) -> Unit): Disposable =
+fun <T: Any> Observable<T>.subscribeNext(fn: (T) -> Unit): Disposable =
     subscribeBy(
         onNext = { fn(it) },
         onError = { it.printStackTrace() },
@@ -18,7 +18,7 @@ fun <T : Any> Observable<T>.subscribeNext(fn: (T) -> Unit): Disposable =
 fun <T : Any> Observable<T>.subscribeError(fn: (e: Throwable?) -> Unit): Disposable =
     subscribeBy(
         onNext = {},
-        onError = { it.let { fn(it) } },
+        onError = { fn(it) },
         onComplete = {}
     )
 
