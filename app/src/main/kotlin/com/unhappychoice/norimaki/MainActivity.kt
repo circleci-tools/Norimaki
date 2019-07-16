@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.di.applicationModule
@@ -18,13 +19,18 @@ import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
 import org.kodein.di.Kodein
-import androidx.appcompat.app.ActionBarDrawerToggle
 
 class MainActivity : AppCompatActivity() {
     val module by lazy {
         Kodein {
             import(applicationModule(application as NorimakiApplication))
             import(activityModule(this@MainActivity))
+        }
+    }
+
+    val drawerToggle by lazy {
+        ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.drawer_open, R.string.drawer_close).apply {
+            setToolbarNavigationClickListener { onBackPressed() }
         }
     }
 
@@ -84,16 +90,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         setSupportActionBar(toolbar)
 
-        val actionBarDrawerToggle = ActionBarDrawerToggle(
-            this,
-            drawerLayout,
-            toolbar,
-            R.string.drawer_open,
-            R.string.drawer_close
-        )
-        drawerLayout.addDrawerListener(actionBarDrawerToggle)
-        actionBarDrawerToggle.syncState()
         navigationView.kodein = module
+        drawerLayout.addDrawerListener(drawerToggle)
     }
 
     private fun getFlowContext(baseContext: Context): Context =

@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import flow.*
@@ -42,11 +43,14 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
     }
 
     private fun updateActionBar(screen: Screen) {
+        activity.drawerToggle.isDrawerIndicatorEnabled = screen is BuildListScreen
         activity.supportActionBar?.setHomeButtonEnabled(true)
         activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
         activity.supportActionBar?.setDisplayShowHomeEnabled(false)
         activity.supportActionBar?.title = screen.getTitle()
         activity.invalidateOptionsMenu()
+
+        if (screen is BuildListScreen) { activity.drawerToggle.syncState() }
     }
 
     private fun hasScreens(): Boolean =
