@@ -3,7 +3,7 @@
 
 [![CircleCI](https://circleci.com/gh/unhappychoice/Norimaki.svg?style=shield)](https://circleci.com/gh/unhappychoice/Norimaki)
 [![codecov](https://codecov.io/gh/unhappychoice/Norimaki/branch/master/graph/badge.svg)](https://codecov.io/gh/unhappychoice/Norimaki)
-![Libraries.io dependency status for GitHub repo](https://img.shields.io/librariesio/github/unhappychoice/Norimaki.svg)
+[![Libraries.io dependency status for GitHub repo](https://img.shields.io/librariesio/github/unhappychoice/Norimaki.svg)](https://libraries.io/github/unhappychoice/Norimaki)
 
 ![Norimaki](https://raw.githubusercontent.com/unhappychoice/Norimaki/image/logo.png)
 
