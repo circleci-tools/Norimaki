@@ -13,7 +13,7 @@ import org.kodein.di.generic.singleton
 fun activityModule(activity: MainActivity) = Kodein.Module("activity") {
     bind<MainActivity>() with provider { activity }
     bind<APITokenPresenter>() with singleton { APITokenPresenter() }
-    bind<BuildListPresenter>() with singleton { BuildListPresenter() }
+    bind<BuildListPresenter>() with provider { BuildListPresenter() }
     bind<BuildPresenter>() with provider { BuildPresenter() }
     bind<BuildStepPresenter>() with provider { BuildStepPresenter() }
 }

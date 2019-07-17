@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.di.applicationModule
@@ -24,6 +25,12 @@ class MainActivity : AppCompatActivity() {
         Kodein {
             import(applicationModule(application as NorimakiApplication))
             import(activityModule(this@MainActivity))
+        }
+    }
+
+    val drawerToggle by lazy {
+        ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.drawer_open, R.string.drawer_close).apply {
+            setToolbarNavigationClickListener { onBackPressed() }
         }
     }
 
@@ -47,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setupView()
     }
 
     override fun onDestroy() {
@@ -79,10 +86,18 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+    private fun setupView() {
+        setContentView(R.layout.activity_main)
+        setSupportActionBar(toolbar)
+
+        navigationView.kodein = module
+        drawerLayout.addDrawerListener(drawerToggle)
+    }
+
     private fun getFlowContext(baseContext: Context): Context =
         Flow.configure(baseContext, this)
             .dispatcher(KeyDispatcher.configure(this, ScreenChanger(this)).build())
-            .defaultKey(BuildListScreen())
+            .defaultKey(BuildListScreen(""))
             .keyParceler(GsonParceler())
             .install()
 
