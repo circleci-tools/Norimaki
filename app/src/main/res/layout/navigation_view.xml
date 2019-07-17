@@ -67,6 +67,7 @@
             android:layout_width="match_parent"
             android:layout_height="24dp"
             android:layout_below="@+id/recentView"
+            android:layout_marginBottom="@dimen/vertical_margin_small"
             android:paddingRight="@dimen/horizontal_margin"
             android:paddingLeft="@dimen/horizontal_margin"
             android:gravity="center_vertical"

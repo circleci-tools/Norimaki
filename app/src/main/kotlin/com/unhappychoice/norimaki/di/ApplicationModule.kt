@@ -22,7 +22,7 @@ fun applicationModule(application: NorimakiApplication) = Kodein.Module("applica
             .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
             .create()
     }
-    bind<CircleCIAPIClientV1>() with singleton {
+    bind<CircleCIAPIClientV1>() with provider {
         CircleCIAPIClient(APITokenPreference(application).token).client()
     }
 }
