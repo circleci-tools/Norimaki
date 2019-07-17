@@ -8,7 +8,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
+import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.service.EventBusService
@@ -55,6 +57,13 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
             .subscribeNext {
                 Glide.with(context).load(it.avatarUrl).into(profileImageView)
                 nameView.text = it.login
+            }
+            .addTo(bag)
+
+        recentView.clicks()
+            .subscribeNext {
+                (context as? MainActivity)?.drawerLayout?.closeDrawers()
+                eventBus.selectProject.onNext(None)
             }
             .addTo(bag)
 
