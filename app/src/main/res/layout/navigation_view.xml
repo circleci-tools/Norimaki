@@ -57,7 +57,7 @@
             android:paddingRight="@dimen/horizontal_margin"
             android:paddingLeft="@dimen/horizontal_margin"
             android:gravity="center_vertical"
-            android:text="Recent builds"
+            android:text="Recent Builds"
             android:textSize="14sp"
             android:textStyle="bold"
             android:clickable="true"/>

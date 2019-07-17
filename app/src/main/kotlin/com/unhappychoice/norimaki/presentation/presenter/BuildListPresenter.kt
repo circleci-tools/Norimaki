@@ -15,18 +15,22 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
+import flow.Direction
+import flow.Flow
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
+import org.kodein.di.generic.instance
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
+    val projectName: String by instance()
     val builds = Variable<List<Build>>(listOf())
-    private val project = Variable<Optional<Project>>(None)
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
@@ -39,11 +43,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
                     .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
             }.addTo(bag)
 
-
         eventBus.selectProject
-            .doOnNext { project.value = it }
-            .doOnNext { reset() }
-            .subscribeNext { getBuilds() }
+            .map {
+                when(it.toNullable()) {
+                    null -> ""
+                    else -> "${it.toNullable()!!.username!!}/${it.toNullable()!!.reponame!!}"
+                }
+            }
+            .subscribeNext { goToBuildListView(it) }
             .addTo(bag)
     }
 
@@ -65,18 +72,16 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
+    private fun goToBuildListView(projectName: String) {
+        Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
+    }
+
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
-        project.value.toNullable().let {
-            when (it) {
-                null -> api.getRecentBuilds(offset = offset, limit = 20)
-                else -> api.getProjectBuilds(userName = it.username ?: "", project = it.reponame ?: "", offset = offset, limit = 20)
-            }
+        when (projectName) {
+            "" -> api.getRecentBuilds(offset = offset, limit = 20)
+            else -> api.getProjectBuilds(userName = userName(), project = repoName(), offset = offset, limit = 20)
         }
 
-    private fun reset() {
-        builds.value = emptyList()
-        isLoading.value = false
-        page.value = 0
-        hasMore.value = true
-    }
+    private fun userName(): String = projectName.split("/").first()
+    private fun repoName(): String = projectName.split("/").last()
 }
