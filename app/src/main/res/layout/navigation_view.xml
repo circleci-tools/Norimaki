@@ -9,43 +9,76 @@
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#212121">
-        <de.hdodenhof.circleimageview.CircleImageView
-            android:id="@+id/profileImageView"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentLeft="true"
-            android:layout_marginTop="@dimen/vertical_margin"
-            android:layout_marginStart="@dimen/horizontal_margin"
-            android:layout_marginLeft="@dimen/horizontal_margin"
-            android:layout_marginBottom="@dimen/vertical_margin"/>
+        android:background="#F5F5F5">
+
+        <RelativeLayout
+            android:id="@+id/profileView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#212121">
+
+            <de.hdodenhof.circleimageview.CircleImageView
+                android:id="@+id/profileImageView"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentStart="true"
+                android:layout_alignParentLeft="true"
+                android:layout_marginTop="@dimen/vertical_margin"
+                android:layout_marginStart="@dimen/horizontal_margin"
+                android:layout_marginLeft="@dimen/horizontal_margin"
+                android:layout_marginBottom="@dimen/vertical_margin"/>
+
+            <TextView
+                android:id="@+id/nameView"
+                android:layout_width="200dp"
+                android:layout_height="30dp"
+                android:gravity="center_vertical"
+                android:layout_alignTop="@id/profileImageView"
+                android:layout_toLeftOf="@id/profileImageView"
+                android:layout_toStartOf="@id/profileImageView"
+                android:layout_alignParentRight="true"
+                android:layout_alignParentEnd="true"
+                android:layout_marginTop="5dp"
+                android:layout_marginStart="@dimen/horizontal_margin_small"
+                android:layout_marginLeft="@dimen/horizontal_margin_small"
+                android:layout_marginRight="@dimen/horizontal_margin"
+                android:layout_marginEnd="@dimen/horizontal_margin"
+                android:textSize="13sp"
+                android:textColor="#FFFFFF"/>
+        </RelativeLayout>
 
         <TextView
-            android:id="@+id/nameView"
-            android:layout_width="200dp"
-            android:layout_height="30dp"
+            android:id="@+id/recentView"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_below="@id/profileView"
+            android:layout_marginBottom="@dimen/vertical_margin"
+            android:paddingRight="@dimen/horizontal_margin"
+            android:paddingLeft="@dimen/horizontal_margin"
             android:gravity="center_vertical"
-            android:layout_alignTop="@id/profileImageView"
-            android:layout_toLeftOf="@id/profileImageView"
-            android:layout_toStartOf="@id/profileImageView"
-            android:layout_alignParentRight="true"
-            android:layout_alignParentEnd="true"
-            android:layout_marginTop="5dp"
-            android:layout_marginStart="@dimen/horizontal_margin_small"
-            android:layout_marginLeft="@dimen/horizontal_margin_small"
-            android:layout_marginRight="@dimen/horizontal_margin"
-            android:layout_marginEnd="@dimen/horizontal_margin"
-            android:textSize="13sp"
-            android:textColor="#FFFFFF"
-            />
+            android:text="Recent builds"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:clickable="true"/>
+
+        <TextView
+            android:id="@+id/projectsTextView"
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:layout_below="@+id/recentView"
+            android:paddingRight="@dimen/horizontal_margin"
+            android:paddingLeft="@dimen/horizontal_margin"
+            android:gravity="center_vertical"
+            android:text="Projects"
+            android:textSize="11sp"
+            android:background="@drawable/border_bottom"/>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/projectsView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_below="@id/profileImageView"
+            android:layout_below="@id/projectsTextView"
             android:layout_alignParentRight="true"
             android:layout_alignParentLeft="true"
             android:layout_alignParentStart="true"
