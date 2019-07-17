@@ -14,13 +14,16 @@ class BuildListScreenTest : KSpec() {
 
     override fun spec() {
         beforeEach {
-            subject = BuildListScreen()
+            subject = BuildListScreen("")
         }
 
         describe("BuildListScreen") {
             describe(".getTitle()") {
                 it("should return title") {
-                    expect(subject.getTitle()).to.equal("All builds")
+                    expect(BuildListScreen("").getTitle()).to.equal("Recent Builds")
+                }
+                it("should return title") {
+                    expect(BuildListScreen("unhappychoice/Norimaki").getTitle()).to.equal("unhappychoice/Norimaki")
                 }
             }
             describe(".getLayoutResource()") {
