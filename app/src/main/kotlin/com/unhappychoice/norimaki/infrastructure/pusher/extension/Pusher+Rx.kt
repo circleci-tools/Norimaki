@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.infrastructure.pusher.extension
 import android.util.Log
 import com.pusher.client.channel.Channel
 import com.pusher.client.channel.PrivateChannelEventListener
+import com.pusher.client.channel.PusherEvent
 import io.reactivex.Observable
 
 fun Channel.privateChannelEvents(eventName: String): Observable<String> {
@@ -17,8 +18,8 @@ fun Channel.privateChannelEvents(eventName: String): Observable<String> {
                 Log.d("Pusher", "Succeeded to subscribe $channelName")
             }
 
-            override fun onEvent(channelName: String?, eventName: String?, data: String?) {
-                data?.let { observer.onNext(it) }
+            override fun onEvent(event: PusherEvent?) {
+                event?.data?.let { observer.onNext(it) }
             }
         }
         bind(eventName, listener)
