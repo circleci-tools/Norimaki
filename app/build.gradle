@@ -159,6 +159,8 @@ task jacoco(type: JacocoReport, dependsOn: ["testDebugUnitTest"]) {
                         )
                 )
         )
+        sourceDirectories.from files('src/main/kotlin')
+        executionData.from file('build/jacoco/testDebugUnitTest.exec')
     }
 }
 
