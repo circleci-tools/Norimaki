@@ -21,13 +21,13 @@ import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.navigation_view.view.*
-import org.kodein.di.Kodein
-import org.kodein.di.KodeinAware
-import org.kodein.di.generic.instance
+import org.kodein.di.DI
+import org.kodein.di.DIAware
+import org.kodein.di.instance
 import com.google.android.material.navigation.NavigationView as AndroidNavigationView
 
-class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationView(context, attr), KodeinAware {
-    override lateinit var kodein: Kodein
+class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationView(context, attr), DIAware {
+    override lateinit var di: DI
 
     private val client: CircleCIAPIClientV1 by instance()
     private val eventBus: EventBusService by instance()

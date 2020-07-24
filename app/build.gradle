@@ -5,7 +5,7 @@ buildscript {
         maven { url "https://plugins.gradle.org/m2/" }
     }
     dependencies {
-        classpath 'com.github.triplet.gradle:play-publisher:2.4.2'
+        classpath 'com.github.triplet.gradle:play-publisher:2.8.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath "org.jetbrains.kotlin:kotlin-android-extensions:$kotlin_version"
     }
@@ -33,7 +33,7 @@ dependencies {
     implementation "androidx.appcompat:appcompat:1.1.0"
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation "androidx.recyclerview:recyclerview:1.1.0"
-    implementation 'com.github.bumptech.glide:glide:4.10.0'
+    implementation 'com.github.bumptech.glide:glide:4.11.0'
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
     implementation 'com.github.unhappychoice:circleci:0.3.0'
     implementation 'com.github.unhappychoice:rxsnackbar:1.0.0'
@@ -54,7 +54,7 @@ dependencies {
     implementation 'jp.takuji31.koreference:koreference:1.4.0'
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-    implementation 'org.kodein.di:kodein-di-generic-jvm:6.5.5'
+    implementation 'org.kodein.di:kodein-di:7.0.0'
     testImplementation 'junit:junit:4.13'
     testImplementation ("com.nhaarman:mockito-kotlin:1.6.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
@@ -65,11 +65,14 @@ dependencies {
 
 android {
     compileSdkVersion 29
-    buildToolsVersion '29.0.0'
+    buildToolsVersion '29.0.3'
 
     compileOptions {
         sourceCompatibility 1.8
         targetCompatibility 1.8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
     }
     signingConfigs {
         release {
@@ -157,8 +160,6 @@ task jacoco(type: JacocoReport, dependsOn: ["testDebugUnitTest"]) {
                 )
         )
     }
-    sourceDirectories = files('src/main/kotlin')
-    executionData = files('build/jacoco/testDebugUnitTest.exec')
 }
 
 static decodeFileFromBase64Env(String name, String fileName, String ext) {

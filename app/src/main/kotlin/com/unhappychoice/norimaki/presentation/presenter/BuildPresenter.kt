@@ -10,7 +10,7 @@ import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
 import mortar.MortarScope
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()

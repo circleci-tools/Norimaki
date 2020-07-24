@@ -14,7 +14,7 @@ import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.build_view.view.*
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(context, attr), HasMenu {
     override val presenter: BuildPresenter by instance()

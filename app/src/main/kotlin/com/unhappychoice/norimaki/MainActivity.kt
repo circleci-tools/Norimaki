@@ -18,11 +18,11 @@ import flow.KeyDispatcher
 import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
-import org.kodein.di.Kodein
+import org.kodein.di.DI
 
 class MainActivity : AppCompatActivity() {
     val module by lazy {
-        Kodein {
+        DI {
             import(applicationModule(application as NorimakiApplication))
             import(activityModule(this@MainActivity))
         }
@@ -90,7 +90,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         setSupportActionBar(toolbar)
 
-        navigationView.kodein = module
+        navigationView.di = module
         drawerLayout.addDrawerListener(drawerToggle)
     }
 

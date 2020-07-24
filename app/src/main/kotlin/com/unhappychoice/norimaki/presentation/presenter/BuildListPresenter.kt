@@ -23,7 +23,7 @@ import flow.Flow
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
