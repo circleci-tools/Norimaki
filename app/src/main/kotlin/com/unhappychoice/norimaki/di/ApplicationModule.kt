@@ -9,10 +9,9 @@ import com.unhappychoice.norimaki.NorimakiApplication
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
-import org.kodein.di.Kodein
-import org.kodein.di.generic.*
+import org.kodein.di.*
 
-fun applicationModule(application: NorimakiApplication) = Kodein.Module("application") {
+fun applicationModule(application: NorimakiApplication) = DI.Module("application") {
     bind<NorimakiApplication>() with provider { application }
     bind<EventBusService>() with singleton { EventBusService() }
     bind<PusherService>() with singleton { PusherService(instance(), instance()) }

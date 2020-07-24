@@ -13,7 +13,7 @@ import mortar.MortarScope
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     val build: Build by instance()

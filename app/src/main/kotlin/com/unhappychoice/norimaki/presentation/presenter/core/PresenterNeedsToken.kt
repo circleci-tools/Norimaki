@@ -16,7 +16,7 @@ import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     val activity: MainActivity by instance()

@@ -10,7 +10,7 @@ import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import io.reactivex.rxkotlin.addTo
 import kotlinx.android.synthetic.main.api_token_view.view.*
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenView>(context, attr) {
     override val presenter: APITokenPresenter by instance()

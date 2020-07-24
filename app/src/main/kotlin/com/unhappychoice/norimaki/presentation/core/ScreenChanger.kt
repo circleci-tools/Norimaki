@@ -60,8 +60,8 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         try {
             (view as? BaseView<*>)?.let { baseView ->
                 val module = screen.module(activity.module)
-                baseView.kodein = module
-                baseView.presenter.kodein = module
+                baseView.di = module
+                baseView.presenter.di = module
             }
         } catch (e: Exception) {
             e.printStackTrace()

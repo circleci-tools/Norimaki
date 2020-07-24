@@ -8,7 +8,7 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Presenter
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
 import mortar.MortarScope
-import org.kodein.di.generic.instance
+import org.kodein.di.instance
 
 class APITokenPresenter: Presenter<APITokenView>() {
     val activity: MainActivity by instance()
