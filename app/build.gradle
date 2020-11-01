@@ -143,6 +143,11 @@ play {
     serviceAccountCredentials = decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", ".json")
 }
 
+tasks.withType(Test) {
+    jacoco.includeNoLocationClasses = true
+    jacoco.excludes = ['jdk.internal.*']
+}
+
 task jacoco(type: JacocoReport, dependsOn: ["testDebugUnitTest"]) {
     description = "Generate Jacoco coverage reports after running tests."
     reports {
