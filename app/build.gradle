@@ -1,13 +1,7 @@
 buildscript {
-    ext.kotlin_version = '1.4.10'
     repositories {
         mavenCentral()
         maven { url "https://plugins.gradle.org/m2/" }
-    }
-    dependencies {
-        classpath 'com.github.triplet.gradle:play-publisher:2.8.0'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath "org.jetbrains.kotlin:kotlin-android-extensions:$kotlin_version"
     }
 }
 
@@ -56,7 +50,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     implementation 'org.kodein.di:kodein-di:7.1.0'
     testImplementation 'junit:junit:4.13.1'
-    testImplementation ("com.nhaarman:mockito-kotlin:1.6.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("io.polymorphicpanda.kspec:kspec-core:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("io.polymorphicpanda.kspec:kspec-junit-runner:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
