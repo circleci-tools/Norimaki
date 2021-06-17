@@ -7,7 +7,7 @@ buildscript {
 
 plugins {
     id 'com.android.application'
-    id 'com.github.triplet.play' version '3.4.0-agp7.0'
+    id 'com.github.triplet.play' version '3.4.0-agp4.2'
     id 'jacoco'
 }
 
@@ -58,8 +58,8 @@ dependencies {
 }
 
 android {
-    compileSdkVersion 29
-    buildToolsVersion '29.0.3'
+    compileSdkVersion 30
+    buildToolsVersion '30.0.2'
 
     compileOptions {
         sourceCompatibility 1.8
@@ -97,7 +97,7 @@ android {
     defaultConfig {
         applicationId "com.unhappychoice.norimaki"
         minSdkVersion 16
-        targetSdkVersion 29
+        targetSdkVersion 30
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
         versionName "1.1.0"
         multiDexEnabled true
@@ -135,6 +135,10 @@ android {
 play {
     enabled = System.getenv("RELEASE_KEYSTORE_BASE64") != null
     serviceAccountCredentials = decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", ".json")
+}
+
+jacoco {
+    toolVersion = "0.8.7"
 }
 
 tasks.withType(Test) {
