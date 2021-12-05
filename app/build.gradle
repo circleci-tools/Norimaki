@@ -16,8 +16,8 @@ apply plugin: 'kotlin-android-extensions'
 
 repositories {
     mavenCentral()
-    jcenter()
     google()
+    jcenter()
     maven { url("https://jitpack.io") }
     maven { url('https://oss.sonatype.org/content/repositories/snapshots/') }
 }
@@ -45,7 +45,7 @@ dependencies {
     implementation 'de.hdodenhof:circleimageview:3.1.0'
     implementation "io.reactivex.rxjava2:rxkotlin:2.4.0"
     implementation "io.reactivex.rxjava2:rxandroid:2.1.1"
-    implementation 'jp.takuji31.koreference:koreference:1.4.0'
+    implementation 'com.github.takuji31.Koreference:koreference:1.4.3'
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     implementation 'org.kodein.di:kodein-di:7.9.0'
@@ -58,7 +58,7 @@ dependencies {
 }
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 31
     buildToolsVersion '30.0.2'
 
     compileOptions {
@@ -97,7 +97,7 @@ android {
     defaultConfig {
         applicationId "com.unhappychoice.norimaki"
         minSdkVersion 16
-        targetSdkVersion 30
+        targetSdkVersion 31
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
         versionName "1.1.0"
         multiDexEnabled true
