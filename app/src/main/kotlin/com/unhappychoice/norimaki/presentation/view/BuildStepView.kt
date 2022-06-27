@@ -3,16 +3,21 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.Context
 import android.text.Html
 import android.util.AttributeSet
+import android.view.LayoutInflater
+import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import io.reactivex.rxkotlin.addTo
-import kotlinx.android.synthetic.main.build_step_view.view.*
 import org.kodein.di.instance
 
 class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepView>(context, attr) {
     override val presenter: BuildStepPresenter by instance()
+
+    private val binding by lazy {
+        BuildStepViewBinding.bind(this)
+    }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -20,7 +25,7 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
 
         presenter.logString.asObservable()
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { logText.text = Html.fromHtml(it.replace("\n", "<br>")) }
+            .subscribeNext { binding.logText.text = Html.fromHtml(it.replace("\n", "<br>")) }
             .addTo(bag)
     }
 

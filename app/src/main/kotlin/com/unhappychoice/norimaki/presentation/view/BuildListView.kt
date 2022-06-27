@@ -4,11 +4,13 @@ import android.content.Context
 import android.os.Parcelable
 import android.util.AttributeSet
 import android.util.SparseArray
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
+import com.unhappychoice.norimaki.databinding.BuildListViewBinding
 import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -17,12 +19,15 @@ import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.rxkotlin.addTo
-import kotlinx.android.synthetic.main.build_list_view.view.*
 import org.kodein.di.instance
 
 class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListView>(context, attr), HasMenu {
     override val presenter: BuildListPresenter by instance()
     private val adapter = BuildAdapter(context)
+
+    private val binding by lazy {
+        BuildListViewBinding.bind(this)
+    }
 
     private enum class MenuResource(val id: Int) {
         LogOut(0)
@@ -40,15 +45,15 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
 
     override fun dispatchRestoreInstanceState(container: SparseArray<Parcelable>?) {
         super.dispatchRestoreInstanceState(container)
-        buildsView.restoreHierarchyState(container)
+        binding.buildsView.restoreHierarchyState(container)
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
 
-        buildsView.adapter = adapter
-        buildsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
+        binding.buildsView.adapter = adapter
+        binding.buildsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
         adapter.builds.value = presenter.builds.value
 
@@ -63,8 +68,8 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .subscribeNext { presenter.goToBuildView(it) }
             .addTo(bag)
 
-        buildsView.scrollEvents()
-            .filter { buildsView.isNearEnd() }
+        binding.buildsView.scrollEvents()
+            .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
     }

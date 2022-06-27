@@ -2,10 +2,12 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.unhappychoice.norimaki.databinding.BuildViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
@@ -13,11 +15,14 @@ import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.rxkotlin.addTo
-import kotlinx.android.synthetic.main.build_view.view.*
 import org.kodein.di.instance
 
 class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(context, attr), HasMenu {
     override val presenter: BuildPresenter by instance()
+
+    private val binding by lazy {
+        BuildViewBinding.bind(this)
+    }
 
     private val adapter = BuildStepAdapter(context)
 
@@ -41,8 +46,8 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         super.onAttachedToWindow()
         presenter.takeView(this)
 
-        stepsView.adapter = adapter
-        stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
+        binding.stepsView.adapter = adapter
+        binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
         presenter.steps.asObservable()
             .subscribeOnIoObserveOnUI()
