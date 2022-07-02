@@ -53,7 +53,7 @@ jobs:
   deploy:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:api-30
+      - image: cimg/android:2022.09
     environment:
       JVM_OPTS: -Xmx3200m
     steps:
