@@ -10,11 +10,10 @@ import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import flow.*
-import kotlinx.android.synthetic.main.activity_main.*
 
 class ScreenChanger(val activity: MainActivity) : KeyChanger {
     private val containerView: ViewGroup
-        get() = activity.containerView
+        get() = activity.binding.containerView
 
     private val contentView: View
         get() = containerView.getChildAt(0)

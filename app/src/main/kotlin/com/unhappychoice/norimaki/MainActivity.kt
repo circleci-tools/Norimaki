@@ -7,15 +7,17 @@ import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import com.unhappychoice.norimaki.databinding.ActivityMainBinding
+import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.di.applicationModule
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
+import com.unhappychoice.norimaki.presentation.view.NavigationView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
-import kotlinx.android.synthetic.main.activity_main.*
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
 import org.kodein.di.DI
@@ -29,9 +31,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     val drawerToggle by lazy {
-        ActionBarDrawerToggle(this, drawerLayout, toolbar, R.string.drawer_open, R.string.drawer_close).apply {
-            setToolbarNavigationClickListener { onBackPressed() }
-        }
+        ActionBarDrawerToggle(this, binding.drawerLayout, binding.toolbar, R.string.drawer_open, R.string.drawer_close)
+            .apply { setToolbarNavigationClickListener { onBackPressed() } }
+    }
+
+    val binding by lazy {
+        ActivityMainBinding.inflate(layoutInflater)
     }
 
     private val scope: MortarScope by lazy {
@@ -79,7 +84,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item?.itemId) {
+        when (item.itemId) {
             android.R.id.home -> Flow.get(this).goBack()
         }
         (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
@@ -87,11 +92,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupView() {
-        setContentView(R.layout.activity_main)
-        setSupportActionBar(toolbar)
+        setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
 
-        navigationView.di = module
-        drawerLayout.addDrawerListener(drawerToggle)
+        binding.navigationView.di = module
+        binding.drawerLayout.addDrawerListener(drawerToggle)
     }
 
     private fun getFlowContext(baseContext: Context): Context =
@@ -101,5 +106,5 @@ class MainActivity : AppCompatActivity() {
             .keyParceler(GsonParceler())
             .install()
 
-    private fun getCurrentView(): View? = containerView.getChildAt(0)
+    private fun getCurrentView(): View? = binding.containerView.getChildAt(0)
 }
