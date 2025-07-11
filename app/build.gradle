@@ -30,7 +30,7 @@ dependencies {
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
     implementation 'com.github.unhappychoice:circleci:0.3.0'
     implementation 'com.github.unhappychoice:rxsnackbar:1.0.0'
-    implementation 'com.gojuno.koptional:koptional:1.7.0'
+    implementation 'com.github.gojuno.koptional:koptional:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'com.google.code.gson:gson:2.13.1'
     implementation "com.jakewharton.rxbinding2:rxbinding-kotlin:2.2.0"
@@ -51,22 +51,22 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation ("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
-    testImplementation ("io.polymorphicpanda.kspec:kspec-core:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
-    testImplementation ("io.polymorphicpanda.kspec:kspec-junit-runner:0.4.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("com.github.raniejade.kspec:kspec-core:v0.4.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("com.github.raniejade.kspec:kspec-junit-runner:v0.4.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation 'org.robolectric:robolectric:4.15.1'
 }
 
 android {
     namespace = "com.unhappychoice.norimaki"
-    compileSdkVersion = 34
-    buildToolsVersion = '34.0.0'
+    compileSdk 36
+    buildToolsVersion = '36.0.0'
 
     compileOptions {
-        sourceCompatibility 1.8
-        targetCompatibility 1.8
+        sourceCompatibility 11
+        targetCompatibility 11
     }
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '11'
     }
     signingConfigs {
         release {
@@ -99,7 +99,7 @@ android {
     }
     defaultConfig {
         applicationId "com.unhappychoice.norimaki"
-        minSdkVersion 16
+        minSdkVersion 21
         targetSdkVersion 34
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
         versionName "1.1.1"
