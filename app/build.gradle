@@ -26,7 +26,7 @@ dependencies {
     implementation "androidx.appcompat:appcompat:1.7.1"
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation "androidx.recyclerview:recyclerview:1.4.0"
-    implementation 'com.github.bumptech.glide:glide:5.0.4'
+    implementation 'com.github.bumptech.glide:glide:5.0.5'
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
     implementation 'com.github.unhappychoice:circleci:0.3.0'
     implementation 'com.github.unhappychoice:rxsnackbar:1.0.0'
