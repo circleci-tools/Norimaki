@@ -1,35 +1,18 @@
-buildscript {
-    repositories {
-        mavenCentral()
-        maven { url "https://plugins.gradle.org/m2/" }
-    }
-}
-
 plugins {
     id 'com.android.application'
     id 'com.github.triplet.play' version '4.0.0'
     id 'jacoco'
 }
 
-apply plugin: 'kotlin-android'
-
-repositories {
-    mavenCentral()
-    google()
-    jcenter()
-    maven { url("https://jitpack.io") }
-    maven { url('https://oss.sonatype.org/content/repositories/snapshots/') }
-}
-
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:1.7.1"
-    implementation 'androidx.multidex:multidex:2.0.1'
+
     implementation "androidx.recyclerview:recyclerview:1.4.0"
     implementation 'com.github.bumptech.glide:glide:5.0.5'
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
     implementation 'com.github.unhappychoice:circleci:0.3.0'
-    implementation 'com.github.unhappychoice:rxsnackbar:1.0.0'
+
     implementation 'com.github.gojuno.koptional:koptional:1.7.0'
     implementation 'com.google.android.material:material:1.13.0'
     implementation 'com.google.code.gson:gson:2.13.2'
@@ -38,18 +21,19 @@ dependencies {
     implementation "com.jakewharton.rxbinding2:rxbinding-appcompat-v7-kotlin:2.2.0"
     implementation "com.jakewharton.rxbinding2:rxbinding-design-kotlin:2.2.0"
     implementation "com.jakewharton.rxbinding2:rxbinding-recyclerview-v7-kotlin:2.2.0"
-    implementation 'com.squareup.flow:flow:1.0.0-alpha4-SNAPSHOT'
+    implementation 'com.squareup.flow:flow:1.0.0-alpha3'
     implementation 'com.squareup.mortar:mortar:0.20'
     implementation 'com.pusher:pusher-java-client:2.4.4'
     implementation 'de.hdodenhof:circleimageview:3.1.0'
     implementation "io.reactivex.rxjava2:rxkotlin:2.4.0"
     implementation "io.reactivex.rxjava2:rxandroid:2.1.1"
     implementation 'com.github.takuji31.Koreference:koreference:2.0.0'
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-reflect:2.1.21"
     implementation 'org.kodein.di:kodein-di:7.30.0'
     testImplementation 'junit:junit:4.13.2'
-    testImplementation ("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation ("org.mockito.kotlin:mockito-kotlin:5.4.0") { exclude group: 'org.jetbrains.kotlin' }
+    testImplementation 'org.mockito:mockito-core:5.15.2'
+    testImplementation 'org.mockito:mockito-subclass:5.15.2'
     testImplementation ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.github.raniejade.kspec:kspec-core:v0.4.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.github.raniejade.kspec:kspec-junit-runner:v0.4.0") { exclude group: 'org.jetbrains.kotlin' }
@@ -62,11 +46,8 @@ android {
     buildToolsVersion = '36.0.0'
 
     compileOptions {
-        sourceCompatibility 11
-        targetCompatibility 11
-    }
-    kotlinOptions {
-        jvmTarget = '11'
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
     signingConfigs {
         release {
@@ -88,7 +69,7 @@ android {
             minifyEnabled false
             debuggable false
             testCoverageEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
                 signingConfig signingConfigs.release
             }
@@ -103,7 +84,6 @@ android {
         targetSdkVersion 34
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
         versionName "1.1.1"
-        multiDexEnabled true
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     sourceSets {
@@ -138,6 +118,12 @@ android {
 play {
     enabled = System.getenv("RELEASE_KEYSTORE_BASE64") != null
     serviceAccountCredentials.set(decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", ".json"))
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
 }
 
 jacoco {
