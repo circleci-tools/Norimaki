@@ -1,7 +1,7 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.unhappychoice.circleci.response.Build
-import com.github.unhappychoice.circleci.response.BuildStep
+import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import org.kodein.di.DI

@@ -1,8 +1,8 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.unhappychoice.circleci.response.Build
-import com.nhaarman.mockitokotlin2.doReturn
-import com.nhaarman.mockitokotlin2.mock
+import com.github.unhappychoice.circleci.v1.response.Build
+import io.mockk.every
+import io.mockk.mockk
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.revisionString
 import com.winterbe.expekt.expect
@@ -19,7 +19,11 @@ class BuildScreenTest : KSpec() {
 
     override fun spec() {
         beforeEach {
-            build = mock { on { revisionString() } doReturn("revisionString") }
+            build = mockk {
+                every { branch } returns "main"
+                every { buildNum } returns 123
+                every { vcsRevision } returns "abc123def"
+            }
             subject = BuildScreen(build)
         }
 
@@ -37,5 +41,3 @@ class BuildScreenTest : KSpec() {
         }
     }
 }
-
-

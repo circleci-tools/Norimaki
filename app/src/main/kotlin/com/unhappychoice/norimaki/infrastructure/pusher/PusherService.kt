@@ -1,6 +1,6 @@
 package com.unhappychoice.norimaki.infrastructure.pusher
 
-import com.github.unhappychoice.circleci.response.Build
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.pusher.client.Pusher

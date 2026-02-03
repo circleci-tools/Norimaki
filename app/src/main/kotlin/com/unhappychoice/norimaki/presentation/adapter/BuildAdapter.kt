@@ -7,7 +7,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import com.github.unhappychoice.circleci.response.Build
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.*

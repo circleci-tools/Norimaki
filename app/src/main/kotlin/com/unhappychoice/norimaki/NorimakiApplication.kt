@@ -1,9 +1,9 @@
 package com.unhappychoice.norimaki
 
-import androidx.multidex.MultiDexApplication
+import android.app.Application
 import mortar.MortarScope
 
-class NorimakiApplication : MultiDexApplication() {
+class NorimakiApplication : Application() {
     private val scope by lazy {
         MortarScope.buildRootScope().build("root_scope")
     }

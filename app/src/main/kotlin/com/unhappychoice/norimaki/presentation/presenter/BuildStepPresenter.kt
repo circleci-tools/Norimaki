@@ -1,8 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.response.Build
-import com.github.unhappychoice.circleci.response.BuildAction
-import com.github.unhappychoice.circleci.response.BuildStep
+import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v1.response.BuildAction
+import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.step
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
@@ -45,9 +45,10 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
 
     private fun getAction(action: BuildAction): Observable<String> =
         Observable.create { observer ->
+            val outputUrl = action.outputUrl ?: return@create
             val client = OkHttpClient()
-            val request = Request.Builder().url(action.outputUrl).build()
-            val response = client.newCall(request).execute().body().string()
+            val request = Request.Builder().url(outputUrl).build()
+            val response = client.newCall(request).execute().body?.string() ?: ""
             val out = JSONArray(response).asSequence()
                 .map { it.getString("message") }
                 .reduce { acc, string -> acc + string }

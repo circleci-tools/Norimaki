@@ -1,9 +1,9 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.unhappychoice.circleci.response.Build
-import com.github.unhappychoice.circleci.response.BuildStep
-import com.nhaarman.mockitokotlin2.doReturn
-import com.nhaarman.mockitokotlin2.mock
+import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v1.response.BuildStep
+import io.mockk.every
+import io.mockk.mockk
 import com.unhappychoice.norimaki.R
 import com.winterbe.expekt.expect
 import io.polymorphicpanda.kspec.KSpec
@@ -21,8 +21,8 @@ class BuildStepScreenTest : KSpec() {
 
     override fun spec() {
         beforeEach {
-            build = mock { }
-            buildStep = mock { on { name } doReturn("build name") }
+            build = mockk(relaxed = true)
+            buildStep = mockk { every { name } returns "build name" }
             subject = BuildStepScreen(build, buildStep)
         }
 
