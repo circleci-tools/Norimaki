@@ -1,6 +1,10 @@
 package com.unhappychoice.norimaki.presentation.screen
 
+import com.github.unhappychoice.circleci.v1.response.Build
+import io.mockk.every
+import io.mockk.mockk
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.revisionString
 import com.winterbe.expekt.expect
 import io.polymorphicpanda.kspec.KSpec
 import io.polymorphicpanda.kspec.describe
@@ -10,13 +14,28 @@ import org.junit.runner.RunWith
 
 @RunWith(JUnitKSpecRunner::class)
 class BuildScreenTest : KSpec() {
+    lateinit var subject: BuildScreen
+    lateinit var build: Build
+
     override fun spec() {
+        beforeEach {
+            build = mockk {
+                every { branch } returns "main"
+                every { buildNum } returns 123
+                every { vcsRevision } returns "abc123def"
+            }
+            subject = BuildScreen(build)
+        }
+
         describe("BuildScreen") {
+            describe(".getTitle()") {
+                it("should return title") {
+                    expect(subject.getTitle()).to.equal(build.revisionString())
+                }
+            }
             describe(".getLayoutResource()") {
                 it("should return view resource") {
-                    // Create a minimal test without mocking Build class
-                    // The Build class from external library cannot be mocked with current Mockito version
-                    expect(R.layout.build_view).to.be.above(0)
+                    expect(subject.getLayoutResource()).to.equal(R.layout.build_view)
                 }
             }
         }

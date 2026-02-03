@@ -1,6 +1,6 @@
 package com.unhappychoice.norimaki.infrastructure.pusher.response
 
-import com.github.unhappychoice.circleci.response.BuildAction
+import com.github.unhappychoice.circleci.v1.response.BuildAction
 import java.util.*
 
 data class ActionLog(

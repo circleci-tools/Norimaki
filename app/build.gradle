@@ -11,7 +11,8 @@ dependencies {
     implementation "androidx.recyclerview:recyclerview:1.4.0"
     implementation 'com.github.bumptech.glide:glide:5.0.5'
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
-    implementation 'com.github.unhappychoice:circleci:0.3.0'
+    implementation 'com.github.unhappychoice:circleci:1.0.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
     implementation 'com.github.gojuno.koptional:koptional:1.7.0'
     implementation 'com.google.android.material:material:1.13.0'
@@ -31,9 +32,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect:2.1.21"
     implementation 'org.kodein.di:kodein-di:7.30.0'
     testImplementation 'junit:junit:4.13.2'
-    testImplementation ("org.mockito.kotlin:mockito-kotlin:5.4.0") { exclude group: 'org.jetbrains.kotlin' }
-    testImplementation 'org.mockito:mockito-core:5.15.2'
-    testImplementation 'org.mockito:mockito-subclass:5.15.2'
+    testImplementation 'io.mockk:mockk:1.13.16'
     testImplementation ("com.winterbe:expekt:0.5.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.github.raniejade.kspec:kspec-core:v0.4.0") { exclude group: 'org.jetbrains.kotlin' }
     testImplementation ("com.github.raniejade.kspec:kspec-junit-runner:v0.4.0") { exclude group: 'org.jetbrains.kotlin' }

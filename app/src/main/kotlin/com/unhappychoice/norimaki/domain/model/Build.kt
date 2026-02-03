@@ -1,7 +1,7 @@
 package com.unhappychoice.norimaki.domain.model
 
 import android.graphics.Color
-import com.github.unhappychoice.circleci.response.Build
+import com.github.unhappychoice.circleci.v1.response.Build
 
 fun Build.repositoryString(): String = "$username / $reponame"
 fun Build.revisionString(): String = "$branch #$buildNum (${vcsRevision?.take(6)})"
