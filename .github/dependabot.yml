@@ -1,32 +1,9 @@
 version: 2
 updates:
-- package-ecosystem: gradle
-  directory: "/"
-  schedule:
-    interval: daily
-    time: "12:00"
-    timezone: Asia/Tokyo
-  open-pull-requests-limit: 20
-  reviewers:
-  - unhappychoice
-  ignore:
-  - dependency-name: org.jetbrains.kotlin:kotlin-reflect
-    versions:
-    - 1.4.31
-  - dependency-name: org.jetbrains.kotlin:kotlin-stdlib
-    versions:
-    - 1.4.31
-  - dependency-name: org.jetbrains.kotlin:kotlin-android-extensions
-    versions:
-    - 1.4.31
-  - dependency-name: org.jetbrains.kotlin:kotlin-gradle-plugin
-    versions:
-    - 1.4.31
-  - dependency-name: com.github.triplet.play
-    versions:
-    - 3.2.0-agp4.2-2
-    - 3.3.0-agp4.2
-  - dependency-name: org.kodein.di:kodein-di
-    versions:
-    - 7.3.0
-    - 7.3.1
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "12:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 20
