@@ -28,7 +28,7 @@ dependencies {
     implementation 'io.reactivex.rxjava2:rxandroid:2.1.1'
     implementation 'io.reactivex.rxjava2:rxkotlin:2.4.0'
     implementation 'org.jetbrains.kotlin:kotlin-reflect:2.3.10'
-    implementation 'org.kodein.di:kodein-di:7.30.0'
+    implementation 'org.kodein.di:kodein-di:7.31.0'
     testImplementation('com.github.raniejade.kspec:kspec-core:v0.4.0') { exclude group: 'org.jetbrains.kotlin' }
     testImplementation('com.github.raniejade.kspec:kspec-junit-runner:v0.4.0') { exclude group: 'org.jetbrains.kotlin' }
     testImplementation('com.winterbe:expekt:0.5.0') { exclude group: 'org.jetbrains.kotlin' }
