@@ -1,62 +1,37 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.v1.response.Build
-import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.addAction
+import com.github.unhappychoice.circleci.v2.response.Job
+import com.github.unhappychoice.circleci.v2.response.Workflow
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
-import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.switchLatest
 import mortar.MortarScope
 import org.kodein.di.instance
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
-    val build: Build by instance()
-    val steps = Variable<List<BuildStep>>(listOf())
+    val workflow: Workflow by instance()
+    val jobs = Variable<List<Job>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
-
-        pusher.newActionEvents(build)
-            .map { BuildStep(name = it.log.name, actions = listOf(it.log.toBuildAction())) }
-            .filterNotNull()
-            .subscribeNext { steps.value = steps.value + it }
-            .addTo(bag)
-
-        pusher.updateActionEvents(build)
-            .map { it.log.toBuildAction() }
-            .subscribeNext { steps.value = steps.value.addAction(it) }
-            .addTo(bag)
-
-        getBuild()
+        getJobs()
     }
 
-    fun getBuild() {
-        api.getBuild(build.username!!, build.reponame!!, build.buildNum!!)
+    fun getJobs() {
+        api.getWorkflowJobs(workflow.id)
+            .map { it.items }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { steps.value = steps.value + (it.steps ?: listOf()) }
+            .subscribeNext { jobs.value = it }
             .addTo(bag)
     }
 
-    fun goToBuildStepScreen(buildStep: BuildStep) {
-        if (buildStep.actions.isEmpty()) return
-        goTo(activity, BuildStepScreen(build, buildStep))
+    fun goToJobDetail(job: Job) {
+        // Job detail view is not available in V2 API
     }
 
     fun rebuild() {
-        api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { goBack(activity) }
-            .addTo(bag)
-    }
-
-    fun rebuildWithoutCache() {
-        api.deleteCache(build.username!!, build.reponame!!)
-            .map {
-                api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
-            }.switchLatest()
+        api.rerunWorkflow(workflow.id, null)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { goBack(activity) }
             .addTo(bag)

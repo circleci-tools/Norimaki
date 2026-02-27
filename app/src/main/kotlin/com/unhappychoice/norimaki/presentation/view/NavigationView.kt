@@ -6,8 +6,7 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.github.unhappychoice.circleci.CircleCIAPIClientV2
 import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
 import com.jakewharton.rxbinding2.view.clicks
@@ -32,7 +31,7 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         NavigationViewBinding.bind(this)
     }
 
-    private val client: CircleCIAPIClientV1 by instance()
+    private val client: CircleCIAPIClientV2 by instance()
     private val eventBus: EventBusService by instance()
     private val adapter = ProjectAdapter(context)
     private val bag = CompositeDisposable()
@@ -48,18 +47,17 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         binding.projectsView.adapter = adapter
         binding.projectsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
-        client.getProjects()
+        client.getCollaborations()
             .subscribeOnIoObserveOnUI()
             .subscribeNext {
-                adapter.projects.value = it
+                adapter.collaborations.value = it
                 adapter.notifyDataSetChanged()
             }.addTo(bag)
 
         client.getMe()
             .subscribeOnIoObserveOnUI()
             .subscribeNext {
-                Glide.with(context).load(it.avatarUrl).into(binding.profileImageView)
-                binding.nameView.text = it.login
+                binding.nameView.text = it.name.ifEmpty { it.login }
             }
             .addTo(bag)
 

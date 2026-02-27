@@ -1,8 +1,8 @@
 package com.unhappychoice.norimaki.infrastructure.pusher.response
 
-import com.github.unhappychoice.circleci.v1.response.BuildAction
 import java.util.*
 
+// Kept as stub - Pusher integration is no longer supported with CircleCI API V2
 data class ActionLog(
     val background: Boolean,
     val endTime: Date,
@@ -16,26 +16,4 @@ data class ActionLog(
     val startTime: Date,
     val step: Int,
     val type: String
-) {
-    fun toBuildAction(): BuildAction =
-        BuildAction(
-            bashCommand = null,
-            canceled = null,
-            endTime = endTime,
-            exitCode = null,
-            failed = null,
-            hasOutput = hasOutput,
-            infrastructureFail = null,
-            index = index,
-            name = name,
-            outputUrl = outputUrl,
-            parallel = parallel,
-            runTimeMillis = runTimeMillis,
-            startTime = startTime,
-            status = status,
-            step = step,
-            timedout = null,
-            truncated = null,
-            type = type
-        )
-}
+)

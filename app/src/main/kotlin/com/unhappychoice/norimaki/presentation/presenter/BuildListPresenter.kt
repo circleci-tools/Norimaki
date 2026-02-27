@@ -1,12 +1,9 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.v1.response.Build
-import com.github.unhappychoice.circleci.v1.response.Project
-import com.gojuno.koptional.None
-import com.gojuno.koptional.Optional
-import com.gojuno.koptional.Some
-import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
-import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
+import com.github.unhappychoice.circleci.v2.response.Collaboration
+import com.github.unhappychoice.circleci.v2.response.Workflow
+import com.unhappychoice.norimaki.domain.model.addDistinctById
+import com.unhappychoice.norimaki.domain.model.sortByCreatedAt
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
@@ -30,25 +27,17 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override val page = Variable(0)
     override val hasMore = Variable(true)
     val projectName: String by instance()
-    val builds = Variable<List<Build>>(listOf())
+    val builds = Variable<List<Workflow>>(listOf())
+
+    private var nextPageToken: String? = null
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
         getBuilds()
 
-        pusher.buildListUpdated
-            .subscribeNext {
-                getBuildsAPI(offset = 0)
-                    .subscribeOnIoObserveOnUI()
-                    .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-            }.addTo(bag)
-
         eventBus.selectProject
-            .map {
-                when(it.toNullable()) {
-                    null -> ""
-                    else -> "${it.toNullable()!!.username!!}/${it.toNullable()!!.reponame!!}"
-                }
+            .map { optional ->
+                optional.toNullable()?.let { "${it.vcsType}/${it.slug}" } ?: ""
             }
             .subscribeNext { goToBuildListView(it) }
             .addTo(bag)
@@ -56,16 +45,15 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
-        getBuildsAPI(offset = this.page.value * 20)
+        getWorkflowsFromPipelines()
             .startLoading()
-            .paginate()
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+            .subscribeNext { builds.value = builds.value.addDistinctById(it).sortByCreatedAt() }
             .addTo(bag)
     }
 
-    fun goToBuildView(build: Build) {
-        goTo(activity, BuildScreen(build))
+    fun goToBuildView(workflow: Workflow) {
+        goTo(activity, BuildScreen(workflow))
     }
 
     fun changeAPIToken() {
@@ -76,12 +64,29 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
     }
 
-    private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
-        when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = 20)
-            else -> api.getProjectBuilds(userName = userName(), project = repoName(), offset = offset, limit = 20)
+    private fun getWorkflowsFromPipelines(): Observable<List<Workflow>> {
+        val pipelinesObservable = when (projectName) {
+            "" -> api.listPipelines(mine = true, pageToken = nextPageToken)
+            else -> api.getProjectPipelines(projectName, pageToken = nextPageToken)
         }
 
-    private fun userName(): String = projectName.split("/").first()
-    private fun repoName(): String = projectName.split("/").last()
+        return pipelinesObservable.flatMap { response ->
+            nextPageToken = response.nextPageToken
+            if (response.nextPageToken == null) hasMore.value = false
+            isLoading.value = false
+
+            val workflowObservables = response.items.map { pipeline ->
+                api.getPipelineWorkflows(pipeline.id)
+                    .map { it.items }
+                    .onErrorReturnItem(emptyList())
+            }
+            if (workflowObservables.isEmpty()) Observable.just(emptyList())
+            else Observable.zip(workflowObservables) { results ->
+                results.flatMap {
+                    @Suppress("UNCHECKED_CAST")
+                    it as List<Workflow>
+                }
+            }
+        }
+    }
 }

@@ -6,13 +6,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
-import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v2.response.Workflow
 import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.domain.model.*
+import com.unhappychoice.norimaki.domain.model.projectName
+import com.unhappychoice.norimaki.domain.model.statusColor
 import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.getTimeAgo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import de.hdodenhof.circleimageview.CircleImageView
 import io.reactivex.disposables.CompositeDisposable
@@ -20,14 +19,14 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
 class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.ViewHolder>() {
-    val builds = Variable<List<Build>>(emptyList())
-    val onClickItem = PublishSubject.create<Build>()
+    val builds = Variable<List<Workflow>>(emptyList())
+    val onClickItem = PublishSubject.create<Workflow>()
 
     init {
         setHasStableIds(true)
     }
 
-    override fun getItemId(position: Int) = builds.value[position].uniqueId().hashCode().toLong()
+    override fun getItemId(position: Int) = builds.value[position].id.hashCode().toLong()
 
     override fun getItemCount(): Int = builds.value.size
 
@@ -41,18 +40,15 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
     }
 
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
-        fun bind(build: Build) {
-            repositoryTitle.text = build.repositoryString()
-            branchTitle.text = build.revisionString()
-            commitTitle.text = build.subject
-            createdAt.text = build.queuedAt?.getTimeAgo()
-            indicator.setBackgroundColor(build.statusColor())
-
-            Glide.with(context).load(build.avatarUrl())
-                .into(author)
+        fun bind(workflow: Workflow) {
+            repositoryTitle.text = workflow.projectName()
+            branchTitle.text = "${workflow.name} #${workflow.pipelineNumber ?: ""}"
+            commitTitle.text = workflow.status
+            createdAt.text = workflow.createdAt.take(10)
+            indicator.setBackgroundColor(workflow.statusColor())
 
             view.clicks()
-                .subscribeNext { onClickItem.onNext(build) }
+                .subscribeNext { onClickItem.onNext(workflow) }
                 .addTo(bag)
         }
 
