@@ -1,12 +1,9 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.github.unhappychoice.circleci.v1.response.Project
-import com.gojuno.koptional.None
-import com.gojuno.koptional.Optional
-import com.gojuno.koptional.Some
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
+import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
@@ -44,11 +41,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             }.addTo(bag)
 
         eventBus.selectProject
-            .map {
-                when(it.toNullable()) {
-                    null -> ""
-                    else -> "${it.toNullable()!!.username!!}/${it.toNullable()!!.reponame!!}"
-                }
+            .map { optional ->
+                val project = optional.toNullable()
+                    ?: return@map ""
+                "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
             }
             .subscribeNext { goToBuildListView(it) }
             .addTo(bag)
@@ -79,9 +75,20 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
         when (projectName) {
             "" -> api.getRecentBuilds(offset = offset, limit = 20)
-            else -> api.getProjectBuilds(userName = userName(), project = repoName(), offset = offset, limit = 20)
+            else -> api.getProjectBuilds(
+                vcsType = vcsType(),
+                userName = userName(),
+                project = repoName(),
+                offset = offset,
+                limit = 20
+            )
         }
 
-    private fun userName(): String = projectName.split("/").first()
+    private fun vcsType(): String = projectName.split("/").let {
+        if (it.size >= 3) it[0] else "github"
+    }
+    private fun userName(): String = projectName.split("/").let {
+        if (it.size >= 3) it[1] else it[0]
+    }
     private fun repoName(): String = projectName.split("/").last()
 }

@@ -1,7 +1,7 @@
 package com.unhappychoice.norimaki.di
 
 import com.github.unhappychoice.circleci.CircleCIAPIClient
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -21,7 +21,7 @@ fun applicationModule(application: NorimakiApplication) = DI.Module("application
             .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
             .create()
     }
-    bind<CircleCIAPIClientV1>() with provider {
-        CircleCIAPIClient(APITokenPreference(application).token).client()
+    bind<CircleCIAPIClientV1_1>() with provider {
+        CircleCIAPIClient(APITokenPreference(application).token).client1_1()
     }
 }
