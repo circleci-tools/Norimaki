@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.addAction
+import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
@@ -34,7 +35,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun getBuild() {
-        api.getBuild(build.username!!, build.reponame!!, build.buildNum!!)
+        api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { steps.value = steps.value + (it.steps ?: listOf()) }
             .addTo(bag)
@@ -46,16 +47,16 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuild() {
-        api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!)
+        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { goBack(activity) }
             .addTo(bag)
     }
 
     fun rebuildWithoutCache() {
-        api.deleteCache(build.username!!, build.reponame!!)
+        api.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
             .map {
-                api.retryBuild(build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
+                api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
             }.switchLatest()
             .subscribeOnIoObserveOnUI()
             .subscribeNext { goBack(activity) }

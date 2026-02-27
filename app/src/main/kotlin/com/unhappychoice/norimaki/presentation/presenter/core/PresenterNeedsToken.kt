@@ -2,7 +2,7 @@ package com.unhappychoice.norimaki.presentation.presenter.core
 
 import android.os.Handler
 import android.view.View
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.service.EventBusService
@@ -20,7 +20,7 @@ import org.kodein.di.instance
 
 abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     val activity: MainActivity by instance()
-    val api: CircleCIAPIClientV1 by instance()
+    val api: CircleCIAPIClientV1_1 by instance()
     val eventBus: EventBusService by instance()
     val pusher: PusherService by instance()
 

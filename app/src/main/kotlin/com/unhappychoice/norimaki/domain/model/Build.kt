@@ -19,5 +19,12 @@ fun Build.uniqueId(): String = "${repositoryString()}/$buildNum"
 
 fun Build.channelName(): String = "private-$username@$reponame@$buildNum@vcs-github@0"
 
+fun Build.vcsType(): String = vcsTypeFromUrl(vcsUrl)
+
+fun vcsTypeFromUrl(url: String?): String = when {
+    url?.contains("bitbucket.org") == true -> "bitbucket"
+    else -> "github"
+}
+
 fun List<Build>.addDistinctByNumber(builds: List<Build>) = (builds + this).distinctBy { it.uniqueId() }
 fun List<Build>.sortByQueuedAt() = this.sortedByDescending { it.queuedAt }

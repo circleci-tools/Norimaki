@@ -7,7 +7,7 @@ import android.view.LayoutInflater
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
 import com.jakewharton.rxbinding2.view.clicks
@@ -32,7 +32,7 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         NavigationViewBinding.bind(this)
     }
 
-    private val client: CircleCIAPIClientV1 by instance()
+    private val client: CircleCIAPIClientV1_1 by instance()
     private val eventBus: EventBusService by instance()
     private val adapter = ProjectAdapter(context)
     private val bag = CompositeDisposable()
