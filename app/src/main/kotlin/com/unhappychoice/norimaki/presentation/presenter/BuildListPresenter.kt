@@ -1,6 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.v2.response.Collaboration
+import com.github.unhappychoice.circleci.v2.response.PipelineListResponse
 import com.github.unhappychoice.circleci.v2.response.Workflow
 import com.unhappychoice.norimaki.domain.model.addDistinctById
 import com.unhappychoice.norimaki.domain.model.sortByCreatedAt
@@ -36,18 +36,17 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         getBuilds()
 
         eventBus.selectProject
-            .map { optional ->
-                optional.toNullable()?.let { "${it.vcsType}/${it.slug}" } ?: ""
-            }
+            .map { optional -> optional.toNullable()?.slug ?: "" }
             .subscribeNext { goToBuildListView(it) }
             .addTo(bag)
     }
 
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
-        getWorkflowsFromPipelines()
-            .startLoading()
+        getPipelines()
+            .flatMap { response -> flatMapPipelinesToWorkflows(response) }
             .subscribeOnIoObserveOnUI()
+            .startLoading()
             .subscribeNext { builds.value = builds.value.addDistinctById(it).sortByCreatedAt() }
             .addTo(bag)
     }
@@ -64,28 +63,35 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
     }
 
-    private fun getWorkflowsFromPipelines(): Observable<List<Workflow>> {
-        val pipelinesObservable = when (projectName) {
-            "" -> api.listPipelines(mine = true, pageToken = nextPageToken)
-            else -> api.getProjectPipelines(projectName, pageToken = nextPageToken)
+    private fun getPipelines(): Observable<PipelineListResponse> =
+        when {
+            projectName.isEmpty() -> getRecentPipelines()
+            else -> api.listPipelines(orgSlug = projectName, mine = true, pageToken = nextPageToken)
         }
 
-        return pipelinesObservable.flatMap { response ->
-            nextPageToken = response.nextPageToken
-            if (response.nextPageToken == null) hasMore.value = false
-            isLoading.value = false
-
-            val workflowObservables = response.items.map { pipeline ->
-                api.getPipelineWorkflows(pipeline.id)
-                    .map { it.items }
-                    .onErrorReturnItem(emptyList())
+    private fun getRecentPipelines(): Observable<PipelineListResponse> =
+        api.getCollaborations()
+            .flatMap { collaborations ->
+                val orgSlug = collaborations.firstOrNull()?.slug
+                    ?: return@flatMap Observable.just(PipelineListResponse(emptyList(), null))
+                api.listPipelines(orgSlug = orgSlug, mine = true, pageToken = nextPageToken)
             }
-            if (workflowObservables.isEmpty()) Observable.just(emptyList())
-            else Observable.zip(workflowObservables) { results ->
-                results.flatMap {
-                    @Suppress("UNCHECKED_CAST")
-                    it as List<Workflow>
-                }
+
+    private fun flatMapPipelinesToWorkflows(response: PipelineListResponse): Observable<List<Workflow>> {
+        nextPageToken = response.nextPageToken
+        if (response.nextPageToken == null) hasMore.value = false
+        isLoading.value = false
+
+        val workflowObservables = response.items.map { pipeline ->
+            api.getPipelineWorkflows(pipeline.id)
+                .map { it.items }
+                .onErrorReturnItem(emptyList())
+        }
+        return if (workflowObservables.isEmpty()) Observable.just(emptyList())
+        else Observable.zip(workflowObservables) { results ->
+            results.flatMap {
+                @Suppress("UNCHECKED_CAST")
+                it as List<Workflow>
             }
         }
     }
