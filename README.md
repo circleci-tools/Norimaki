@@ -13,6 +13,6 @@ Norimaki is a [CircleCI](https://circleci.com) client for Android.
 
 ## Author
 
-[Yuji Ueki](https://github.com/unhappychoice)
+[@unhappychoice](https://unhappychoice.com)
 
 Logo, app icons are designed by [Carlos Liu](https://github.com/morita7453)
