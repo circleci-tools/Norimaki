@@ -14,7 +14,7 @@ dependencies {
     implementation 'com.github.takuji31.Koreference:koreference:2.0.0'
     implementation 'com.github.unhappychoice:circleci:2.1.0'
     implementation 'com.google.android.material:material:1.13.0'
-    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'com.google.code.gson:gson:2.14.0'
     implementation 'com.jakewharton.rxbinding2:rxbinding-appcompat-v7-kotlin:2.2.0'
     implementation 'com.jakewharton.rxbinding2:rxbinding-design-kotlin:2.2.0'
     implementation 'com.jakewharton.rxbinding2:rxbinding-kotlin:2.2.0'
