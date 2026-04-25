@@ -1,33 +1,22 @@
 package com.unhappychoice.norimaki.presentation.screen
 
 import com.unhappychoice.norimaki.R
-import com.winterbe.expekt.expect
-import io.polymorphicpanda.kspec.KSpec
-import io.polymorphicpanda.kspec.describe
-import io.polymorphicpanda.kspec.it
-import io.polymorphicpanda.kspec.junit.JUnitKSpecRunner
-import org.junit.runner.RunWith
+import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 
-@RunWith(JUnitKSpecRunner::class)
-class APITokenScreenTest : KSpec() {
-    lateinit var subject: APITokenScreen
+class APITokenScreenTest : DescribeSpec({
+    val subject = APITokenScreen()
 
-    override fun spec() {
-        beforeEach {
-            subject = APITokenScreen()
-        }
-
-        describe("APITokenScreen") {
-            describe(".getTitle()") {
-                it("should return title") {
-                    expect(subject.getTitle()).to.equal("Set api token")
-                }
+    describe("APITokenScreen") {
+        describe(".getTitle()") {
+            it("should return title") {
+                subject.getTitle() shouldBe "Set api token"
             }
-            describe(".getLayoutResource()") {
-                it("should return view resource") {
-                    expect(subject.getLayoutResource()).to.equal(R.layout.api_token_view)
-                }
+        }
+        describe(".getLayoutResource()") {
+            it("should return view resource") {
+                subject.getLayoutResource() shouldBe R.layout.api_token_view
             }
         }
     }
-}
+})
