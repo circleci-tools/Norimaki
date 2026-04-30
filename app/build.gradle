@@ -28,7 +28,7 @@ dependencies {
     implementation 'io.reactivex.rxjava2:rxandroid:2.1.1'
     implementation 'io.reactivex.rxjava2:rxkotlin:2.4.0'
     implementation 'org.jetbrains.kotlin:kotlin-reflect:2.3.21'
-    implementation 'org.kodein.di:kodein-di:7.31.0'
+    implementation 'org.kodein.di:kodein-di:7.32.0'
     testImplementation 'io.kotest:kotest-runner-junit5:6.1.11'
     testImplementation 'io.kotest:kotest-assertions-core:6.1.11'
     testImplementation 'io.mockk:mockk:1.14.9'
