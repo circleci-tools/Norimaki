@@ -79,7 +79,7 @@ android {
     }
     defaultConfig {
         applicationId "com.unhappychoice.norimaki"
-        minSdk 21
+        minSdk 23
         targetSdk 35
         versionCode System.getenv("CIRCLE_BUILD_NUM") as Integer ?: 1
         versionName "1.1.2"
