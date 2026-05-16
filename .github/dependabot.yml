@@ -7,3 +7,7 @@ updates:
       time: "12:00"
       timezone: Asia/Tokyo
     open-pull-requests-limit: 20
+    ignore:
+      # JitPack does not expose maven-metadata.xml for GitHub-built
+      # artifacts, so Dependabot's version lookup fails with HTTP 401.
+      - dependency-name: "com.github.unhappychoice:circleci"
