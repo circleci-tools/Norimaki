@@ -54,8 +54,10 @@ jobs:
     working_directory: ~/norimaki
     docker:
       - image: cimg/android:2026.02.1
+    resource_class: large
     environment:
-      JVM_OPTS: -Xmx3200m
+      JVM_OPTS: -Xmx6g
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
     steps:
       - checkout
       - *restore_cache
