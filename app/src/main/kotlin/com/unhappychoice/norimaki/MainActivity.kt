@@ -7,6 +7,8 @@ import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.di.activityModule
@@ -97,6 +99,16 @@ class MainActivity : AppCompatActivity() {
 
         binding.navigationView.di = module
         binding.drawerLayout.addDrawerListener(drawerToggle)
+        applySystemBarInsets()
+    }
+
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.drawerLayout) { view, insets ->
+            insets.getInsets(WindowInsetsCompat.Type.systemBars()).let {
+                view.setPadding(it.left, it.top, it.right, it.bottom)
+            }
+            insets
+        }
     }
 
     private fun getFlowContext(baseContext: Context): Context =
