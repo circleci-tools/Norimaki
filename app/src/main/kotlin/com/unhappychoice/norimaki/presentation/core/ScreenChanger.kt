@@ -42,15 +42,17 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
     }
 
     private fun updateActionBar(screen: Screen) {
-        activity.drawerToggle.isDrawerIndicatorEnabled = screen is BuildListScreen
+        activity.drawerToggle.isDrawerIndicatorEnabled = showsDrawerIndicator(screen)
         activity.supportActionBar?.setHomeButtonEnabled(true)
         activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
         activity.supportActionBar?.setDisplayShowHomeEnabled(false)
         activity.supportActionBar?.title = screen.getTitle()
         activity.invalidateOptionsMenu()
 
-        if (screen is BuildListScreen) { activity.drawerToggle.syncState() }
+        if (showsDrawerIndicator(screen)) { activity.drawerToggle.syncState() }
     }
+
+    private fun showsDrawerIndicator(screen: Screen): Boolean = screen is BuildListScreen && !activity.isTwoPane
 
     private fun hasScreens(): Boolean =
         Flow.get(activity).history.asIterable().filter { it !is APITokenScreen }.size > 1

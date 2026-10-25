@@ -9,6 +9,7 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.di.activityModule
@@ -40,6 +41,9 @@ class MainActivity : AppCompatActivity() {
     val binding by lazy {
         ActivityMainBinding.inflate(layoutInflater)
     }
+
+    val isTwoPane: Boolean
+        get() = resources.getBoolean(R.bool.is_two_pane)
 
     private val scope: MortarScope by lazy {
         MortarScope.buildChild(applicationContext)
@@ -99,7 +103,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.navigationView.di = module
         binding.drawerLayout.addDrawerListener(drawerToggle)
+        lockDrawerOnTwoPane()
         applySystemBarInsets()
+    }
+
+    private fun lockDrawerOnTwoPane() {
+        if (isTwoPane) binding.drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
     }
 
     private fun applySystemBarInsets() {
