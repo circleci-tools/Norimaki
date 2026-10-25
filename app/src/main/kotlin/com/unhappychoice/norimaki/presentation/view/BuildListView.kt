@@ -7,8 +7,8 @@ import android.util.SparseArray
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.GridLayoutManager
+import com.unhappychoice.norimaki.R
 import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
 import com.unhappychoice.norimaki.databinding.BuildListViewBinding
 import com.unhappychoice.norimaki.extension.isNearEnd
@@ -53,7 +53,7 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         presenter.takeView(this)
 
         binding.buildsView.adapter = adapter
-        binding.buildsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
+        binding.buildsView.layoutManager = GridLayoutManager(context, resources.getInteger(R.integer.build_list_columns))
 
         adapter.builds.value = presenter.builds.value
 

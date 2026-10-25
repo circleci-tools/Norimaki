@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="is_two_pane">true</bool>
+    <integer name="build_list_columns">2</integer>
+</resources>
