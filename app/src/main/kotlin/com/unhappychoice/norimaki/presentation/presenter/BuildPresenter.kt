@@ -3,10 +3,12 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.isFinished
+import com.unhappychoice.norimaki.domain.model.projectName
 import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
@@ -34,6 +36,13 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     fun goToBuildStepScreen(buildStep: BuildStep) {
         if (buildStep.actions.isEmpty()) return
         goTo(activity, BuildStepScreen(build, buildStep))
+    }
+
+    fun hasWorkflow(): Boolean = build.workflows?.workflowId != null
+
+    fun goToWorkflowScreen() {
+        val workflowId = build.workflows?.workflowId ?: return
+        goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
     fun rebuild() {
