@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
+import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
 import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
@@ -14,6 +15,7 @@ import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToke
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
+import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Direction
 import flow.Flow
@@ -21,12 +23,14 @@ import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import org.kodein.di.instance
+import org.kodein.di.instanceOrNull
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
     val projectName: String by instance()
+    private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val builds = Variable<List<Build>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {
@@ -36,6 +40,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         pusher.buildListUpdated
             .subscribeNext {
                 getBuildsAPI(offset = 0)
+                    .map { it.inWorkflow(workflowId) }
                     .subscribeOnIoObserveOnUI()
                     .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
             }.addTo(bag)
@@ -55,6 +60,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         getBuildsAPI(offset = this.page.value * 20)
             .startLoading()
             .paginate()
+            .map { it.inWorkflow(workflowId) }
             .subscribeOnIoObserveOnUI()
             .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
             .addTo(bag)

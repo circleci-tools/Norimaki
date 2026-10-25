@@ -42,7 +42,7 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
 
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(build: Build) {
-            repositoryTitle.text = build.repositoryString()
+            repositoryTitle.text = build.repositoryWithWorkflowString()
             branchTitle.text = build.revisionString()
             commitTitle.text = build.subject
             createdAt.text = build.queuedAt?.getTimeAgo()

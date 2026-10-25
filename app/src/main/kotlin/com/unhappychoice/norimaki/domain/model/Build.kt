@@ -15,6 +15,14 @@ fun Build.statusColor(): Int = when (status) {
 
 fun Build.avatarUrl(): String = "https://github.com/${user?.get("login")}.png"
 
+fun Build.repositoryWithWorkflowString(): String =
+    listOfNotNull(repositoryString(), workflowString()).joinToString("  ·  ")
+
+fun Build.workflowString(): String? =
+    listOfNotNull(workflows?.workflowName, workflows?.jobName).joinToString(" / ").ifEmpty { null }
+
+fun Build.projectName(): String = "${vcsType()}/$username/$reponame"
+
 fun Build.uniqueId(): String = "${repositoryString()}/$buildNum"
 
 fun Build.channelName(): String = "private-$username@$reponame@$buildNum@vcs-github@0"
@@ -28,3 +36,5 @@ fun vcsTypeFromUrl(url: String?): String = when {
 
 fun List<Build>.addDistinctByNumber(builds: List<Build>) = (builds + this).distinctBy { it.uniqueId() }
 fun List<Build>.sortByQueuedAt() = this.sortedByDescending { it.queuedAt }
+fun List<Build>.inWorkflow(workflowId: String?) =
+    if (workflowId.isNullOrBlank()) this else filter { it.workflows?.workflowId == workflowId }

@@ -29,17 +29,19 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onCreateOptionsMenu(menu: Menu?) {
         menu?.add(Menu.NONE, MenuResource.Rebuild.id, Menu.NONE, "Rebuild")
         menu?.add(Menu.NONE, MenuResource.RebuildWithoutCache.id, Menu.NONE, "Rebuild without cache")
+        if (presenter.hasWorkflow()) menu?.add(Menu.NONE, MenuResource.Workflow.id, Menu.NONE, "Show workflow jobs")
     }
 
     override fun onOptionsItemSelected(item: MenuItem?) {
         when (item?.itemId) {
             MenuResource.Rebuild.id -> presenter.rebuild()
             MenuResource.RebuildWithoutCache.id -> presenter.rebuildWithoutCache()
+            MenuResource.Workflow.id -> presenter.goToWorkflowScreen()
         }
     }
 
     private enum class MenuResource(val id: Int) {
-        Rebuild(0), RebuildWithoutCache(1)
+        Rebuild(0), RebuildWithoutCache(1), Workflow(2)
     }
 
     override fun onAttachedToWindow() {
