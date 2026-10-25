@@ -11,6 +11,11 @@
 
 Norimaki is a [CircleCI](https://circleci.com) client for Android.
 
+## Download
+
+- [Google Play](https://play.google.com/store/apps/details?id=com.unhappychoice.norimaki)
+- APK files are attached to each [GitHub Release](https://github.com/circleci-tools/Norimaki/releases)
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
