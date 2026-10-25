@@ -1,6 +1,9 @@
 package com.unhappychoice.norimaki
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -62,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         setupView()
+        requestNotificationPermission()
     }
 
     override fun onDestroy() {
@@ -102,6 +106,12 @@ class MainActivity : AppCompatActivity() {
         applySystemBarInsets()
     }
 
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+    }
+
     private fun applySystemBarInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.drawerLayout) { view, insets ->
             insets.getInsets(WindowInsetsCompat.Type.systemBars()).let {
@@ -119,4 +129,8 @@ class MainActivity : AppCompatActivity() {
             .install()
 
     private fun getCurrentView(): View? = binding.containerView.getChildAt(0)
+
+    companion object {
+        private const val NOTIFICATION_PERMISSION_REQUEST = 1
+    }
 }
