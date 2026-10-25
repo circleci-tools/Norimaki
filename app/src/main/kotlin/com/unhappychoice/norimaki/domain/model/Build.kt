@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.domain.model
 
 import android.graphics.Color
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v1.response.BuildAction
 
 fun Build.repositoryString(): String = "$username / $reponame"
 fun Build.revisionString(): String = "$branch #$buildNum (${vcsRevision?.take(6)})"
@@ -17,7 +18,10 @@ fun Build.avatarUrl(): String = "https://github.com/${user?.get("login")}.png"
 
 fun Build.uniqueId(): String = "${repositoryString()}/$buildNum"
 
-fun Build.channelName(): String = "private-$username@$reponame@$buildNum@vcs-github@0"
+fun Build.isFinished(): Boolean = lifecycle in listOf("finished", "not_run")
+
+fun Build.rawOutputUrl(action: BuildAction): String =
+    "https://circleci.com/api/private/output/raw/${vcsType()}/$username/$reponame/$buildNum/output/${action.index}/${action.step}"
 
 fun Build.vcsType(): String = vcsTypeFromUrl(vcsUrl)
 
