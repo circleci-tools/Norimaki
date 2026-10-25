@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -35,11 +36,17 @@ class MainActivity : AppCompatActivity() {
 
     val drawerToggle by lazy {
         ActionBarDrawerToggle(this, binding.drawerLayout, binding.toolbar, R.string.drawer_open, R.string.drawer_close)
-            .apply { setToolbarNavigationClickListener { onBackPressed() } }
+            .apply { setToolbarNavigationClickListener { onBackPressedDispatcher.onBackPressed() } }
     }
 
     val binding by lazy {
         ActivityMainBinding.inflate(layoutInflater)
+    }
+
+    private val flowBackCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            if (!Flow.get(this@MainActivity).goBack()) finishWithDefaultBack()
+        }
     }
 
     val isTwoPane: Boolean
@@ -65,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, flowBackCallback)
         setupView()
     }
 
@@ -76,12 +84,6 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         BundleServiceRunner.getBundleServiceRunner(this).onSaveInstanceState(outState)
         super.onSaveInstanceState(outState)
-    }
-
-    override fun onBackPressed() {
-        if (!Flow.get(this).goBack()) {
-            super.onBackPressed()
-        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -105,6 +107,12 @@ class MainActivity : AppCompatActivity() {
         binding.drawerLayout.addDrawerListener(drawerToggle)
         lockDrawerOnTwoPane()
         applySystemBarInsets()
+    }
+
+    private fun finishWithDefaultBack() {
+        flowBackCallback.isEnabled = false
+        onBackPressedDispatcher.onBackPressed()
+        flowBackCallback.isEnabled = true
     }
 
     private fun lockDrawerOnTwoPane() {
