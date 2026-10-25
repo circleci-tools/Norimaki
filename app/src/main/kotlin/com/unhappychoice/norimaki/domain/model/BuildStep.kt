@@ -1,7 +1,6 @@
 package com.unhappychoice.norimaki.domain.model
 
 import android.graphics.Color
-import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 
 
@@ -18,24 +17,15 @@ fun BuildStep.statusColor(): Int = when {
     else -> Color.rgb(92, 211, 228)
 }
 
-fun BuildStep.addAction(action: BuildAction): BuildStep = copy(
-    actions = (listOf(action) + actions).distinctBy { it.name }
-)
-
 fun BuildStep.step(): Int? = actions.firstOrNull()?.step
 
-fun List<BuildStep>.addAction(action: BuildAction): List<BuildStep> = map {
-    when (it.name) {
-        action.name -> it.addAction(action)
-        else -> it
-    }
-}
+fun BuildStep.isFinished() =
+    actions.fold(true) { acc, action -> acc && action.endTime != null }
+
+fun List<BuildStep>.findByName(name: String): BuildStep? = firstOrNull { it.name == name }
 
 private fun BuildStep.isCanceled() =
     actions.fold(false) { acc, action -> acc || (action.canceled ?: false) }
 
 private fun BuildStep.isFailed() =
     actions.fold(false) { acc, action -> acc || (action.failed ?: false) || (action.timedout ?: false) }
-
-private fun BuildStep.isFinished() =
-    actions.fold(true) { acc, action -> acc && action.endTime != null }

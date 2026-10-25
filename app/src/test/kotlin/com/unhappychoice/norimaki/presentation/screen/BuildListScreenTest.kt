@@ -16,6 +16,15 @@ class BuildListScreenTest : DescribeSpec({
                 BuildListScreen("unhappychoice/Norimaki").getTitle() shouldBe "unhappychoice/Norimaki"
             }
         }
+        describe(".equals()") {
+            it("should be equal for the same project") {
+                (BuildListScreen("a/b") == BuildListScreen("a/b")) shouldBe true
+                BuildListScreen("a/b").hashCode() shouldBe BuildListScreen("a/b").hashCode()
+            }
+            it("should not be equal for another project") {
+                (BuildListScreen("a/b") == BuildListScreen("a/c")) shouldBe false
+            }
+        }
         describe(".getLayoutResource()") {
             it("should return view resource") {
                 subject.getLayoutResource() shouldBe R.layout.build_list_view

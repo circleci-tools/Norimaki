@@ -11,7 +11,6 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.extension.withLog
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
-import com.unhappychoice.norimaki.infrastructure.pusher.PusherService
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
@@ -22,7 +21,6 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     val activity: MainActivity by instance()
     val api: CircleCIAPIClientV1_1 by instance()
     val eventBus: EventBusService by instance()
-    val pusher: PusherService by instance()
 
     companion object {
         var currentUser: User? = null
@@ -36,6 +34,11 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
         authenticate()
+    }
+
+    override fun dropView(view: T) {
+        bag.clear()
+        super.dropView(view)
     }
 
     override fun onExitScope() {

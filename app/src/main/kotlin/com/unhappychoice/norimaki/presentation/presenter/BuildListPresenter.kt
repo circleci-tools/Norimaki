@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
 import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
+import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
@@ -37,13 +38,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         super.onEnterScope(scope)
         getBuilds()
 
-        pusher.buildListUpdated
-            .subscribeNext {
-                getBuildsAPI(offset = 0)
-                    .map { it.inWorkflow(workflowId) }
-                    .subscribeOnIoObserveOnUI()
-                    .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-            }.addTo(bag)
+        pollLatestBuilds()
 
         eventBus.selectProject
             .map { optional ->
@@ -60,6 +55,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         getBuildsAPI(offset = this.page.value * 20)
             .startLoading()
             .paginate()
+            .map { it.inWorkflow(workflowId) }
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+            .addTo(bag)
+    }
+
+    fun pollLatestBuilds() {
+        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
             .map { it.inWorkflow(workflowId) }
             .subscribeOnIoObserveOnUI()
             .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
@@ -97,4 +100,8 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         if (it.size >= 3) it[1] else it[0]
     }
     private fun repoName(): String = projectName.split("/").last()
+
+    companion object {
+        const val BUILD_LIST_POLLING_SECONDS = 10L
+    }
 }
