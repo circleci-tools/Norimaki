@@ -46,8 +46,9 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .concatWith(Observable.defer { fetchRawOutput(action) })
             .filter { it.isNotEmpty() }
             .doOnNext { readBytes += it.size }
+            .decodeUtf8()
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(String(it)) }
+            .subscribeNext { appendLog(it) }
             .addTo(bag)
     }
 
