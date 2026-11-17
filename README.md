@@ -11,6 +11,13 @@
 
 Norimaki is a [CircleCI](https://circleci.com) client for Android.
 
+## Quick start
+
+1. Install Norimaki from [Google Play](https://play.google.com/store/apps/details?id=com.unhappychoice.norimaki).
+2. Create a [personal API token](https://circleci.com/docs/guides/toolkit/managing-api-tokens/#create-a-personal-api-token) for your CircleCI account.
+3. Open Norimaki, paste the token into the token field, and tap **Apply**.
+4. Tap a build in **Recent Builds** to see its details.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
