@@ -25,7 +25,7 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
 
         presenter.logString.asObservable()
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { binding.logText.text = Html.fromHtml(it.replace("\n", "<br>")) }
+            .subscribeNext { binding.logText.text = Html.fromHtml(it) }
             .addTo(bag)
     }
 

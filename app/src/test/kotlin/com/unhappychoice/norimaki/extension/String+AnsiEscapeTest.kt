@@ -8,6 +8,14 @@ class StringAnsiEscapeTest : DescribeSpec({
         it(".removeAnsiEscapeCode() should remove the code") {
             "[3ASome string".removeAnsiEscapeCode() shouldBe "Some string"
         }
+        it(".replaceAnsiColorCodeToHtml() should escape literal tags and entities") {
+            "expected <b>literal</b> &amp;".replaceAnsiColorCodeToHtml() shouldBe
+                "expected &lt;b&gt;literal&lt;/b&gt; &amp;amp;"
+        }
+        it(".replaceAnsiColorCodeToHtml() should preserve colors and line breaks around escaped text") {
+            "plain<br>\n\u001B[31m<error> &lt;\nnext\u001B[0m &".replaceAnsiColorCodeToHtml() shouldBe
+                "plain&lt;br&gt;<br><font color=#F00000>&lt;error&gt; &amp;lt;<br>next</font> &amp;"
+        }
         it(".replaceAnsiColorCodeToHtml() should replace 30 to #111111") {
             "[30mSome string".replaceAnsiColorCodeToHtml() shouldBe "<font color=#111111>Some string</font>"
         }
