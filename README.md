@@ -1,7 +1,7 @@
 # Norimaki
 [![play store](https://raw.githubusercontent.com/circleci-tools/Norimaki/image/google-play-badge.png)](https://play.google.com/store/apps/details?id=com.unhappychoice.norimaki)
 
-![Version](https://img.shields.io/badge/%20version-1.1.0-blue.svg)
+[![Version](https://img.shields.io/github/v/release/circleci-tools/Norimaki?display_name=tag&label=version&color=blue)](https://github.com/circleci-tools/Norimaki/releases/latest)
 [![CircleCI](https://circleci.com/gh/circleci-tools/Norimaki.svg?style=shield)](https://circleci.com/gh/circleci-tools/Norimaki)
 [![codecov](https://codecov.io/gh/circleci-tools/Norimaki/branch/master/graph/badge.svg)](https://codecov.io/gh/circleci-tools/Norimaki)
 [![Libraries.io dependency status for GitHub repo](https://img.shields.io/librariesio/github/circleci-tools/Norimaki.svg)](https://libraries.io/github/circleci-tools/Norimaki)
