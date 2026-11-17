@@ -32,6 +32,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override val hasMore = Variable(true)
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
+    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     val builds = Variable<List<Build>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {
@@ -53,12 +54,19 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
         getBuildsAPI(offset = this.page.value * 20)
+            .singleOrError()
+            .toObservable()
+            .subscribeOnIoObserveOnUI()
             .startLoading()
+            .doOnDispose { isLoading.value = false }
             .paginate()
             .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
             .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
             .addTo(bag)
+    }
+
+    fun getBuildsIfUnderfilled(canScroll: Boolean) {
+        if (isWorkflow && !canScroll) getBuilds()
     }
 
     fun pollLatestBuilds() {
