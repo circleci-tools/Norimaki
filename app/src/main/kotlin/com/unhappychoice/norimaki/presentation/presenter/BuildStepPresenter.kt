@@ -3,7 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.findByName
+import com.unhappychoice.norimaki.domain.model.findByStepNumber
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
 import com.unhappychoice.norimaki.domain.model.vcsType
@@ -40,12 +40,15 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun pollRunningAction(action: BuildAction) {
+    internal fun runningOutput(action: BuildAction): Observable<ByteArray> =
         polling(LOG_POLLING_SECONDS) { fetchRawOutput(action) }
-            .takeUntil(stepFinished())
+            .takeUntil(stepFinished(action.step))
             .concatWith(Observable.defer { fetchRawOutput(action) })
             .filter { it.isNotEmpty() }
             .doOnNext { readBytes += it.size }
+
+    private fun pollRunningAction(action: BuildAction) {
+        runningOutput(action)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { appendLog(String(it)) }
             .addTo(bag)
@@ -54,10 +57,10 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private fun fetchRawOutput(action: BuildAction): Observable<ByteArray> =
         outputClient.fetchRawOutput(build.rawOutputUrl(action), readBytes)
 
-    private fun stepFinished(): Observable<Build> =
+    private fun stepFinished(stepNumber: Int?): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
-        }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
+        }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
 
     private fun appendLog(log: String) {
         logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
