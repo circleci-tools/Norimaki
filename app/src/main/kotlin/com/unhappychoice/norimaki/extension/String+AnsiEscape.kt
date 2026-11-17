@@ -7,16 +7,21 @@ fun String.replaceAnsiColorCodeToHtml(): String =
         .map { it.convertAnsiColorCodeToHtmlTag() }
         .joinToString("")
 
-private fun String.convertAnsiColorCodeToHtmlTag(): String =
-    when ("\\033\\[(\\d+?)m".toRegex().find(this)?.groupValues?.lastOrNull()) {
-        "30" -> "<font color=#111111>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "31" -> "<font color=#F00000>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "32" -> "<font color=#00F000>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "33" -> "<font color=#F0F000>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "34" -> "<font color=#0000F0>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "35" -> "<font color=#F000F0>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "36" -> "<font color=#00F0F0>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "37" -> "<font color=#F0F0F0>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        "39" -> "<font color=#F0F0F0>" + replace("\\033\\[\\d+?m".toRegex(), "") + "</font>"
-        else -> replace("\\033\\[\\d+?m".toRegex(), "")
+internal fun ansiForegroundColor(code: String?): String? =
+    when (code) {
+        "30" -> "#111111"
+        "31" -> "#F00000"
+        "32" -> "#00F000"
+        "33" -> "#F0F000"
+        "34" -> "#0000F0"
+        "35" -> "#F000F0"
+        "36" -> "#00F0F0"
+        "37", "39" -> "#F0F0F0"
+        else -> null
     }
+
+private fun String.convertAnsiColorCodeToHtmlTag(): String {
+    val color = ansiForegroundColor("\\033\\[(\\d+?)m".toRegex().find(this)?.groupValues?.lastOrNull())
+    val text = replace("\\033\\[\\d+?m".toRegex(), "")
+    return color?.let { "<font color=$it>$text</font>" } ?: text
+}

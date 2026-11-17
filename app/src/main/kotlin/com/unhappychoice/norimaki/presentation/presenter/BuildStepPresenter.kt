@@ -7,12 +7,15 @@ import com.unhappychoice.norimaki.domain.model.findByName
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
 import com.unhappychoice.norimaki.domain.model.vcsType
-import com.unhappychoice.norimaki.extension.*
+import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
+import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.schedulers.Schedulers
 import mortar.MortarScope
 import org.kodein.di.instance
 
@@ -21,7 +24,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     val buildStep: BuildStep by instance()
     private val outputClient: BuildOutputClient by instance()
 
-    val logString: Variable<String> = Variable("")
+    internal val log = BuildLog()
     @Volatile private var readBytes = 0L
 
     override fun onEnterScope(scope: MortarScope?) {
@@ -32,12 +35,10 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
         }
     }
 
-    fun getActions() {
+    private fun getActions() {
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
         Observable.concat(actions.map { outputClient.fetchOutput(it) })
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(it) }
-            .addTo(bag)
+            .renderLog()
     }
 
     private fun pollRunningAction(action: BuildAction) {
@@ -46,9 +47,8 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .concatWith(Observable.defer { fetchRawOutput(action) })
             .filter { it.isNotEmpty() }
             .doOnNext { readBytes += it.size }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(String(it)) }
-            .addTo(bag)
+            .map { String(it, Charsets.UTF_8) }
+            .renderLog()
     }
 
     private fun fetchRawOutput(action: BuildAction): Observable<ByteArray> =
@@ -59,8 +59,9 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
         }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
 
-    private fun appendLog(log: String) {
-        logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
+    private fun Observable<String>.renderLog() {
+        val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation())
+        log.render(chunks, AndroidSchedulers.mainThread()).addTo(bag)
     }
 
     companion object {
