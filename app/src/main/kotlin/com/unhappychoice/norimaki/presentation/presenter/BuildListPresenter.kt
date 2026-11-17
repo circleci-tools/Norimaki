@@ -22,7 +22,6 @@ import flow.Direction
 import flow.Flow
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
-import mortar.MortarScope
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
 
@@ -34,8 +33,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val builds = Variable<List<Build>>(listOf())
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onAuthenticated() {
         getBuilds()
 
         pollLatestBuilds()
@@ -51,7 +49,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun getBuilds() {
-        if (isLoading.value || !hasMore.value) return
+        if (account == null || isLoading.value || !hasMore.value) return
         getBuildsAPI(offset = this.page.value * 20)
             .startLoading()
             .paginate()
@@ -61,15 +59,8 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .addTo(bag)
     }
 
-    fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
-            .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-            .addTo(bag)
-    }
-
     fun goToBuildView(build: Build) {
+        if (account == null) return
         goTo(activity, BuildScreen(build))
     }
 
@@ -77,14 +68,27 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
+    override fun onSessionEnded() {
+        builds.value = emptyList()
+    }
+
+    private fun pollLatestBuilds() {
+        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
+            .map { it.inWorkflow(workflowId) }
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+            .addTo(bag)
+    }
+
     private fun goToBuildListView(projectName: String) {
         Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
     }
 
-    private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
-        when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = 20)
-            else -> api.getProjectBuilds(
+    private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
+        val client = account?.client ?: return Observable.empty()
+        return when (projectName) {
+            "" -> client.getRecentBuilds(offset = offset, limit = 20)
+            else -> client.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),
                 project = repoName(),
@@ -92,6 +96,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
                 limit = 20
             )
         }
+    }
 
     private fun vcsType(): String = projectName.split("/").let {
         if (it.size >= 3) it[0] else "github"

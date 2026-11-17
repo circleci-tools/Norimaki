@@ -12,13 +12,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
-import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.di.activityModule
-import com.unhappychoice.norimaki.di.applicationModule
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
-import com.unhappychoice.norimaki.presentation.view.NavigationView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
@@ -29,7 +26,7 @@ import org.kodein.di.DI
 class MainActivity : AppCompatActivity() {
     val module by lazy {
         DI {
-            import(applicationModule(application as NorimakiApplication))
+            extend((application as NorimakiApplication).module)
             import(activityModule(this@MainActivity))
         }
     }
@@ -100,10 +97,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupView() {
+        binding.navigationView.di = module
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
 
-        binding.navigationView.di = module
         binding.drawerLayout.addDrawerListener(drawerToggle)
         lockDrawerOnTwoPane()
         applySystemBarInsets()

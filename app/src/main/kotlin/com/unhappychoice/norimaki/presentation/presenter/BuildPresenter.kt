@@ -13,15 +13,13 @@ import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.switchLatest
-import mortar.MortarScope
 import org.kodein.di.instance
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()
     val steps = Variable<List<BuildStep>>(listOf())
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onAuthenticated() {
         pollBuild()
     }
 
@@ -46,16 +44,18 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuild() {
-        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+        val client = account?.client ?: return
+        client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { goBack(activity) }
             .addTo(bag)
     }
 
     fun rebuildWithoutCache() {
-        api.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
+        val client = account?.client ?: return
+        client.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
             .map {
-                api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
+                client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
             }.switchLatest()
             .subscribeOnIoObserveOnUI()
             .subscribeNext { goBack(activity) }
@@ -63,7 +63,8 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     private fun getBuildAPI(): Observable<Build> =
-        api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+        account?.client?.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+            ?: Observable.empty()
 
     companion object {
         const val BUILD_POLLING_SECONDS = 5L

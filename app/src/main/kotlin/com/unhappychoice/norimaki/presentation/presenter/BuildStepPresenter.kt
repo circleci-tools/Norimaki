@@ -13,19 +13,18 @@ import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToke
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
-import mortar.MortarScope
 import org.kodein.di.instance
 
 class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     val build: Build by instance()
     val buildStep: BuildStep by instance()
-    private val outputClient: BuildOutputClient by instance()
+    private lateinit var outputClient: BuildOutputClient
 
     val logString: Variable<String> = Variable("")
     @Volatile private var readBytes = 0L
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onAuthenticated() {
+        outputClient = BuildOutputClient(requireNotNull(account).token)
         when (buildStep.isFinished()) {
             true -> getActions()
             false -> buildStep.actions.firstOrNull()?.let { pollRunningAction(it) }
@@ -33,6 +32,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     }
 
     fun getActions() {
+        if (account == null) return
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
         Observable.concat(actions.map { outputClient.fetchOutput(it) })
             .subscribeOnIoObserveOnUI()
@@ -56,7 +56,8 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
 
     private fun stepFinished(): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
-            api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+            account?.client?.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+                ?: Observable.empty()
         }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
 
     private fun appendLog(log: String) {

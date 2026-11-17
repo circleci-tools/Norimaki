@@ -4,4 +4,6 @@
     </string>
     <string name="drawer_open">Open</string>
     <string name="drawer_close">Close</string>
+    <string name="api_token_required">Enter an API token.</string>
+    <string name="api_token_verification_failed">Could not verify this API token. Check the token and try again.</string>
 </resources>
