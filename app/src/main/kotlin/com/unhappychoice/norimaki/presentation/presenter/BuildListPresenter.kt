@@ -1,17 +1,9 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
-import com.unhappychoice.norimaki.domain.model.inWorkflow
-import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
 import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
-import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
-import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
-import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
-import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
@@ -21,24 +13,24 @@ import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Direction
 import flow.Flow
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
 
-class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
-    override val isLoading = Variable(false)
-    override val page = Variable(0)
-    override val hasMore = Variable(true)
+class BuildListPresenter : PresenterNeedsToken<BuildListView>() {
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
-    val builds = Variable<List<Build>>(listOf())
+    private val buildList by lazy {
+        BuildListRequests(workflowId, Schedulers.io(), AndroidSchedulers.mainThread(), ::getBuildsAPI)
+    }
+    val builds get() = buildList.builds
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
-        getBuilds()
-
-        pollLatestBuilds()
+        buildList.poll(BUILD_LIST_POLLING_SECONDS).addTo(bag)
 
         eventBus.selectProject
             .map { optional ->
@@ -51,22 +43,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun getBuilds() {
-        if (isLoading.value || !hasMore.value) return
-        getBuildsAPI(offset = this.page.value * 20)
-            .startLoading()
-            .paginate()
-            .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-            .addTo(bag)
-    }
-
-    fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
-            .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-            .addTo(bag)
+        buildList.loadNextPage()?.addTo(bag)
     }
 
     fun goToBuildView(build: Build) {
@@ -83,13 +60,13 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
         when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = 20)
+            "" -> api.getRecentBuilds(offset = offset, limit = BuildListRequests.PAGE_SIZE)
             else -> api.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),
                 project = repoName(),
                 offset = offset,
-                limit = 20
+                limit = BuildListRequests.PAGE_SIZE
             )
         }
 
