@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Parcelable
 import android.util.AttributeSet
 import android.util.SparseArray
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import androidx.recyclerview.widget.GridLayoutManager
@@ -13,7 +12,6 @@ import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
 import com.unhappychoice.norimaki.databinding.BuildListViewBinding
 import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
@@ -55,14 +53,9 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         binding.buildsView.adapter = adapter
         binding.buildsView.layoutManager = GridLayoutManager(context, resources.getInteger(R.integer.build_list_columns))
 
-        adapter.builds.value = presenter.builds.value
-
-        presenter.builds.asObservable()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext {
-                adapter.builds.value = it
-                adapter.notifyDataSetChanged()
-            }.addTo(bag)
+        presenter.builds
+            .subscribeNext { adapter.submitList(it) }
+            .addTo(bag)
 
         adapter.onClickItem
             .subscribeNext { presenter.goToBuildView(it) }

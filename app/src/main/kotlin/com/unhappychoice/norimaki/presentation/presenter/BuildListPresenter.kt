@@ -1,9 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
+import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
-import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
 import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
@@ -20,8 +19,13 @@ import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Direction
 import flow.Flow
+import io.reactivex.Maybe
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
@@ -32,10 +36,15 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override val hasMore = Variable(true)
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
-    val builds = Variable<List<Build>>(listOf())
+    private val history = Variable(BuildHistory())
+    private val incomingPages = PublishSubject.create<List<Build>>()
+    val builds = history.asObservable().map { it.builds }
+    private var pageUpdates: Disposable? = null
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
+        pageUpdates = observePages()
+
         getBuilds()
 
         pollLatestBuilds()
@@ -50,22 +59,25 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .addTo(bag)
     }
 
+    override fun onExitScope() {
+        pageUpdates?.dispose()
+        super.onExitScope()
+    }
+
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
         getBuildsAPI(offset = this.page.value * 20)
+            .subscribeOnIoObserveOnUI()
             .startLoading()
             .paginate()
-            .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+            .subscribeNext { incomingPages.onNext(it) }
             .addTo(bag)
     }
 
     fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
-            .map { it.inWorkflow(workflowId) }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+            .subscribeNext { incomingPages.onNext(it) }
             .addTo(bag)
     }
 
@@ -76,6 +88,18 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
     }
+
+    private fun observePages(): Disposable =
+        incomingPages.concatMapMaybe { page ->
+            val current = history.value
+            val filter = workflowId
+            Maybe.defer<BuildHistory> {
+                val updated = current.merge(page.inWorkflow(filter))
+                if (updated == null) Maybe.empty() else Maybe.just(updated)
+            }
+                .subscribeOn(Schedulers.computation())
+                .observeOn(AndroidSchedulers.mainThread())
+        }.subscribeNext { history.value = it }
 
     private fun goToBuildListView(projectName: String) {
         Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
