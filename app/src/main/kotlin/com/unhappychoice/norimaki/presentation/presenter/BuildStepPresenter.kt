@@ -52,7 +52,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
-                onNext = { appendLog(String(it)) },
+                onNext = { appendLog(it) },
                 onError = { logLoadFailed.value = true }
             )
             .addTo(bag)
@@ -78,23 +78,28 @@ internal fun pollActionOutputs(
     fetchOutput: (String, Long) -> Observable<ByteArray>,
     scheduler: Scheduler = Schedulers.computation(),
     fetchFinalOutput: (String, Long) -> Observable<ByteArray> = fetchOutput
-): Observable<ByteArray> = Observable.defer {
+): Observable<String> = Observable.defer {
+    val urls = outputUrls.distinct()
+    val decoders = urls.associateWith { Utf8StreamDecoder() }
     val offsets = mutableMapOf<String, Long>()
     // Stop scheduling reads at completion, then drain after any in-flight reads.
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = outputUrls.map { url ->
+            val reads = urls.map { url ->
                 val read = Observable.defer {
+                    val decoder = decoders.getValue(url)
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
-                    fetch(url, offset)
+                    val chunks = fetch(url, offset)
                         .filter { it.isNotEmpty() }
-                        .doOnNext { offsets[url] = offset + it.size }
+                        .doOnNext { offsets[url] = offsets.getOrDefault(url, 0L) + it.size }
+                        .map { decoder.decode(it) }
+                    if (finishing) chunks.concatWith(Observable.fromCallable { decoder.finish() }) else chunks
                 }
-                if (finishing) read else read.onErrorResumeNext(Observable.empty<ByteArray>())
+                if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }
-            Observable.concatDelayError(reads)
+            Observable.concatDelayError(reads).filter { it.isNotEmpty() }
         }
 }
