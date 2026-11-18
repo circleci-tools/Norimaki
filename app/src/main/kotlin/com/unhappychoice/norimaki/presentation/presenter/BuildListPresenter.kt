@@ -2,7 +2,6 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
-import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -13,7 +12,6 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.Single
@@ -23,15 +21,12 @@ import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import org.kodein.di.instance
-import org.kodein.di.instanceOrNull
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
     val projectName: String by instance()
-    private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
-    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
@@ -63,10 +58,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .addTo(bag)
     }
 
-    fun getBuildsIfUnderfilled(canScroll: Boolean) {
-        if (isWorkflow && !canScroll) getBuilds()
-    }
-
     fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
             .subscribeOnIoObserveOnUI()
@@ -84,8 +75,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
         val current = history.value
-        val filter = workflowId
-        Single.fromCallable { current.merge(page.builds.inWorkflow(filter)) ?: current }
+        Single.fromCallable { current.merge(page.builds) ?: current }
             .subscribeOn(Schedulers.computation())
             .observeOn(AndroidSchedulers.mainThread())
             .map { updated -> page to updated }

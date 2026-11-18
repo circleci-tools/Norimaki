@@ -5,4 +5,17 @@
     <string name="drawer_open">Open</string>
     <string name="drawer_close">Close</string>
     <string name="build_log_load_error">Could not load the rest of the build log.</string>
+    <string name="workflow_refresh">Refresh</string>
+    <string name="workflow_no_jobs">No jobs in this workflow.</string>
+    <string name="workflow_load_error">Could not load workflow jobs. Try refreshing.</string>
+    <string name="workflow_build_load_error">Could not load build details.</string>
+    <string name="workflow_approve_title">Approve held job?</string>
+    <string name="workflow_approve">Approve</string>
+    <string name="workflow_approve_confirmation">Job: %1$s\nProject: %2$s\nWorkflow: %3$s\nWorkflow run ID: %4$s</string>
+    <string name="workflow_job_approval">%1$s · Tap to approve</string>
+    <string name="workflow_job_build">%1$s · Build #%2$d</string>
+    <string name="workflow_approval_submitted">CircleCI accepted the approval request.</string>
+    <string name="workflow_approval_permission">CircleCI denied approval. Check your token and approval permissions.</string>
+    <string name="workflow_approval_resolved">This job is no longer waiting for approval.</string>
+    <string name="workflow_approval_error">Could not confirm approval. Refresh to check the job status.</string>
 </resources>

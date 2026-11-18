@@ -45,7 +45,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    internal fun runningOutput(): Observable<ByteArray> {
+    internal fun runningOutput(): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
             outputUrls,

@@ -11,8 +11,8 @@ class WorkflowScreenTest : DescribeSpec({
         it(".getTitle() should return the workflow name") {
             subject.getTitle() shouldBe "test-and-deploy"
         }
-        it(".getLayoutResource() should reuse the build list view") {
-            subject.getLayoutResource() shouldBe R.layout.build_list_view
+        it(".getLayoutResource() should use the workflow job view") {
+            subject.getLayoutResource() shouldBe R.layout.workflow_view
         }
         it(".equals() should compare workflow ids") {
             (subject == WorkflowScreen("other", "workflow-id", "other")) shouldBe true
