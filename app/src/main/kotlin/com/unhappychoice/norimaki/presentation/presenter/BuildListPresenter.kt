@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
@@ -70,7 +71,8 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun goToBuildView(build: Build) {
-        goTo(activity, BuildScreen(build))
+        val buildId = BuildId.from(build) ?: return
+        goTo(activity, BuildScreen(buildId))
     }
 
     fun changeAPIToken() {

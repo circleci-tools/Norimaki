@@ -3,7 +3,6 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.Context
 import android.text.Html
 import android.util.AttributeSet
-import android.view.LayoutInflater
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -22,6 +21,7 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
+        presenter.loadStep { updateScreenTitle(presenter.activity, it.name) }
 
         presenter.logString.asObservable()
             .subscribeOnIoObserveOnUI()
