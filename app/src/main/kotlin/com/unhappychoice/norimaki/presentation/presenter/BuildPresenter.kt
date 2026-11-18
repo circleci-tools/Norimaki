@@ -5,14 +5,16 @@ import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.projectName
 import com.unhappychoice.norimaki.domain.model.vcsType
+import com.unhappychoice.norimaki.domain.service.rebuildWithoutCache
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.switchLatest
+import io.reactivex.rxkotlin.subscribeBy
 import mortar.MortarScope
 import org.kodein.di.instance
 
@@ -53,13 +55,18 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuildWithoutCache() {
-        api.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
-            .map {
-                api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
-            }.switchLatest()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { goBack(activity) }
+        val origin = view ?: return
+        api.rebuildWithoutCache(build)
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribeBy(onError = {}, onNext = { goBackFrom(origin) })
             .addTo(bag)
+    }
+
+    private fun goBackFrom(origin: BuildView) {
+        val container = activity.binding.containerView
+        if (origin.isAttachedToWindow && container.childCount == 1 && container.getChildAt(0) === origin) {
+            goBack(activity)
+        }
     }
 
     private fun getBuildAPI(): Observable<Build> =
