@@ -31,10 +31,7 @@ class SessionService(
         active.value?.toNullable()?.let { Single.just(it) } ?: authenticate(savedToken)
     }
 
-    fun replace(token: String): Single<VerifiedSession> = Single.defer {
-        writeToken("")
-        authenticate(token)
-    }
+    fun replace(token: String): Single<VerifiedSession> = authenticate(token)
 
     private fun authenticate(token: String): Single<VerifiedSession> = Single.defer {
         val currentAttempt = ++attempt

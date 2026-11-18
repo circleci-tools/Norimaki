@@ -28,7 +28,7 @@ class SessionServiceTest : DescribeSpec({
             val replacement = fixture.session.replace("second").test()
 
             accounts.values().map { it.toNullable() } shouldBe listOf(first, null)
-            fixture.savedToken shouldBe ""
+            fixture.savedToken shouldBe "first"
 
             fixture.secondVerification.onSuccess(fixture.secondUser)
 
@@ -51,8 +51,7 @@ class SessionServiceTest : DescribeSpec({
 
             replacement.assertError(failure)
             accounts.values().map { it.toNullable() } shouldBe listOf(first, null)
-            fixture.savedToken shouldBe ""
-            fixture.session.restore().test().assertError(IllegalArgumentException::class.java)
+            fixture.savedToken shouldBe "first"
             fixture.session.replace("first").test().assertComplete()
             fixture.verifiedClients shouldBe listOf(fixture.firstClient, fixture.secondClient, fixture.firstClient)
         }
