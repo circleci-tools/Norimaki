@@ -11,6 +11,10 @@
 
 Norimaki is a [CircleCI](https://circleci.com) client for Android.
 
+## Release checklist
+
+- When updating `versionName` in `app/build.gradle`, review and update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before publishing to Google Play.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
