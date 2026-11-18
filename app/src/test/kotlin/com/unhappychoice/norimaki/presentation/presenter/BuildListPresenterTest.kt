@@ -19,6 +19,7 @@ import org.kodein.di.singleton
 
 class BuildListPresenterTest : DescribeSpec({
     beforeSpec {
+        RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
@@ -62,23 +63,28 @@ class BuildListPresenterTest : DescribeSpec({
             every { api.pageAt(0) } returns Observable.just(listOf(build("other", 3)))
             every { api.pageAt(20) } returns Observable.just(listOf(build("other", 2)))
             every { api.pageAt(40) } returns Observable.just(listOf(matchingJob))
-            every { api.pageAt(60) } returns Observable.just(emptyList())
+            every { api.pageAt(60) } returns Observable.just(listOf(matchingJob))
+            every { api.pageAt(80) } returns Observable.just(emptyList())
             val presenter = presenter(api)
+            val builds = presenter.builds.test()
 
             presenter.getBuilds()
-            presenter.builds.value shouldBe emptyList()
+            builds.assertValue(emptyList())
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            presenter.builds.value shouldBe emptyList()
+            builds.assertValue(emptyList())
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            presenter.builds.value shouldBe listOf(matchingJob)
+            builds.assertValues(emptyList(), listOf(matchingJob))
 
             presenter.getBuildsIfUnderfilled(canScroll = true)
             verify(exactly = 0) { api.pageAt(60) }
             presenter.getBuildsIfUnderfilled(canScroll = false)
+            presenter.hasMore.value shouldBe true
+            presenter.page.value shouldBe 4
+            presenter.getBuildsIfUnderfilled(canScroll = false)
             presenter.hasMore.value shouldBe false
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            verify(exactly = 0) { api.pageAt(80) }
-            presenter.builds.value shouldBe listOf(matchingJob)
+            verify(exactly = 0) { api.pageAt(100) }
+            builds.assertValues(emptyList(), listOf(matchingJob))
         }
 
         it("does not auto-load pages for an unfiltered project") {
