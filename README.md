@@ -11,6 +11,14 @@
 
 Norimaki is a [CircleCI](https://circleci.com) client for Android.
 
+## Running tests
+
+With JDK 21 and the Android SDK (platform 37 and Build Tools 37.0.0) installed, run the full unit test suite from the repository root:
+
+```sh
+./gradlew testDebugUnitTest
+```
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
