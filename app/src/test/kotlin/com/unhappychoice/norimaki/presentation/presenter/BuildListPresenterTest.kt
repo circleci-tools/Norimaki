@@ -43,6 +43,7 @@ class BuildListPresenterTest : DescribeSpec({
         val workflow = mockk<Workflow> { every { workflowId } returns id }
         return mockk {
             every { workflows } returns workflow
+            every { vcsUrl } returns "https://github.com/owner/repo"
             every { username } returns "owner"
             every { reponame } returns "repo"
             every { vcsUrl } returns "https://github.com/owner/repo"
