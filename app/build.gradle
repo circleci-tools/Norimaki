@@ -135,22 +135,18 @@ tasks.withType(Test) {
     jacoco.excludes = ['jdk.internal.*']
 }
 
-task jacoco(type: JacocoReport, dependsOn: "testDebugUnitTest") {
+tasks.register('jacoco', JacocoReport) {
+    dependsOn 'testDebugUnitTest'
     description = "Generate Jacoco coverage reports after running tests."
+    def kotlinClasses = tasks.named('compileDebugKotlin').flatMap { it.destinationDirectory }
+    def excludedClasses = ['**/R.class', '**/R$*.class', '**/BuildConfig.class', '**/Manifest*.*', '**/*$inlined$*.*']
+    classDirectories.from(
+            fileTree(dir: './build/intermediates/javac/debug/compileDebugJavaWithJavac/classes', excludes: excludedClasses),
+            files(kotlinClasses).asFileTree.matching { exclude excludedClasses }
+    )
     reports {
         xml.required = true
         html.required = true
-        classDirectories.setFrom(
-                files(
-                        fileTree(
-                                dir: './build/intermediates/javac/debug/compileDebugJavaWithJavac/classes',
-                                excludes: ['**/R.class', '**/R$*.class', '**/BuildConfig.class', '**/Manifest*.*', '**/*$inlined$*.*']
-                        ) + fileTree(
-                                dir: './build/tmp/kotlin-classes/debug',
-                                excludes: ['**/R.class', '**/R$*.class', '**/BuildConfig.class', '**/Manifest*.*', '**/*$inlined$*.*']
-                        )
-                )
-        )
     }
     sourceDirectories.from files('src/main/kotlin')
     executionData.from files('build/outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec')
