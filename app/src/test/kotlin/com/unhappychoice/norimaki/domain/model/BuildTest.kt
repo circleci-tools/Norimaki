@@ -11,13 +11,18 @@ import io.mockk.unmockkStatic
 import java.util.Date
 
 class BuildTest : DescribeSpec({
-    fun build(number: Int = 1, queued: Date? = null, buildStatus: String? = null): Build = mockk {
+    fun build(
+        number: Int = 1,
+        queued: Date? = null,
+        buildStatus: String? = null,
+        repositoryUrl: String = "https://github.com/circleci-tools/Norimaki"
+    ): Build = mockk {
         every { username } returns "circleci-tools"
         every { reponame } returns "Norimaki"
         every { branch } returns "master"
         every { buildNum } returns number
         every { vcsRevision } returns "abcdef123456"
-        every { vcsUrl } returns "https://github.com/circleci-tools/Norimaki"
+        every { vcsUrl } returns repositoryUrl
         every { user } returns mapOf("login" to "unhappychoice")
         every { queuedAt } returns queued
         every { status } returns buildStatus
@@ -49,14 +54,21 @@ class BuildTest : DescribeSpec({
 
     describe("vcsTypeFromUrl()") {
         it("should detect bitbucket") {
-            vcsTypeFromUrl("https://bitbucket.org/user/repo") shouldBe "bitbucket"
+            vcsTypeFromUrl("https://bitbucket.org/acme/repo") shouldBe "bitbucket"
+            vcsTypeFromUrl("https://BITBUCKET.ORG:443/acme/repo") shouldBe "bitbucket"
+        }
+        it("should only match the Bitbucket hostname") {
+            vcsTypeFromUrl("https://github.com/acme/bitbucket.org") shouldBe "github"
+            vcsTypeFromUrl("https://bitbucket.org.example.com/acme/repo") shouldBe "github"
         }
         it("should fall back to github") {
             vcsTypeFromUrl("https://github.com/user/repo") shouldBe "github"
             vcsTypeFromUrl(null) shouldBe "github"
+            vcsTypeFromUrl("bitbucket.org/acme/repo") shouldBe "github"
         }
-        it("should be used by Build.vcsType()") {
-            build().vcsType() shouldBe "github"
+        it("should resolve the provider used by build detail requests") {
+            build(repositoryUrl = "https://github.com/acme/bitbucket.org").vcsType() shouldBe "github"
+            build(repositoryUrl = "https://bitbucket.org/acme/repo").vcsType() shouldBe "bitbucket"
         }
     }
 

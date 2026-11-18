@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.domain.model
 import android.graphics.Color
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 fun Build.repositoryString(): String = "$username / $reponame"
 fun Build.revisionString(): String = "$branch #$buildNum (${vcsRevision?.take(6)})"
@@ -33,8 +34,8 @@ fun Build.rawOutputUrl(action: BuildAction): String =
 
 fun Build.vcsType(): String = vcsTypeFromUrl(vcsUrl)
 
-fun vcsTypeFromUrl(url: String?): String = when {
-    url?.contains("bitbucket.org") == true -> "bitbucket"
+fun vcsTypeFromUrl(url: String?): String = when (url?.toHttpUrlOrNull()?.host) {
+    "bitbucket.org" -> "bitbucket"
     else -> "github"
 }
 
