@@ -78,6 +78,10 @@ class MainActivity : AppCompatActivity() {
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
         setupView()
+    }
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
     }
