@@ -24,19 +24,23 @@ class BuildStepLookupTest : DescribeSpec({
     }
 
     describe("pollBuildStep()") {
-        it("waits for the requested step and stops polling once it is found") {
+        it("retries a failed refresh while waiting for the requested step") {
             val scheduler = TestScheduler()
             val resolved = mockk<Build> { every { steps } returns listOf(step) }
             var requests = 0
             val observer = pollBuildStep(stepId, scheduler) {
-                Observable.just(if (++requests == 1) running else resolved)
+                when (++requests) {
+                    1 -> Observable.just(running)
+                    2 -> Observable.error(IllegalStateException("Build refresh failed"))
+                    else -> Observable.just(resolved)
+                }
             }.test()
 
             observer.assertNoValues().assertNotComplete()
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS * 3, TimeUnit.SECONDS)
 
             observer.assertResult(resolved to step)
-            requests shouldBe 2
+            requests shouldBe 3
         }
 
         it("fails when the build finishes without the requested step") {

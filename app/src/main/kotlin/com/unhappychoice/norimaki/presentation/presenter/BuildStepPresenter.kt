@@ -16,6 +16,7 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
+import java.util.concurrent.TimeUnit
 import org.kodein.di.instance
 
 class BuildStepPresenter : PresenterNeedsToken<BuildStepView>() {
@@ -84,7 +85,11 @@ internal fun pollBuildStep(
     scheduler: Scheduler = Schedulers.computation(),
     fetchBuild: () -> Observable<Build>
 ): Observable<Pair<Build, BuildStep>> =
-    polling(BuildPresenter.BUILD_POLLING_SECONDS, scheduler = scheduler, fetch = fetchBuild)
+    Observable.defer(fetchBuild)
+        .concatWith(
+            Observable.timer(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS, scheduler)
+                .flatMap { polling(BuildPresenter.BUILD_POLLING_SECONDS, scheduler = scheduler, fetch = fetchBuild) }
+        )
         .flatMap { build ->
             val step = stepId.resolve(build.steps)
             when {
