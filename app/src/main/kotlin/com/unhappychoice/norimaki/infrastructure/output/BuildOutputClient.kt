@@ -6,11 +6,16 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONArray
+import java.io.IOException
 
 class BuildOutputClient(private val token: String, private val client: OkHttpClient = OkHttpClient()) {
     fun fetchOutput(outputUrl: String): Observable<String> =
-        Observable.fromCallable { execute(Request.Builder().url(outputUrl).build()).use { it.body.string() } }
-            .map { joinMessages(it) }
+        Observable.fromCallable {
+            execute(Request.Builder().url(outputUrl).build()).use { response ->
+                if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
+                joinMessages(response.body.string())
+            }
+        }
 
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<ByteArray> =
         Observable.fromCallable { execute(rawOutputRequest(rawOutputUrl, offset)).use { rawOutputBytes(it) } }

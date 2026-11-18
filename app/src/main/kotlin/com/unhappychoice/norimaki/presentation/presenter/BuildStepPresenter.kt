@@ -34,7 +34,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
 
     fun getActions() {
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
-        Observable.concat(actions.map { outputClient.fetchOutput(it) })
+        completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { appendLog(it) }
             .addTo(bag)
@@ -67,3 +67,12 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
         const val LOG_POLLING_SECONDS = 1L
     }
 }
+
+internal fun completedActionLogs(
+    outputUrls: List<String>,
+    fetchOutput: (String) -> Observable<String>
+): Observable<String> =
+    Observable.fromIterable(outputUrls).concatMap { url ->
+        Observable.defer { fetchOutput(url) }
+            .onErrorReturnItem("\n[Some output could not be loaded.]\n")
+    }
