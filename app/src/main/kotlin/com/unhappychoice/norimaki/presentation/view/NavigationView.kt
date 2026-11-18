@@ -80,6 +80,7 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
 
     @SuppressLint("RestrictedApi")
     override fun onDetachedFromWindow() {
+        bag.clear()
         super.onDetachedFromWindow()
     }
 }

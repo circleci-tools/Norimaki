@@ -67,6 +67,7 @@ private fun verifyPolling(initiallyOnFirstPage: Boolean) {
 
 private fun build(number: Int, state: String, result: String = state): Build = mockk {
     every { username } returns "circleci-tools"
+    every { vcsUrl } returns "https://github.com/circleci-tools/Norimaki"
     every { reponame } returns "Norimaki"
     every { buildNum } returns number
     every { lifecycle } returns state
