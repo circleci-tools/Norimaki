@@ -2,9 +2,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.findByName
+import com.unhappychoice.norimaki.domain.model.findByStepNumber
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
+import com.unhappychoice.norimaki.domain.model.step
 import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
@@ -44,11 +45,18 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun pollRunningActions() {
+    internal fun runningOutput(): Observable<ByteArray> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
-        pollActionOutputs(outputUrls, stepFinished(), outputClient::fetchRawOutput, fetchFinalOutput = { url, offset ->
-            outputClient.fetchFinalRawOutput(url, offset)
-        })
+        return pollActionOutputs(
+            outputUrls,
+            stepFinished(buildStep.step()),
+            outputClient::fetchRawOutput,
+            fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
+        )
+    }
+
+    private fun pollRunningActions() {
+        runningOutput()
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
@@ -58,10 +66,10 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun stepFinished(): Observable<Build> =
+    private fun stepFinished(stepNumber: Int?): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
-        }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
+        }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
 
     private fun appendLog(log: String) {
         logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
