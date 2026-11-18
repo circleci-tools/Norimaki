@@ -78,12 +78,22 @@ class MainActivity : AppCompatActivity() {
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
         setupView()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Flow installs its lifecycle fragment after onCreate returns.
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
     }
 
-    override fun onDestroy() {
+    override fun onStop() {
         projectNavigation?.dispose()
+        projectNavigation = null
+        super.onStop()
+    }
+
+    override fun onDestroy() {
         scope.destroy()
         super.onDestroy()
     }
