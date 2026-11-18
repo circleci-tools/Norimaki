@@ -37,6 +37,30 @@ class BuildListRequestsTest : DescribeSpec({
             polling.dispose()
         }
 
+        it("allows pagination to retry the same offset after disposal") {
+            val scheduler = TestScheduler()
+            val offsets = mutableListOf<Int>()
+            val requests = BuildListRequests(null, scheduler, scheduler) { offset ->
+                offsets.add(offset)
+                if (offset == 0) Observable.just(listOf(build(42, "running"))) else Observable.never()
+            }
+
+            val polling = requests.poll(10)
+            scheduler.triggerActions()
+            val page = checkNotNull(requests.loadNextPage())
+            scheduler.triggerActions()
+            requests.isLoading.value shouldBe true
+
+            page.dispose()
+            requests.isLoading.value shouldBe false
+            val retry = checkNotNull(requests.loadNextPage())
+            scheduler.triggerActions()
+            offsets shouldBe listOf(0, 20, 20)
+
+            retry.dispose()
+            polling.dispose()
+        }
+
         it("keeps a newer poll snapshot while adding unseen builds from a late page") {
             val scheduler = TestScheduler()
             val olderPage = PublishSubject.create<List<Build>>()
@@ -72,6 +96,7 @@ class BuildListRequestsTest : DescribeSpec({
 })
 
 private fun build(number: Int, buildStatus: String): Build = mockk {
+    every { vcsUrl } returns null
     every { username } returns "circleci-tools"
     every { reponame } returns "Norimaki"
     every { buildNum } returns number

@@ -39,9 +39,16 @@ internal class BuildListRequests(
 
     private fun request(offset: Int, paginated: Boolean): Observable<Response> {
         val number = ++requestNumber
-        val response = Observable.defer { fetch(offset) }.subscribeOn(io).observeOn(ui)
-        return (if (paginated) response.startLoading().paginate() else response)
-            .map { Response(number, it.inWorkflow(workflowId)) }
+        val source = Observable.defer { fetch(offset) }
+        val response = (if (paginated) source.singleOrError().toObservable() else source)
+            .subscribeOn(io)
+            .observeOn(ui)
+        val trackedResponse = if (paginated) {
+            response.startLoading().doOnDispose { isLoading.value = false }.paginate()
+        } else {
+            response
+        }
+        return trackedResponse.map { Response(number, it.inWorkflow(workflowId)) }
     }
 
     private fun merge(response: Response) {
