@@ -11,7 +11,11 @@ import org.json.JSONArray
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class BuildOutputClient(private val token: String, private val client: OkHttpClient = OkHttpClient()) {
+class BuildOutputClient(
+    private val token: String,
+    private val client: OkHttpClient = OkHttpClient(),
+    private val ioScheduler: Scheduler = Schedulers.io()
+) {
     fun fetchOutput(outputUrl: String): Observable<String> =
         Observable.fromCallable {
             execute(Request.Builder().url(outputUrl).build()).use { response ->
@@ -23,7 +27,7 @@ class BuildOutputClient(private val token: String, private val client: OkHttpCli
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<ByteArray> =
         Observable.fromCallable {
             execute(rawOutputRequest(rawOutputUrl, offset)).use { rawOutputBytes(it, offset) }
-        }
+        }.subscribeOn(ioScheduler)
 
     fun fetchFinalRawOutput(
         rawOutputUrl: String,

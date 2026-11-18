@@ -6,13 +6,13 @@ import java.io.IOException
 
 class BuildStepPresenterTest : DescribeSpec({
     describe("completedActionLogs()") {
-        it("should show a missing output notice and continue to the next action") {
-            completedActionLogs(listOf("first", "second")) { url ->
+        it("should keep earlier output, show a missing output notice, and continue") {
+            completedActionLogs(listOf("first", "second", "third")) { url ->
                 when (url) {
-                    "first" -> Observable.error(IOException("HTTP 503"))
-                    else -> Observable.just("Second action log")
+                    "second" -> Observable.error(IOException("HTTP 503"))
+                    else -> Observable.just(url)
                 }
-            }.test().assertResult("\n[Some output could not be loaded.]\n", "Second action log")
+            }.test().assertResult("first", "\n[Some output could not be loaded.]\n", "third")
         }
 
         it("should preserve action order when all downloads succeed") {
