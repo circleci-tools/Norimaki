@@ -1,9 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
+import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
-import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -17,7 +16,11 @@ import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
+import io.reactivex.Single
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.PublishSubject
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
 
@@ -28,30 +31,46 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
-    val builds = Variable<List<Build>>(listOf())
+    private val history = Variable(BuildHistory())
+    private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
+    val builds = history.asObservable().map { it.builds }
 
     override fun onAuthenticated() {
+        observePages().addTo(bag)
         getBuilds()
 
         pollLatestBuilds()
     }
 
+    override fun onSessionEnded() {
+        isLoading.value = false
+        history.value = BuildHistory()
+        hasMore.value = true
+        page.value = 0
+    }
+
     fun getBuilds() {
         if (account == null || isLoading.value || !hasMore.value) return
-        getBuildsAPI(offset = this.page.value * 20)
+        isLoading.value = true
+        getBuildsAPI(offset = page.value * 20)
             .singleOrError()
             .toObservable()
             .subscribeOnIoObserveOnUI()
-            .startLoading()
+            .doOnError { isLoading.value = false }
             .doOnDispose { isLoading.value = false }
-            .paginate()
-            .map { it.inWorkflow(workflowId) }
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = true)) }
             .addTo(bag)
     }
 
     fun getBuildsIfUnderfilled(canScroll: Boolean) {
         if (isWorkflow && !canScroll) getBuilds()
+    }
+
+    private fun pollLatestBuilds() {
+        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
+            .addTo(bag)
     }
 
     fun goToBuildView(build: Build) {
@@ -63,17 +82,23 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    override fun onSessionEnded() {
-        builds.value = emptyList()
+    private fun observePages() = incomingPages.concatMapSingle { page ->
+        val current = history.value
+        val filter = workflowId
+        Single.fromCallable { current.merge(page.builds.inWorkflow(filter)) ?: current }
+            .subscribeOn(Schedulers.computation())
+            .observeOn(AndroidSchedulers.mainThread())
+            .map { updated -> page to updated }
+    }.subscribeNext { (incoming, updated) ->
+        if (updated !== history.value) history.value = updated
+        if (incoming.paginated) {
+            hasMore.value = incoming.builds.isNotEmpty()
+            isLoading.value = false
+            page.value += 1
+        }
     }
 
-    private fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
-            .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
-            .addTo(bag)
-    }
+    private data class IncomingPage(val builds: List<Build>, val paginated: Boolean)
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
         val client = account?.client ?: return Observable.empty()

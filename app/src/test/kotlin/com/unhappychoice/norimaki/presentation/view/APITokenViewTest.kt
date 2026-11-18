@@ -1,0 +1,81 @@
+package com.unhappychoice.norimaki.presentation.view
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Looper
+import android.text.InputType
+import android.widget.Button
+import android.widget.EditText
+import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import flow.Flow
+import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.schedulers.TestScheduler
+import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class APITokenViewTest {
+    @Before
+    fun pauseNetworkSubscriptions() {
+        val scheduler = TestScheduler()
+        RxJavaPlugins.setIoSchedulerHandler { scheduler }
+    }
+
+    @After
+    fun restoreSchedulers() {
+        RxJavaPlugins.reset()
+    }
+
+    @Test
+    fun masksSavedAndPastedTokensWhileWaitingForVerification() {
+        val preference = APITokenPreference(RuntimeEnvironment.getApplication())
+        val savedToken = "saved-dummy-token"
+        val replacement = "replacement_Dummy-Token.123"
+        preference.token = savedToken
+
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            Flow.get(activity).set(APITokenScreen())
+            shadowOf(Looper.getMainLooper()).idle()
+            val field = activity.findViewById<EditText>(R.id.accessTokenTextView)
+
+            assertEquals(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD, field.inputType)
+            assertMasked(field, savedToken)
+
+            val clipboard = requireNotNull(activity.getSystemService(ClipboardManager::class.java))
+            clipboard.setPrimaryClip(ClipData.newPlainText("Dummy API token", replacement))
+            field.requestFocus()
+            field.selectAll()
+            assertTrue(field.onTextContextMenuItem(android.R.id.paste))
+            assertMasked(field, replacement)
+
+            val submit = activity.findViewById<Button>(R.id.submitButton)
+            submit.performClick()
+
+            assertFalse(submit.isEnabled)
+            assertFalse(field.isEnabled)
+            assertEquals(savedToken, preference.token)
+        }
+    }
+
+    private fun assertMasked(field: EditText, token: String) {
+        assertEquals(token, field.text.toString())
+        val transformation = requireNotNull(field.transformationMethod)
+        val displayed = requireNotNull(transformation.getTransformation(field.text, field))
+        assertEquals(List(token.length) { '•' }, displayed.toList())
+    }
+}

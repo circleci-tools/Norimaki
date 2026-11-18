@@ -79,14 +79,23 @@ class MainActivity : AppCompatActivity() {
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
         setupView()
+    }
+
+    override fun onPostResume() {
+        super.onPostResume()
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus) {
             binding.containerView.children.any { it is APITokenView }
         }
     }
 
-    override fun onDestroy() {
+    override fun onPause() {
         projectNavigation?.dispose()
+        projectNavigation = null
+        super.onPause()
+    }
+
+    override fun onDestroy() {
         scope.destroy()
         super.onDestroy()
     }

@@ -49,11 +49,12 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     protected abstract fun onAuthenticated()
     protected open fun onSessionEnded() {}
 
+    protected fun sessionEnded(verified: VerifiedSession) =
+        session.changes.filter { it.toNullable() !== verified }.take(1)
+
     private fun useAccount(verified: VerifiedSession) {
         account = verified
-        session.changes
-            .filter { it.toNullable() !== verified }
-            .take(1)
+        sessionEnded(verified)
             .subscribeNext {
                 account = null
                 bag.clear()

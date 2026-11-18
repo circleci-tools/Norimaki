@@ -5,31 +5,25 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.*
-import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.getTimeAgo
-import com.unhappychoice.norimaki.extension.subscribeNext
 import de.hdodenhof.circleimageview.CircleImageView
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
-class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.ViewHolder>() {
-    val builds = Variable<List<Build>>(emptyList())
+class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewHolder>(BuildDiff) {
     val onClickItem = PublishSubject.create<Build>()
 
     init {
         setHasStableIds(true)
     }
 
-    override fun getItemId(position: Int) = builds.value[position].uniqueId().hashCode().toLong()
-
-    override fun getItemCount(): Int = builds.value.size
+    override fun getItemId(position: Int) = getItem(position).uniqueId().hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(context).inflate(R.layout.build_list_item_view, parent, false)
@@ -37,7 +31,7 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(builds.value[position])
+        holder.bind(getItem(position))
     }
 
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
@@ -51,9 +45,7 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
             Glide.with(context).load(build.avatarUrl())
                 .into(author)
 
-            view.clicks()
-                .subscribeNext { onClickItem.onNext(build) }
-                .addTo(bag)
+            view.setOnClickListener { onClickItem.onNext(build) }
         }
 
         private val author = view.findViewById<CircleImageView>(R.id.author)
@@ -63,8 +55,11 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
         private val commitTitle = view.findViewById<TextView>(R.id.commitTitle)
         private val createdAt = view.findViewById<TextView>(R.id.createdAt)
     }
+}
 
-    fun finalize() = bag.dispose()
+internal object BuildDiff : DiffUtil.ItemCallback<Build>() {
+    override fun areItemsTheSame(oldItem: Build, newItem: Build) =
+        oldItem.uniqueId() == newItem.uniqueId()
 
-    private val bag = CompositeDisposable()
+    override fun areContentsTheSame(oldItem: Build, newItem: Build) = oldItem == newItem
 }

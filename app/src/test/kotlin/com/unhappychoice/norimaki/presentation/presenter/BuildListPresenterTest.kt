@@ -15,6 +15,7 @@ import io.reactivex.Observable
 import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.TestScheduler
 import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
@@ -23,7 +24,11 @@ import org.kodein.di.singleton
 class BuildListPresenterTest : DescribeSpec({
     lateinit var scope: MortarScope
 
-    beforeSpec {
+    lateinit var scheduler: TestScheduler
+
+    beforeEach {
+        scheduler = TestScheduler()
+        RxJavaPlugins.setComputationSchedulerHandler { scheduler }
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
@@ -36,9 +41,13 @@ class BuildListPresenterTest : DescribeSpec({
         RxAndroidPlugins.reset()
     }
 
-    fun presenter(api: CircleCIAPIClientV1_1, workflowId: String? = "target") = BuildListPresenter().apply {
+    fun presenter(
+        api: CircleCIAPIClientV1_1,
+        workflowId: String? = "target",
+        session: SessionService = testSession(api)
+    ) = BuildListPresenter().apply {
         di = DI {
-            bind<SessionService>() with singleton { testSession(api) }
+            bind<SessionService>() with singleton { session }
             bind<String>() with singleton { "github/owner/repo" }
             workflowId?.let { id ->
                 bind<String>(tag = WorkflowScreen.WORKFLOW_ID_TAG) with singleton { id }
@@ -69,22 +78,53 @@ class BuildListPresenterTest : DescribeSpec({
             every { api.pageAt(0) } returns Observable.just(listOf(build("other", 3)))
             every { api.pageAt(20) } returns Observable.just(listOf(build("other", 2)))
             every { api.pageAt(40) } returns Observable.just(listOf(matchingJob))
-            every { api.pageAt(60) } returns Observable.just(emptyList())
+            every { api.pageAt(60) } returns Observable.just(listOf(matchingJob))
+            every { api.pageAt(80) } returns Observable.just(emptyList())
             val presenter = presenter(api)
+            val builds = presenter.builds.test()
 
-            presenter.builds.value shouldBe emptyList()
+            scheduler.triggerActions()
+            builds.assertValue(emptyList())
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            presenter.builds.value shouldBe emptyList()
+            scheduler.triggerActions()
+            builds.assertValue(emptyList())
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            presenter.builds.value shouldBe listOf(matchingJob)
+            scheduler.triggerActions()
+            builds.assertValues(emptyList(), listOf(matchingJob))
 
             presenter.getBuildsIfUnderfilled(canScroll = true)
             verify(exactly = 0) { api.pageAt(60) }
             presenter.getBuildsIfUnderfilled(canScroll = false)
+            scheduler.triggerActions()
+            presenter.hasMore.value shouldBe true
+            presenter.page.value shouldBe 4
+            presenter.getBuildsIfUnderfilled(canScroll = false)
+            scheduler.triggerActions()
             presenter.hasMore.value shouldBe false
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            verify(exactly = 0) { api.pageAt(80) }
-            presenter.builds.value shouldBe listOf(matchingJob)
+            scheduler.triggerActions()
+            verify(exactly = 0) { api.pageAt(100) }
+            builds.assertValues(emptyList(), listOf(matchingJob))
+        }
+
+        it("clears loaded builds and discards queued updates when the session changes") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val first = build("target", 2)
+            every { api.pageAt(0) } returns Observable.just(listOf(first))
+            every { api.pageAt(20) } returns Observable.just(listOf(build("target", 1)))
+            val presenter = presenter(api, session = session)
+            val builds = presenter.builds.test()
+            scheduler.triggerActions()
+            builds.assertValues(emptyList(), listOf(first))
+
+            presenter.getBuilds()
+            session.replace("replacement-token").test().assertComplete()
+            scheduler.triggerActions()
+
+            builds.assertValues(emptyList(), listOf(first), emptyList())
+            presenter.page.value shouldBe 0
+            presenter.isLoading.value shouldBe false
         }
 
         it("does not auto-load pages for an unfiltered project") {
