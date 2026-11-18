@@ -12,7 +12,9 @@ import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToke
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
 import io.reactivex.Scheduler
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import mortar.MortarScope
 import org.kodein.di.instance
@@ -23,6 +25,8 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private val outputClient: BuildOutputClient by instance()
 
     val logString: Variable<String> = Variable("")
+
+    val logLoadFailed = Variable(false)
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
@@ -42,9 +46,15 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
 
     private fun pollRunningActions() {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
-        pollActionOutputs(outputUrls, stepFinished(), outputClient::fetchRawOutput)
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(String(it)) }
+        pollActionOutputs(outputUrls, stepFinished(), outputClient::fetchRawOutput, fetchFinalOutput = { url, offset ->
+            outputClient.fetchFinalRawOutput(url, offset)
+        })
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread(), true)
+            .subscribeBy(
+                onNext = { appendLog(String(it)) },
+                onError = { logLoadFailed.value = true }
+            )
             .addTo(bag)
     }
 
@@ -66,7 +76,8 @@ internal fun pollActionOutputs(
     outputUrls: List<String>,
     stepFinished: Observable<Build>,
     fetchOutput: (String, Long) -> Observable<ByteArray>,
-    scheduler: Scheduler = Schedulers.computation()
+    scheduler: Scheduler = Schedulers.computation(),
+    fetchFinalOutput: (String, Long) -> Observable<ByteArray> = fetchOutput
 ): Observable<ByteArray> = Observable.defer {
     val offsets = mutableMapOf<String, Long>()
     // Stop scheduling reads at completion, then drain after any in-flight reads.
@@ -77,7 +88,8 @@ internal fun pollActionOutputs(
             val reads = outputUrls.map { url ->
                 val read = Observable.defer {
                     val offset = offsets.getOrDefault(url, 0L)
-                    fetchOutput(url, offset)
+                    val fetch = if (finishing) fetchFinalOutput else fetchOutput
+                    fetch(url, offset)
                         .filter { it.isNotEmpty() }
                         .doOnNext { offsets[url] = offset + it.size }
                 }

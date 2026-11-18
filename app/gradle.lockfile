@@ -1,0 +1,12 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+# To regenerate this file, run: ./gradlew :app:dependencies --write-locks
+org.jacoco:org.jacoco.agent:0.8.16=androidJacocoAnt,jacocoAgent
+org.jacoco:org.jacoco.ant:0.8.16=androidJacocoAnt
+org.jacoco:org.jacoco.core:0.8.16=androidJacocoAnt
+org.jacoco:org.jacoco.report:0.8.16=androidJacocoAnt
+org.ow2.asm:asm-commons:9.11.1=androidJacocoAnt
+org.ow2.asm:asm-tree:9.11.1=androidJacocoAnt
+org.ow2.asm:asm:9.11.1=androidJacocoAnt
+empty=

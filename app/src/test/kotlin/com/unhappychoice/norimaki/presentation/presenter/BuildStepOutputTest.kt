@@ -38,17 +38,21 @@ class BuildStepOutputTest : DescribeSpec({
         it("drains from the latest offset when completion arrives during a read") {
             val finished = PublishSubject.create<Build>()
             val requestedOffsets = mutableListOf<Pair<String, Long>>()
+            val finalOffsets = mutableListOf<Pair<String, Long>>()
             val observer = pollActionOutputs(listOf("first", "second"), finished, { url, offset ->
                 Observable.fromCallable {
                     requestedOffsets += url to offset
                     if (url == "first" && offset == 0L) finished.onNext(mockk<Build>())
-                    val output = if (offset == 0L) "$url\n" else "$url done\n"
-                    output.toByteArray()
+                    "$url\n".toByteArray()
                 }
-            }, TestScheduler()).map { String(it) }.test()
+            }, TestScheduler(), fetchFinalOutput = { url, offset ->
+                finalOffsets += url to offset
+                Observable.just("$url done\n".toByteArray())
+            }).map { String(it) }.test()
 
             observer.assertResult("first\n", "second\n", "first done\n", "second done\n")
-            requestedOffsets shouldBe listOf("first" to 0L, "second" to 0L, "first" to 6L, "second" to 7L)
+            requestedOffsets shouldBe listOf("first" to 0L, "second" to 0L)
+            finalOffsets shouldBe listOf("first" to 6L, "second" to 7L)
         }
     }
 })
