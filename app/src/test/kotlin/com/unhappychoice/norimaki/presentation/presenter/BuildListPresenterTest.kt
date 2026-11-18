@@ -46,6 +46,7 @@ class BuildListPresenterTest : DescribeSpec({
             every { vcsUrl } returns "https://github.com/owner/repo"
             every { username } returns "owner"
             every { reponame } returns "repo"
+            every { vcsUrl } returns "https://github.com/owner/repo"
             every { buildNum } returns number
             every { queuedAt } returns null
         }

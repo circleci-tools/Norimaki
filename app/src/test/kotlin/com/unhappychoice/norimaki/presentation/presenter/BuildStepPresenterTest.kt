@@ -61,6 +61,7 @@ class BuildStepPresenterTest : DescribeSpec({
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
                         bind<Build>() with singleton { running }
+                        bind<BuildStep>() with singleton { second }
                         bind<CircleCIAPIClientV1_1>() with singleton { api }
                         bind<BuildOutputClient>() with singleton { output }
                     }
@@ -69,7 +70,7 @@ class BuildStepPresenterTest : DescribeSpec({
                 val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
                 RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                 try {
-                    val observer = presenter.runningOutput(selected).test()
+                    val observer = presenter.runningOutput().test()
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
