@@ -1,12 +1,13 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.findByName
+import com.unhappychoice.norimaki.domain.model.findByStepNumber
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
+import com.unhappychoice.norimaki.domain.model.step
 import com.unhappychoice.norimaki.domain.model.vcsType
+import com.unhappychoice.norimaki.extension.Utf8StreamDecoder
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
@@ -14,6 +15,7 @@ import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
+import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
@@ -27,13 +29,12 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
 
     internal val log = BuildLog()
     val logLoadFailed = Variable(false)
-    @Volatile private var readBytes = 0L
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
         when (buildStep.isFinished()) {
             true -> getActions()
-            false -> buildStep.actions.firstOrNull()?.let { pollRunningAction(it) }
+            false -> pollRunningActions()
         }
     }
 
@@ -43,25 +44,24 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .renderLog()
     }
 
-    private fun pollRunningAction(action: BuildAction) {
-        polling(LOG_POLLING_SECONDS) { fetchRawOutput(action) }
-            .takeUntil(stepFinished())
-            .concatWith(Observable.defer {
-                outputClient.fetchFinalRawOutput(build.rawOutputUrl(action), readBytes)
-            })
-            .filter { it.isNotEmpty() }
-            .doOnNext { readBytes += it.size }
-            .map { String(it, Charsets.UTF_8) }
-            .renderLog()
+    internal fun runningOutput(): Observable<String> {
+        val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
+        return pollActionOutputs(
+            outputUrls,
+            stepFinished(buildStep.step()),
+            outputClient::fetchRawOutput,
+            fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
+        )
     }
 
-    private fun fetchRawOutput(action: BuildAction): Observable<ByteArray> =
-        outputClient.fetchRawOutput(build.rawOutputUrl(action), readBytes)
+    private fun pollRunningActions() {
+        runningOutput().renderLog()
+    }
 
-    private fun stepFinished(): Observable<Build> =
+    private fun stepFinished(stepNumber: Int?): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
-        }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
+        }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
 
     private fun Observable<String>.renderLog() {
         val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation(), true)
@@ -72,4 +72,36 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     companion object {
         const val LOG_POLLING_SECONDS = 1L
     }
+}
+
+internal fun pollActionOutputs(
+    outputUrls: List<String>,
+    stepFinished: Observable<Build>,
+    fetchOutput: (String, Long) -> Observable<ByteArray>,
+    scheduler: Scheduler = Schedulers.computation(),
+    fetchFinalOutput: (String, Long) -> Observable<ByteArray> = fetchOutput
+): Observable<String> = Observable.defer {
+    val urls = outputUrls.distinct()
+    val decoders = urls.associateWith { Utf8StreamDecoder() }
+    val offsets = mutableMapOf<String, Long>()
+    // Stop scheduling reads at completion, then drain after any in-flight reads.
+    polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
+        .takeUntil(stepFinished)
+        .concatWith(Observable.just(true))
+        .concatMap { finishing ->
+            val reads = urls.map { url ->
+                val read = Observable.defer {
+                    val decoder = decoders.getValue(url)
+                    val offset = offsets.getOrDefault(url, 0L)
+                    val fetch = if (finishing) fetchFinalOutput else fetchOutput
+                    val chunks = fetch(url, offset)
+                        .filter { it.isNotEmpty() }
+                        .doOnNext { offsets[url] = offsets.getOrDefault(url, 0L) + it.size }
+                        .map { decoder.decode(it) }
+                    if (finishing) chunks.concatWith(Observable.fromCallable { decoder.finish() }) else chunks
+                }
+                if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
+            }
+            Observable.concatDelayError(reads).filter { it.isNotEmpty() }
+        }
 }
