@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.domain.model.findByName
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
 import com.unhappychoice.norimaki.domain.model.vcsType
+import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.presentation.log.BuildLog
@@ -25,6 +26,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private val outputClient: BuildOutputClient by instance()
 
     internal val log = BuildLog()
+    val logLoadFailed = Variable(false)
     @Volatile private var readBytes = 0L
 
     override fun onEnterScope(scope: MortarScope?) {
@@ -35,7 +37,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
         }
     }
 
-    private fun getActions() {
+    fun getActions() {
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
         Observable.concat(actions.map { outputClient.fetchOutput(it) })
             .renderLog()
@@ -44,7 +46,9 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private fun pollRunningAction(action: BuildAction) {
         polling(LOG_POLLING_SECONDS) { fetchRawOutput(action) }
             .takeUntil(stepFinished())
-            .concatWith(Observable.defer { fetchRawOutput(action) })
+            .concatWith(Observable.defer {
+                outputClient.fetchFinalRawOutput(build.rawOutputUrl(action), readBytes)
+            })
             .filter { it.isNotEmpty() }
             .doOnNext { readBytes += it.size }
             .map { String(it, Charsets.UTF_8) }
@@ -60,8 +64,9 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
         }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
 
     private fun Observable<String>.renderLog() {
-        val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation())
-        log.render(chunks, AndroidSchedulers.mainThread()).addTo(bag)
+        val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation(), true)
+        log.render(chunks, AndroidSchedulers.mainThread(), onError = { logLoadFailed.value = true })
+            .addTo(bag)
     }
 
     companion object {

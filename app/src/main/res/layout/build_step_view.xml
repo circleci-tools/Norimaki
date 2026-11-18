@@ -7,10 +7,19 @@
     android:orientation="vertical"
     android:theme="@style/Theme.AppCompat">
 
+    <TextView
+        android:id="@+id/logLoadError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="@dimen/horizontal_margin"
+        android:text="@string/build_log_load_error"
+        android:visibility="gone" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/logLines"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:paddingStart="@dimen/horizontal_margin"
         android:paddingEnd="@dimen/horizontal_margin"
         android:paddingTop="@dimen/vertical_margin"

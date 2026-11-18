@@ -2,13 +2,15 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.adapter.BuildLogAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
-import io.reactivex.disposables.Disposable
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.rxkotlin.addTo
 import org.kodein.di.instance
 
 class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepView>(context, attr) {
@@ -18,7 +20,7 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         BuildStepViewBinding.bind(this)
     }
 
-    private var logSubscription: Disposable? = null
+    private val logSubscriptions = CompositeDisposable()
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -28,12 +30,14 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         binding.logLines.layoutManager = LinearLayoutManager(context)
         binding.logLines.itemAnimator = null
         binding.logLines.adapter = adapter
-        logSubscription = presenter.log.changes.subscribeNext(adapter::update)
+        presenter.log.changes.subscribeNext(adapter::update).addTo(logSubscriptions)
+        presenter.logLoadFailed.asObservable()
+            .subscribeNext { failed -> binding.logLoadError.visibility = if (failed) View.VISIBLE else View.GONE }
+            .addTo(logSubscriptions)
     }
 
     override fun onDetachedFromWindow() {
-        logSubscription?.dispose()
-        logSubscription = null
+        logSubscriptions.clear()
         presenter.dropView(this)
         super.onDetachedFromWindow()
     }

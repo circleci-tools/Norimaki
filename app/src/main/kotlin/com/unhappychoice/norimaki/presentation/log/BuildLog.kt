@@ -1,9 +1,9 @@
 package com.unhappychoice.norimaki.presentation.log
 
-import com.unhappychoice.norimaki.extension.subscribeNext
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.disposables.Disposable
+import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.subjects.PublishSubject
 
 internal data class LogUpdate(val changedLine: Int?, val insertStart: Int, val insertCount: Int)
@@ -20,9 +20,12 @@ internal class BuildLog {
     fun render(
         chunks: Observable<String>,
         displayScheduler: Scheduler,
+        onError: (Throwable) -> Unit = { it.printStackTrace() },
         format: (String) -> List<List<LogSpan>> = LogChunkFormatter()::format
     ): Disposable =
-        chunks.map(format).observeOn(displayScheduler).subscribeNext(::append)
+        chunks.map(format)
+            .observeOn(displayScheduler, true)
+            .subscribeBy(onNext = ::append, onError = onError)
 
     private fun append(chunk: List<List<LogSpan>>) {
         if (chunk.size == 1 && chunk.first().isEmpty()) return

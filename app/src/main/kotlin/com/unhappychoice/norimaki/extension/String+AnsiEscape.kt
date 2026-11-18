@@ -3,9 +3,13 @@ package com.unhappychoice.norimaki.extension
 fun String.removeAnsiEscapeCode(): String = replace("\\033\\[\\d+?[A-T]".toRegex(), "")
 
 fun String.replaceAnsiColorCodeToHtml(): String =
-    split("(?=\\033\\[(\\d)+?m)".toRegex())
+    replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .split("(?=\\033\\[(\\d)+?m)".toRegex())
         .map { it.convertAnsiColorCodeToHtmlTag() }
         .joinToString("")
+        .replace("\n", "<br>")
 
 internal fun ansiForegroundColor(code: String?): String? =
     when (code) {

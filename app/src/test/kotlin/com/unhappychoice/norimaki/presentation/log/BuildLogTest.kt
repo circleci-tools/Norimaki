@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.log
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
 
 class BuildLogTest : DescribeSpec({
@@ -53,6 +54,27 @@ class BuildLogTest : DescribeSpec({
             log.lineCount shouldBe 1
             updates.values().drop(1) shouldBe List(additions.size) { LogUpdate(0, 1, 0) }
             LogLineCursor().takeNewSpans(log[0]) shouldBe listOf(LogSpan("prefix ", null)) + additions
+            subscription.dispose()
+        }
+
+        it("renders queued output before reporting a terminal error on the display scheduler") {
+            val source = PublishSubject.create<String>()
+            val log = BuildLog()
+            val displayScheduler = TestScheduler()
+            val failure = IllegalStateException("Log fetch failed")
+            val failures = mutableListOf<Pair<Throwable, String>>()
+            val subscription = log.render(source, displayScheduler, onError = {
+                failures.add(it to log[0].single().text)
+            })
+
+            source.onNext("last output")
+            source.onError(failure)
+            log.lineCount shouldBe 0
+            failures shouldBe emptyList()
+
+            displayScheduler.triggerActions()
+
+            failures shouldBe listOf(failure to "last output")
             subscription.dispose()
         }
 
