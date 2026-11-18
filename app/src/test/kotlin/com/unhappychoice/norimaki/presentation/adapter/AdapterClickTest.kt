@@ -9,9 +9,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.github.unhappychoice.circleci.v1.response.Project
-import com.google.gson.Gson
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.extension.Variable
 import de.hdodenhof.circleimageview.CircleImageView
 import io.reactivex.subjects.PublishSubject
 import org.junit.Assert.assertEquals
@@ -32,7 +32,7 @@ class AdapterClickTest {
         row.addView(View(context).apply { id = R.id.statusIndicator })
         row.addView(CircleImageView(context).apply { id = R.id.author })
         val builds = List(10) { gson.fromJson("""{"build_num":$it,"subject":"Build $it"}""", Build::class.java) }
-        assertReboundClicks(row, adapter, adapter.builds, adapter.onClickItem, builds) {
+        assertReboundClicks(row, adapter, adapter::submitList, adapter.onClickItem, builds) {
             adapter.ViewHolder(row)
         }
     }
@@ -43,7 +43,7 @@ class AdapterClickTest {
         val row = rowWithTextViews(R.id.buildTitle, R.id.time)
         row.addView(View(context).apply { id = R.id.statusIndicator })
         val steps = List(10) { BuildStep("Step $it", emptyList()) }
-        assertReboundClicks(row, adapter, adapter.steps, adapter.onClickItem, steps) {
+        assertReboundClicks(row, adapter, adapter::submitSteps, adapter.onClickItem, steps) {
             adapter.ViewHolder(row)
         }
     }
@@ -55,13 +55,13 @@ class AdapterClickTest {
         val projects = List(10) {
             gson.fromJson("""{"username":"circleci-tools","reponame":"project-$it"}""", Project::class.java)
         }
-        assertReboundClicks(row, adapter, adapter.projects, adapter.onClickItem, projects) {
+        assertReboundClicks(row, adapter, { adapter.projects.value = it }, adapter.onClickItem, projects) {
             adapter.ViewHolder(row)
         }
     }
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
-    private val gson = Gson()
+    private val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create()
 
     private fun rowWithTextViews(vararg textIds: Int) = ClickCountingRow(context).apply {
         textIds.forEach { textId -> addView(TextView(context).apply { id = textId }) }
@@ -70,7 +70,7 @@ class AdapterClickTest {
     private fun <T : Any, H : RecyclerView.ViewHolder> assertReboundClicks(
         row: ClickCountingRow,
         adapter: RecyclerView.Adapter<H>,
-        items: Variable<List<T>>,
+        submitItems: (List<T>) -> Unit,
         clicks: PublishSubject<T>,
         snapshots: List<T>,
         createHolder: () -> H
@@ -80,20 +80,16 @@ class AdapterClickTest {
         row.performClick()
         observer.assertNoValues()
 
-        snapshots.forEach { snapshot ->
-            items.value = listOf(snapshot)
-            adapter.onBindViewHolder(holder, 0)
-        }
+        submitItems(snapshots)
+        snapshots.indices.forEach { position -> adapter.onBindViewHolder(holder, position) }
         row.performClick()
         observer.assertValueCount(1)
         assertSame(snapshots.last(), observer.values().single())
 
-        items.value = emptyList()
         adapter.onViewRecycled(holder)
         row.performClick()
         observer.assertValueCount(1)
 
-        items.value = listOf(snapshots.first())
         adapter.onBindViewHolder(holder, 0)
         row.performClick()
         observer.assertValueCount(2)

@@ -22,7 +22,8 @@ fun BuildStep.step(): Int? = actions.firstOrNull()?.step
 fun BuildStep.isFinished() =
     actions.fold(true) { acc, action -> acc && action.endTime != null }
 
-fun List<BuildStep>.findByName(name: String): BuildStep? = firstOrNull { it.name == name }
+fun List<BuildStep>.findByStepNumber(stepNumber: Int?): BuildStep? =
+    stepNumber?.let { number -> firstOrNull { it.step() == number } }
 
 private fun BuildStep.isCanceled() =
     actions.fold(false) { acc, action -> acc || (action.canceled ?: false) }
