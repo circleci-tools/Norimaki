@@ -10,6 +10,7 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.children
 import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.di.activityModule
@@ -18,6 +19,7 @@ import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
+import com.unhappychoice.norimaki.presentation.view.APITokenView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
@@ -78,7 +80,9 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
         setupView()
         val eventBus: EventBusService by module.instance()
-        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
+        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus) {
+            binding.containerView.children.any { it is APITokenView }
+        }
     }
 
     override fun onDestroy() {
