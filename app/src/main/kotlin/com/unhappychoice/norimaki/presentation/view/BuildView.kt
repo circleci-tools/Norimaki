@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.unhappychoice.norimaki.databinding.BuildViewBinding
@@ -47,7 +48,15 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
-        presenter.pollBuild { updateScreenTitle(presenter.activity, it.revisionString()) }
+        presenter.buildLoadFailed.asObservable()
+            .subscribeNext { failed ->
+                binding.buildLoadError.visibility = if (failed) View.VISIBLE else View.GONE
+            }
+            .addTo(bag)
+        binding.retryBuildLoad.setOnClickListener {
+            if (presenter.buildLoadFailed.value) loadBuild()
+        }
+        loadBuild()
 
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
@@ -62,6 +71,10 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         adapter.onClickItem
             .subscribeNext { presenter.goToBuildStepScreen(it) }
             .addTo(bag)
+    }
+
+    private fun loadBuild() {
+        presenter.pollBuild { updateScreenTitle(presenter.activity, it.revisionString()) }
     }
 
     override fun onDetachedFromWindow() {

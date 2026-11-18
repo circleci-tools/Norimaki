@@ -55,6 +55,37 @@ class BuildPresenterTest : DescribeSpec({
         RxJavaPlugins.reset()
     }
 
+    describe("loading build details") {
+        it("should expose the initial failure and reload the same build on retry") {
+            val scheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val response = PublishSubject.create<Build>()
+            val loadedStep = step("https://example.com/output")
+            val build = pollResult(loadedStep, "finished")
+            every { api.getBuild("github", "owner", "repo", 123) } returnsMany listOf(
+                Observable.error(IllegalStateException("Build load failed")),
+                response
+            )
+
+            val failures = presenter.buildLoadFailed.asObservable().distinctUntilChanged().test()
+            val loadedBuilds = mutableListOf<Build>()
+            presenter.pollBuild { loadedBuilds.add(it) }
+
+            failures.assertValues(false, true)
+            loadedBuilds shouldBe emptyList()
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            presenter.pollBuild { loadedBuilds.add(it) }
+            failures.assertValues(false, true, false)
+            response.onNext(build)
+
+            loadedBuilds shouldBe listOf(build)
+            presenter.steps.value shouldBe listOf(loadedStep)
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+        }
+    }
+
     describe("rebuild submissions") {
         it("should ignore both actions during retry and allow a submission after retry fails") {
             presenter.rebuild()
@@ -110,8 +141,12 @@ class BuildPresenterPollingTest : DescribeSpec({
         val buildId = BuildId("github", "owner", "repo", 42)
         val builds = listOf(pollResult(first), pollResult(duplicate), pollResult(changed, "finished"))
         val api = mockk<CircleCIAPIClientV1_1>()
-        every { api.getBuild("github", "owner", "repo", 42) } returnsMany
-            builds.map { Observable.just(it) }
+        every { api.getBuild("github", "owner", "repo", 42) } returnsMany listOf(
+            Observable.just(builds[0]),
+            Observable.error(IllegalStateException("Refresh failed")),
+            Observable.just(builds[1]),
+            Observable.just(builds[2])
+        )
 
         val activity = mockk<MainActivity>()
         val presenter = BuildPresenter().apply {
@@ -135,6 +170,11 @@ class BuildPresenterPollingTest : DescribeSpec({
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
             verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+            presenter.buildLoadFailed.value shouldBe false
+            snapshots.assertValues(emptyList(), listOf(first))
+
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
             snapshots.assertValues(emptyList(), listOf(first))
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)

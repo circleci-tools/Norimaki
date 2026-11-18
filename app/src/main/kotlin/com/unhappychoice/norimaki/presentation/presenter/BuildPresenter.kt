@@ -13,6 +13,8 @@ import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.subscribeBy
+import java.util.concurrent.TimeUnit
 import org.kodein.di.instance
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -20,20 +22,29 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private val buildId: BuildId by instance()
     private var build: Build? = null
     val steps = Variable<List<BuildStep>>(listOf())
+    val buildLoadFailed = Variable(false)
     private val rebuildInFlight = AtomicBoolean()
 
     fun pollBuild(onLoaded: (Build) -> Unit) {
-        polling(BUILD_POLLING_SECONDS) { buildId.load(api) }
+        buildLoadFailed.value = false
+        Observable.defer { buildId.load(api) }
+            .concatWith(
+                Observable.timer(BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+                    .flatMap { polling(BUILD_POLLING_SECONDS) { buildId.load(api) } }
+            )
             .takeUntil { it.isFinished() }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { loadedBuild ->
-                val hadWorkflow = hasWorkflow()
-                build = loadedBuild
-                onLoaded(loadedBuild)
-                val snapshot = loadedBuild.steps.orEmpty()
-                if (steps.value != snapshot) steps.value = snapshot
-                if (hasWorkflow() != hadWorkflow) activity.invalidateOptionsMenu()
-            }
+            .subscribeBy(
+                onNext = { loadedBuild ->
+                    val hadWorkflow = hasWorkflow()
+                    build = loadedBuild
+                    onLoaded(loadedBuild)
+                    val snapshot = loadedBuild.steps.orEmpty()
+                    if (steps.value != snapshot) steps.value = snapshot
+                    if (hasWorkflow() != hadWorkflow) activity.invalidateOptionsMenu()
+                },
+                onError = { buildLoadFailed.value = true }
+            )
             .addTo(bag)
     }
 
