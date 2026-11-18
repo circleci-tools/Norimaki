@@ -3,7 +3,7 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.Context
 import android.text.Html
 import android.util.AttributeSet
-import android.view.LayoutInflater
+import android.view.View
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -26,6 +26,11 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         presenter.logString.asObservable()
             .subscribeOnIoObserveOnUI()
             .subscribeNext { binding.logText.text = Html.fromHtml(it) }
+            .addTo(bag)
+
+        presenter.logLoadFailed.asObservable()
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { failed -> binding.logLoadError.visibility = if (failed) View.VISIBLE else View.GONE }
             .addTo(bag)
     }
 
