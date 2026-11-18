@@ -56,6 +56,7 @@ class BuildStepPresenterTest : DescribeSpec({
                     every { fetchRawOutput(url, any()) } answers {
                         Observable.just(byteArrayOf(secondArg<Long>().toByte()))
                     }
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(byteArrayOf(100))
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
@@ -76,7 +77,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.values().map { it.single().toInt() } shouldBe listOf(0, 1, 2, 3, 4, 5)
+                        observer.values().map { it.single().toInt() } shouldBe listOf(0, 1, 2, 3, 4, 100)
                     } finally {
                         observer.dispose()
                     }
