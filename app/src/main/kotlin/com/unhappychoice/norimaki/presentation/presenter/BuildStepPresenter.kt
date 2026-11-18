@@ -12,7 +12,10 @@ import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.subscribeBy
+import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
 
 class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
@@ -21,11 +24,13 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private val outputClient: BuildOutputClient by instance()
 
     val logString: Variable<String> = Variable("")
+    val logLoadFailed = Variable(false)
     @Volatile private var readBytes = 0L
 
     fun loadStep(onLoaded: (BuildStep) -> Unit) {
         readBytes = 0L
         logString.value = ""
+        logLoadFailed.value = false
         polling(BuildPresenter.BUILD_POLLING_SECONDS) { buildId.load(api) }
             .take(1)
             .subscribeOnIoObserveOnUI()
@@ -49,11 +54,17 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private fun pollRunningAction(build: Build, action: BuildAction) {
         polling(LOG_POLLING_SECONDS) { fetchRawOutput(build, action) }
             .takeUntil(stepFinished())
-            .concatWith(Observable.defer { fetchRawOutput(build, action) })
+            .concatWith(Observable.defer {
+                outputClient.fetchFinalRawOutput(build.rawOutputUrl(action), readBytes)
+            })
             .filter { it.isNotEmpty() }
             .doOnNext { readBytes += it.size }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(String(it)) }
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread(), true)
+            .subscribeBy(
+                onNext = { appendLog(String(it)) },
+                onError = { logLoadFailed.value = true }
+            )
             .addTo(bag)
     }
 

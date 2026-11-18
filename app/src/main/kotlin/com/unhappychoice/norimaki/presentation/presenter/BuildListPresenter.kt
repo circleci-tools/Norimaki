@@ -5,7 +5,6 @@ import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
-import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -15,12 +14,9 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
-import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
-import flow.Direction
-import flow.Flow
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
@@ -33,6 +29,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override val hasMore = Variable(true)
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
+    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     val builds = Variable<List<Build>>(listOf())
 
     override fun onEnterScope(scope: MortarScope?) {
@@ -40,26 +37,24 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         getBuilds()
 
         pollLatestBuilds()
-
-        eventBus.selectProject
-            .map { optional ->
-                val project = optional.toNullable()
-                    ?: return@map ""
-                "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
-            }
-            .subscribeNext { goToBuildListView(it) }
-            .addTo(bag)
     }
 
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
         getBuildsAPI(offset = this.page.value * 20)
+            .singleOrError()
+            .toObservable()
+            .subscribeOnIoObserveOnUI()
             .startLoading()
+            .doOnDispose { isLoading.value = false }
             .paginate()
             .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
             .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
             .addTo(bag)
+    }
+
+    fun getBuildsIfUnderfilled(canScroll: Boolean) {
+        if (isWorkflow && !canScroll) getBuilds()
     }
 
     fun pollLatestBuilds() {
@@ -77,10 +72,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
-    }
-
-    private fun goToBuildListView(projectName: String) {
-        Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
     }
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =

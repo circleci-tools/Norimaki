@@ -11,14 +11,16 @@ import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToke
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
+import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.switchLatest
 import org.kodein.di.instance
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private val buildId: BuildId by instance()
     private var build: Build? = null
     val steps = Variable<List<BuildStep>>(listOf())
+    private val rebuildInFlight = AtomicBoolean()
 
     fun pollBuild(onLoaded: (Build) -> Unit) {
         polling(BUILD_POLLING_SECONDS) { buildId.load(api) }
@@ -46,22 +48,25 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
-    fun rebuild() {
-        api.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
+    fun rebuild() = submitRebuild { retryBuild() }
+
+    fun rebuildWithoutCache() = submitRebuild {
+        api.deleteCache(buildId.vcsType, buildId.owner, buildId.repository)
+            .flatMap { retryBuild() }
+    }
+
+    private fun submitRebuild(request: () -> Observable<Build>) {
+        if (!rebuildInFlight.compareAndSet(false, true)) return
+
+        Observable.defer { request() }
             .subscribeOnIoObserveOnUI()
+            .doFinally { rebuildInFlight.set(false) }
             .subscribeNext { goBack(activity) }
             .addTo(bag)
     }
 
-    fun rebuildWithoutCache() {
-        api.deleteCache(buildId.vcsType, buildId.owner, buildId.repository)
-            .map {
-                api.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number).subscribeOnIoObserveOnUI()
-            }.switchLatest()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { goBack(activity) }
-            .addTo(bag)
-    }
+    private fun retryBuild(): Observable<Build> =
+        api.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
 
     companion object {
         const val BUILD_POLLING_SECONDS = 5L
