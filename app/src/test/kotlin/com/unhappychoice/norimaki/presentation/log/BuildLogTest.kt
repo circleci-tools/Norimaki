@@ -33,6 +33,29 @@ class BuildLogTest : DescribeSpec({
             subscription.dispose()
         }
 
+        it("renders only new spans as chunks repeatedly extend the same line") {
+            val source = PublishSubject.create<String>()
+            val log = BuildLog()
+            val cursor = LogLineCursor()
+            val updates = log.changes.test()
+            val subscription = log.render(source, Schedulers.trampoline())
+            val red = 0xFFF00000.toInt()
+
+            source.onNext("prefix ")
+            cursor.takeNewSpans(log[0]) shouldBe listOf(LogSpan("prefix ", null))
+            val additions = List(1_000) { LogSpan(it.toString(), red) }
+            additions.chunked(2).forEach { pair ->
+                pair.forEach { source.onNext("\u001B[31m${it.text}\u001B[0m") }
+                cursor.takeNewSpans(log[0]) shouldBe pair
+                cursor.takeNewSpans(log[0]) shouldBe emptyList()
+            }
+
+            log.lineCount shouldBe 1
+            updates.values().drop(1) shouldBe List(additions.size) { LogUpdate(0, 1, 0) }
+            LogLineCursor().takeNewSpans(log[0]) shouldBe listOf(LogSpan("prefix ", null)) + additions
+            subscription.dispose()
+        }
+
         it("continues a partial line and ANSI sequence across chunks") {
             val source = PublishSubject.create<String>()
             val log = BuildLog()
