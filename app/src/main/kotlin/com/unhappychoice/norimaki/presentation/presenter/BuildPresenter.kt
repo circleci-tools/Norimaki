@@ -12,13 +12,14 @@ import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.switchLatest
 import mortar.MortarScope
 import org.kodein.di.instance
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()
     val steps = Variable<List<BuildStep>>(listOf())
+    private val rebuildInFlight = AtomicBoolean()
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
@@ -45,22 +46,25 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
-    fun rebuild() {
-        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+    fun rebuild() = submitRebuild { retryBuild() }
+
+    fun rebuildWithoutCache() = submitRebuild {
+        api.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
+            .flatMap { retryBuild() }
+    }
+
+    private fun submitRebuild(request: () -> Observable<Build>) {
+        if (!rebuildInFlight.compareAndSet(false, true)) return
+
+        Observable.defer { request() }
             .subscribeOnIoObserveOnUI()
+            .doFinally { rebuildInFlight.set(false) }
             .subscribeNext { goBack(activity) }
             .addTo(bag)
     }
 
-    fun rebuildWithoutCache() {
-        api.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
-            .map {
-                api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
-            }.switchLatest()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { goBack(activity) }
-            .addTo(bag)
-    }
+    private fun retryBuild(): Observable<Build> =
+        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
 
     private fun getBuildAPI(): Observable<Build> =
         api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
