@@ -3,7 +3,9 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.inWorkflow
+import com.unhappychoice.norimaki.domain.model.refreshBuildList
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
+import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
@@ -62,9 +64,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
-            .map { it.inWorkflow(workflowId) }
-            .subscribeOnIoObserveOnUI()
+        polling(BUILD_LIST_POLLING_SECONDS) {
+            Observable.defer { getBuildsAPI(offset = 0) }
+                .subscribeOnIoObserveOnUI()
+                .concatMap { latest -> refreshBuildList(builds.value, latest, workflowId, ::getBuildDetails) }
+        }
             .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
             .addTo(bag)
     }
@@ -79,6 +83,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private fun goToBuildListView(projectName: String) {
         Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
+    }
+
+    private fun getBuildDetails(build: Build): Observable<Build> {
+        val username = build.username ?: return Observable.empty()
+        val repository = build.reponame ?: return Observable.empty()
+        val number = build.buildNum ?: return Observable.empty()
+        return Observable.defer { api.getBuild(build.vcsType(), username, repository, number) }
+            .subscribeOnIoObserveOnUI()
     }
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
