@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.isFinished
@@ -12,12 +13,13 @@ import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
 import io.reactivex.rxkotlin.addTo
-import io.reactivex.rxkotlin.switchLatest
 import org.kodein.di.instance
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()
     val steps = Variable<List<BuildStep>>(listOf())
+    private val rebuildInFlight = AtomicBoolean()
 
     override fun onAuthenticated() {
         pollBuild()
@@ -43,24 +45,26 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
-    fun rebuild() {
+    fun rebuild() = submitRebuild { client -> retryBuild(client) }
+
+    fun rebuildWithoutCache() = submitRebuild { client ->
+        client.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
+            .flatMap { retryBuild(client) }
+    }
+
+    private fun submitRebuild(request: (CircleCIAPIClientV1_1) -> Observable<Build>) {
         val client = account?.client ?: return
-        client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+        if (!rebuildInFlight.compareAndSet(false, true)) return
+
+        Observable.defer { request(client) }
             .subscribeOnIoObserveOnUI()
+            .doFinally { rebuildInFlight.set(false) }
             .subscribeNext { goBack(activity) }
             .addTo(bag)
     }
 
-    fun rebuildWithoutCache() {
-        val client = account?.client ?: return
-        client.deleteCache(build.vcsType(), build.username!!, build.reponame!!)
-            .map {
-                client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!).subscribeOnIoObserveOnUI()
-            }.switchLatest()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { goBack(activity) }
-            .addTo(bag)
-    }
+    private fun retryBuild(client: CircleCIAPIClientV1_1): Observable<Build> =
+        client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
 
     private fun getBuildAPI(): Observable<Build> =
         account?.client?.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)

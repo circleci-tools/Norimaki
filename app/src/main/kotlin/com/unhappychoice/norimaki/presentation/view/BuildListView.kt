@@ -4,16 +4,15 @@ import android.content.Context
 import android.os.Parcelable
 import android.util.AttributeSet
 import android.util.SparseArray
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import androidx.core.view.doOnPreDraw
 import androidx.recyclerview.widget.GridLayoutManager
 import com.unhappychoice.norimaki.R
 import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
 import com.unhappychoice.norimaki.databinding.BuildListViewBinding
 import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
@@ -55,20 +54,24 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         binding.buildsView.adapter = adapter
         binding.buildsView.layoutManager = GridLayoutManager(context, resources.getInteger(R.integer.build_list_columns))
 
-        adapter.builds.value = presenter.builds.value
-
         presenter.builds.asObservable()
-            .subscribeOnIoObserveOnUI()
             .subscribeNext {
                 adapter.builds.value = it
                 adapter.notifyDataSetChanged()
             }.addTo(bag)
+
+        if (presenter.isWorkflow) {
+            presenter.page.asObservable()
+                .subscribeNext { loadMoreAfterLayout() }
+                .addTo(bag)
+        }
 
         adapter.onClickItem
             .subscribeNext { presenter.goToBuildView(it) }
             .addTo(bag)
 
         binding.buildsView.scrollEvents()
+            .filter { !presenter.isWorkflow || it.dy() != 0 }
             .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
@@ -77,5 +80,15 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
     override fun onDetachedFromWindow() {
         presenter.dropView(this)
         super.onDetachedFromWindow()
+    }
+
+    private fun loadMoreAfterLayout() {
+        val recycler = binding.buildsView
+        recycler.doOnPreDraw {
+            presenter.getBuildsIfUnderfilled(
+                canScroll = recycler.canScrollVertically(-1) || recycler.canScrollVertically(1)
+            )
+        }
+        recycler.invalidate()
     }
 }

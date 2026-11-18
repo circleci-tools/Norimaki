@@ -12,7 +12,10 @@ import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.subscribeBy
+import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
 
 class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
@@ -21,6 +24,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private lateinit var outputClient: BuildOutputClient
 
     val logString: Variable<String> = Variable("")
+    val logLoadFailed = Variable(false)
     @Volatile private var readBytes = 0L
 
     override fun onAuthenticated() {
@@ -43,11 +47,17 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     private fun pollRunningAction(action: BuildAction) {
         polling(LOG_POLLING_SECONDS) { fetchRawOutput(action) }
             .takeUntil(stepFinished())
-            .concatWith(Observable.defer { fetchRawOutput(action) })
+            .concatWith(Observable.defer {
+                outputClient.fetchFinalRawOutput(build.rawOutputUrl(action), readBytes)
+            })
             .filter { it.isNotEmpty() }
             .doOnNext { readBytes += it.size }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(String(it)) }
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread(), true)
+            .subscribeBy(
+                onNext = { appendLog(String(it)) },
+                onError = { logLoadFailed.value = true }
+            )
             .addTo(bag)
     }
 
