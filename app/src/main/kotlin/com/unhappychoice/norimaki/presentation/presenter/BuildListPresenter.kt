@@ -52,7 +52,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
-        getBuildsAPI(offset = this.page.value * 20)
+        getBuildsAPI(offset = this.page.value * BUILD_LIST_PAGE_SIZE)
             .startLoading()
             .paginate()
             .map { it.inWorkflow(workflowId) }
@@ -62,7 +62,9 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
+        polling(BUILD_LIST_POLLING_SECONDS) {
+            builds.asObservable().take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+        }
             .map { it.inWorkflow(workflowId) }
             .subscribeOnIoObserveOnUI()
             .subscribeNext { builds.value = builds.value.addDistinctByNumber(it).sortByQueuedAt() }
@@ -83,13 +85,13 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
         when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = 20)
+            "" -> api.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
             else -> api.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),
                 project = repoName(),
                 offset = offset,
-                limit = 20
+                limit = BUILD_LIST_PAGE_SIZE
             )
         }
 
