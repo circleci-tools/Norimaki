@@ -21,7 +21,9 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     private val buildList by lazy {
-        BuildListRequests(workflowId, Schedulers.io(), AndroidSchedulers.mainThread(), ::getBuildsAPI)
+        BuildListRequests(
+            workflowId, Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(), ::getBuildsAPI
+        )
     }
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     val builds get() = buildList.builds

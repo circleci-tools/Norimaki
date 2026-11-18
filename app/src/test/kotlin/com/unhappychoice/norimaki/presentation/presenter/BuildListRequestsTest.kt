@@ -17,7 +17,7 @@ class BuildListRequestsTest : DescribeSpec({
             val scheduler = TestScheduler()
             val initialPage = PublishSubject.create<List<Build>>()
             val offsets = mutableListOf<Int>()
-            val requests = BuildListRequests(null, scheduler, scheduler) { offset ->
+            val requests = BuildListRequests(null, scheduler, scheduler, scheduler) { offset ->
                 offsets.add(offset)
                 if (offset == 0) initialPage else Observable.just(emptyList<Build>())
             }
@@ -37,27 +37,39 @@ class BuildListRequestsTest : DescribeSpec({
             polling.dispose()
         }
 
-        it("allows pagination to retry the same offset after disposal") {
+        it("retries the same offset after a page is disposed during the background merge") {
             val scheduler = TestScheduler()
+            val computation = TestScheduler()
             val offsets = mutableListOf<Int>()
-            val requests = BuildListRequests(null, scheduler, scheduler) { offset ->
+            val first = build(42, "running")
+            val next = build(41, "success")
+            val requests = BuildListRequests(null, scheduler, computation, scheduler) { offset ->
                 offsets.add(offset)
-                if (offset == 0) Observable.just(listOf(build(42, "running"))) else Observable.never()
+                Observable.just(listOf(if (offset == 0) first else next))
             }
 
+            val builds = requests.builds.test()
             val polling = requests.poll(10)
+            scheduler.triggerActions()
+            computation.triggerActions()
             scheduler.triggerActions()
             val page = checkNotNull(requests.loadNextPage())
             scheduler.triggerActions()
             requests.isLoading.value shouldBe true
 
             page.dispose()
+            computation.triggerActions()
+            scheduler.triggerActions()
             requests.isLoading.value shouldBe false
-            val retry = checkNotNull(requests.loadNextPage())
+            requests.page.value shouldBe 1
+            builds.assertValues(emptyList(), listOf(first))
+
+            checkNotNull(requests.loadNextPage())
+            scheduler.triggerActions()
+            computation.triggerActions()
             scheduler.triggerActions()
             offsets shouldBe listOf(0, 20, 20)
-
-            retry.dispose()
+            builds.assertValues(emptyList(), listOf(first), listOf(first, next))
             polling.dispose()
         }
 
@@ -68,7 +80,7 @@ class BuildListRequestsTest : DescribeSpec({
             val successful = build(42, "success")
             val unseen = build(41, "success")
             val offsets = mutableListOf<Int>()
-            val requests = BuildListRequests(null, scheduler, scheduler) { offset ->
+            val requests = BuildListRequests(null, scheduler, scheduler, scheduler) { offset ->
                 offsets.add(offset)
                 when {
                     offsets.size == 1 -> Observable.just(listOf(running))
@@ -77,18 +89,19 @@ class BuildListRequestsTest : DescribeSpec({
                 }
             }
 
+            val builds = requests.builds.test()
             val polling = requests.poll(10)
             scheduler.triggerActions()
             requests.loadNextPage()
             scheduler.triggerActions()
             scheduler.advanceTimeBy(10, SECONDS)
             offsets shouldBe listOf(0, 20, 0)
-            requests.builds.value.map { it.status } shouldBe listOf("success")
+            builds.values().last().map { it.status } shouldBe listOf("success")
 
             olderPage.onNext(listOf(running, unseen))
             olderPage.onComplete()
             scheduler.triggerActions()
-            requests.builds.value.map { it.buildNum to it.status } shouldBe
+            builds.values().last().map { it.buildNum to it.status } shouldBe
                 listOf(42 to "success", 41 to "success")
             polling.dispose()
         }
