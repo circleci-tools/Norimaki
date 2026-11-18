@@ -25,7 +25,7 @@ fun Build.workflowString(): String? =
 
 fun Build.projectName(): String = "${vcsType()}/$username/$reponame"
 
-fun Build.uniqueId(): String = "${repositoryString()}/$buildNum"
+fun Build.uniqueId(): String = "${projectName()}/$buildNum"
 
 fun Build.isFinished(): Boolean = lifecycle in listOf("finished", "not_run")
 

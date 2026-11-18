@@ -47,8 +47,9 @@ class BuildTest : DescribeSpec({
     }
 
     describe("Build.uniqueId()") {
-        it("should combine repository and build number") {
-            build(number = 7).uniqueId() shouldBe "circleci-tools / Norimaki/7"
+        it("should combine VCS provider, repository and build number") {
+            build(number = 7).uniqueId() shouldBe "github/circleci-tools/Norimaki/7"
+            build(number = 7, repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki").uniqueId() shouldBe "bitbucket/circleci-tools/Norimaki/7"
         }
     }
 
@@ -73,6 +74,21 @@ class BuildTest : DescribeSpec({
     }
 
     describe("List<Build>.addDistinctByNumber()") {
+        it("should retain builds with matching repository and number across providers when merging pages") {
+            val github = build(number = 7)
+            val bitbucket = build(number = 7, repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki")
+
+            listOf(github).addDistinctByNumber(listOf(bitbucket)) shouldBe listOf(bitbucket, github)
+        }
+
+        it("should replace only the matching provider's build when polling") {
+            val github = build(number = 7, buildStatus = "running")
+            val bitbucket = build(number = 7, buildStatus = "running", repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki")
+            val updated = build(number = 7, buildStatus = "success", repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki")
+
+            listOf(github, bitbucket).addDistinctByNumber(listOf(updated)) shouldBe listOf(updated, github)
+        }
+
         it("should prefer new builds and drop duplicates") {
             val old = build(number = 1, buildStatus = "running")
             val updated = build(number = 1, buildStatus = "success")
