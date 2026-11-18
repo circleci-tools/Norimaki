@@ -21,7 +21,7 @@ class BuildStepOutputTest : DescribeSpec({
             val available = logs.mapValues { (_, lines) -> lines.first() }.toMutableMap()
             val observer = pollActionOutputs(logs.keys.toList(), finished, { url, offset ->
                 Observable.just(available.getValue(url).toByteArray().drop(offset.toInt()).toByteArray())
-            }, scheduler).map { String(it) }.test()
+            }, scheduler).test()
 
             observer.assertValues("one\n", "action two\n").assertNotComplete()
             logs.forEach { (url, lines) -> available[url] = lines.take(2).joinToString("") }
@@ -33,6 +33,28 @@ class BuildStepOutputTest : DescribeSpec({
             scheduler.advanceTimeBy(10, TimeUnit.SECONDS)
 
             observer.assertResult("one\n", "action two\n", "one more\n", "two more\n", "one done\n", "two done\n")
+        }
+
+        it("keeps split UTF-8 sequences separate and completes them during the final drain") {
+            val finished = PublishSubject.create<Build>()
+            val first = "é".toByteArray()
+            val second = "あ".toByteArray()
+            val prefixes = mapOf("first" to first.take(1), "second" to second.take(2))
+            val logs = mapOf("first" to first, "second" to second)
+            val finalOffsets = mutableListOf<Pair<String, Long>>()
+
+            val observer = pollActionOutputs(logs.keys.toList(), finished, { url, _ ->
+                Observable.just(prefixes.getValue(url).toByteArray())
+            }, TestScheduler(), fetchFinalOutput = { url, offset ->
+                finalOffsets += url to offset
+                Observable.just(logs.getValue(url).drop(offset.toInt()).toByteArray())
+            }).test()
+
+            observer.assertNoValues().assertNotComplete()
+            finished.onNext(mockk<Build>())
+
+            observer.assertResult("é", "あ")
+            finalOffsets shouldBe listOf("first" to 1L, "second" to 2L)
         }
 
         it("drains from the latest offset when completion arrives during a read") {
@@ -48,7 +70,7 @@ class BuildStepOutputTest : DescribeSpec({
             }, TestScheduler(), fetchFinalOutput = { url, offset ->
                 finalOffsets += url to offset
                 Observable.just("$url done\n".toByteArray())
-            }).map { String(it) }.test()
+            }).test()
 
             observer.assertResult("first\n", "second\n", "first done\n", "second done\n")
             requestedOffsets shouldBe listOf("first" to 0L, "second" to 0L)

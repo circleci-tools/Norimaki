@@ -23,6 +23,8 @@ import org.kodein.di.instance
 class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListView>(context, attr), HasMenu {
     override val presenter: BuildListPresenter by instance()
     private val adapter = BuildAdapter(context)
+    private var listPending = false
+    private var underfillPending = false
 
     private val binding by lazy {
         BuildListViewBinding.bind(this)
@@ -54,15 +56,22 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         binding.buildsView.adapter = adapter
         binding.buildsView.layoutManager = GridLayoutManager(context, resources.getInteger(R.integer.build_list_columns))
 
-        presenter.builds.asObservable()
-            .subscribeNext {
-                adapter.builds.value = it
-                adapter.notifyDataSetChanged()
-            }.addTo(bag)
+        presenter.builds
+            .subscribeNext { builds ->
+                listPending = true
+                adapter.submitList(builds) {
+                    listPending = false
+                    checkUnderfill()
+                }
+            }
+            .addTo(bag)
 
         if (presenter.isWorkflow) {
             presenter.page.asObservable()
-                .subscribeNext { loadMoreAfterLayout() }
+                .subscribeNext {
+                    underfillPending = true
+                    checkUnderfill()
+                }
                 .addTo(bag)
         }
 
@@ -82,9 +91,15 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         super.onDetachedFromWindow()
     }
 
-    private fun loadMoreAfterLayout() {
+    private fun checkUnderfill() {
+        if (!underfillPending || listPending || !isAttachedToWindow) return
+        underfillPending = false
         val recycler = binding.buildsView
         recycler.doOnPreDraw {
+            if (listPending) {
+                underfillPending = true
+                return@doOnPreDraw
+            }
             presenter.getBuildsIfUnderfilled(
                 canScroll = recycler.canScrollVertically(-1) || recycler.canScrollVertically(1)
             )

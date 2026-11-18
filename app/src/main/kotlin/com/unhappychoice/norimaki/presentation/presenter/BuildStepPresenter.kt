@@ -2,9 +2,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.findByName
+import com.unhappychoice.norimaki.domain.model.findByStepNumber
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
+import com.unhappychoice.norimaki.domain.model.step
 import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
@@ -44,24 +45,31 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun pollRunningActions() {
+    internal fun runningOutput(): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
-        pollActionOutputs(outputUrls, stepFinished(), outputClient::fetchRawOutput, fetchFinalOutput = { url, offset ->
-            outputClient.fetchFinalRawOutput(url, offset)
-        })
+        return pollActionOutputs(
+            outputUrls,
+            stepFinished(buildStep.step()),
+            outputClient::fetchRawOutput,
+            fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
+        )
+    }
+
+    private fun pollRunningActions() {
+        runningOutput()
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
-                onNext = { appendLog(String(it)) },
+                onNext = { appendLog(it) },
                 onError = { logLoadFailed.value = true }
             )
             .addTo(bag)
     }
 
-    private fun stepFinished(): Observable<Build> =
+    private fun stepFinished(stepNumber: Int?): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
-        }.filter { it.isFinished() || it.steps?.findByName(buildStep.name)?.isFinished() == true }
+        }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
 
     private fun appendLog(log: String) {
         logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
@@ -87,23 +95,28 @@ internal fun pollActionOutputs(
     fetchOutput: (String, Long) -> Observable<ByteArray>,
     scheduler: Scheduler = Schedulers.computation(),
     fetchFinalOutput: (String, Long) -> Observable<ByteArray> = fetchOutput
-): Observable<ByteArray> = Observable.defer {
+): Observable<String> = Observable.defer {
+    val urls = outputUrls.distinct()
+    val decoders = urls.associateWith { Utf8StreamDecoder() }
     val offsets = mutableMapOf<String, Long>()
     // Stop scheduling reads at completion, then drain after any in-flight reads.
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = outputUrls.map { url ->
+            val reads = urls.map { url ->
                 val read = Observable.defer {
+                    val decoder = decoders.getValue(url)
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
-                    fetch(url, offset)
+                    val chunks = fetch(url, offset)
                         .filter { it.isNotEmpty() }
-                        .doOnNext { offsets[url] = offset + it.size }
+                        .doOnNext { offsets[url] = offsets.getOrDefault(url, 0L) + it.size }
+                        .map { decoder.decode(it) }
+                    if (finishing) chunks.concatWith(Observable.fromCallable { decoder.finish() }) else chunks
                 }
-                if (finishing) read else read.onErrorResumeNext(Observable.empty<ByteArray>())
+                if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }
-            Observable.concatDelayError(reads)
+            Observable.concatDelayError(reads).filter { it.isNotEmpty() }
         }
 }
