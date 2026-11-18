@@ -3,7 +3,6 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
-import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -13,16 +12,12 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
-import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
-import flow.Direction
-import flow.Flow
-import io.reactivex.Maybe
 import io.reactivex.Observable
+import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
@@ -36,48 +31,46 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override val hasMore = Variable(true)
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
+    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
-    private val incomingPages = PublishSubject.create<List<Build>>()
+    private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
-    private var pageUpdates: Disposable? = null
+    private val pageUpdates = observePages()
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
-        pageUpdates = observePages()
 
         getBuilds()
 
         pollLatestBuilds()
-
-        eventBus.selectProject
-            .map { optional ->
-                val project = optional.toNullable()
-                    ?: return@map ""
-                "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
-            }
-            .subscribeNext { goToBuildListView(it) }
-            .addTo(bag)
     }
 
     override fun onExitScope() {
-        pageUpdates?.dispose()
+        pageUpdates.dispose()
         super.onExitScope()
     }
 
     fun getBuilds() {
         if (isLoading.value || !hasMore.value) return
-        getBuildsAPI(offset = this.page.value * 20)
+        isLoading.value = true
+        getBuildsAPI(offset = page.value * 20)
+            .singleOrError()
+            .toObservable()
             .subscribeOnIoObserveOnUI()
-            .startLoading()
-            .paginate()
-            .subscribeNext { incomingPages.onNext(it) }
+            .doOnError { isLoading.value = false }
+            .doOnDispose { isLoading.value = false }
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = true)) }
             .addTo(bag)
+    }
+
+    fun getBuildsIfUnderfilled(canScroll: Boolean) {
+        if (isWorkflow && !canScroll) getBuilds()
     }
 
     fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) { getBuildsAPI(offset = 0) }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { incomingPages.onNext(it) }
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
             .addTo(bag)
     }
 
@@ -89,21 +82,23 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    private fun observePages(): Disposable =
-        incomingPages.concatMapMaybe { page ->
-            val current = history.value
-            val filter = workflowId
-            Maybe.defer<BuildHistory> {
-                val updated = current.merge(page.inWorkflow(filter))
-                if (updated == null) Maybe.empty() else Maybe.just(updated)
-            }
-                .subscribeOn(Schedulers.computation())
-                .observeOn(AndroidSchedulers.mainThread())
-        }.subscribeNext { history.value = it }
-
-    private fun goToBuildListView(projectName: String) {
-        Flow.get(activity).replaceTop(BuildListScreen(projectName), Direction.REPLACE)
+    private fun observePages() = incomingPages.concatMapSingle { page ->
+        val current = history.value
+        val filter = workflowId
+        Single.fromCallable { current.merge(page.builds.inWorkflow(filter)) ?: current }
+            .subscribeOn(Schedulers.computation())
+            .observeOn(AndroidSchedulers.mainThread())
+            .map { updated -> page to updated }
+    }.subscribeNext { (incoming, updated) ->
+        if (updated !== history.value) history.value = updated
+        if (incoming.paginated) {
+            hasMore.value = incoming.builds.isNotEmpty()
+            isLoading.value = false
+            page.value += 1
+        }
     }
+
+    private data class IncomingPage(val builds: List<Build>, val paginated: Boolean)
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
         when (projectName) {
