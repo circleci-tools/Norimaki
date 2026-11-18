@@ -2,8 +2,6 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
-import android.util.Log
-import android.view.LayoutInflater
 import com.jakewharton.rxbinding2.view.clicks
 import com.jakewharton.rxbinding2.widget.textChanges
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
@@ -25,8 +23,6 @@ class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenVi
         super.onAttachedToWindow()
         presenter.takeView(this)
 
-        Log.d("binder", binding?.toString() ?: "null")
-
         binding.accessTokenTextView.setText(presenter.token.value)
         binding.accessTokenTextView.textChanges()
             .map { it.toString() }
@@ -35,7 +31,6 @@ class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenVi
             .addTo(bag)
 
         binding.submitButton.clicks()
-            .doOnNext { Log.d("D", it.toString()) }
             .subscribeNext {
                 presenter.saveToken()
                 presenter.goToBuildList()

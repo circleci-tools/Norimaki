@@ -1,64 +1,76 @@
 package com.unhappychoice.norimaki.presentation.view
 
-import android.app.Activity
-import android.app.Application
-import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
-import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Looper
+import android.text.InputType
+import android.widget.Button
+import android.widget.EditText
+import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import flow.Flow
+import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.schedulers.TestScheduler
+import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.kodein.di.DI
-import org.kodein.di.bind
-import org.kodein.di.singleton
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(sdk = [34])
 class APITokenViewTest {
+    @Before
+    fun pauseNetworkSubscriptions() {
+        val scheduler = TestScheduler()
+        RxJavaPlugins.setIoSchedulerHandler { scheduler }
+    }
+
+    @After
+    fun restoreSchedulers() {
+        RxJavaPlugins.reset()
+    }
+
     @Test
-    fun tokenIsBoundAndAppliedWithoutLoggingIt() {
-        val storedToken = "dummy-stored-token"
-        val enteredToken = "dummy-entered-token"
-        val editedToken = "dummy-edited-token"
-        val token = Variable(storedToken)
-        val presenter = mockk<APITokenPresenter>(relaxed = true) {
-            every { this@mockk.token } returns token
-        }
+    fun masksSavedAndPastedTokensAndSavesTheExactReplacement() {
+        val preference = APITokenPreference(RuntimeEnvironment.getApplication())
+        val savedToken = "saved-dummy-token"
+        val replacement = "replacement_Dummy-Token.123"
+        preference.token = savedToken
 
-        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
-            val activity = controller.get()
-            val form = showForm(activity, presenter)
-            val input = form.accessTokenTextView
-            assertEquals(storedToken, input.text.toString())
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            Flow.get(activity).set(APITokenScreen())
+            shadowOf(Looper.getMainLooper()).idle()
+            val field = activity.findViewById<EditText>(R.id.accessTokenTextView)
 
-            input.setText(enteredToken)
-            assertEquals(enteredToken, token.value)
-            input.setText(editedToken)
-            assertEquals(editedToken, token.value)
-            form.submitButton.performClick()
-            verify(exactly = 1) { presenter.saveToken() }
-            verify(exactly = 1) { presenter.goToBuildList() }
+            assertEquals(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD, field.inputType)
+            assertMasked(field, savedToken)
 
-            val reopened = showForm(activity, presenter)
-            assertEquals(editedToken, reopened.accessTokenTextView.text.toString())
+            val clipboard = requireNotNull(activity.getSystemService(ClipboardManager::class.java))
+            clipboard.setPrimaryClip(ClipData.newPlainText("Dummy API token", replacement))
+            field.requestFocus()
+            field.selectAll()
+            assertTrue(field.onTextContextMenuItem(android.R.id.paste))
+            assertMasked(field, replacement)
 
-            val dummyTokens = listOf(storedToken, enteredToken, editedToken)
-            val tokenWasLogged = ShadowLog.getLogs().any { entry -> dummyTokens.any { it in entry.msg.orEmpty() } }
-            assertFalse("Token text appeared in the Android log", tokenWasLogged)
+            activity.findViewById<Button>(R.id.submitButton).performClick()
+            assertEquals(replacement, preference.token)
         }
     }
 
-    private fun showForm(activity: Activity, presenter: APITokenPresenter): ApiTokenViewBinding =
-        ApiTokenViewBinding.inflate(activity.layoutInflater).apply {
-            root.di = DI { bind<APITokenPresenter>() with singleton { presenter } }
-            activity.setContentView(root)
-        }
+    private fun assertMasked(field: EditText, token: String) {
+        assertEquals(token, field.text.toString())
+        val transformation = requireNotNull(field.transformationMethod)
+        val displayed = requireNotNull(transformation.getTransformation(field.text, field))
+        assertEquals(List(token.length) { '•' }, displayed.toList())
+    }
 }
