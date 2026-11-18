@@ -19,6 +19,7 @@ class BuildListPollingTest : DescribeSpec({
     fun build(number: Int): Build = mockk {
         every { username } returns "circleci-tools"
         every { reponame } returns "Norimaki"
+        every { vcsUrl } returns null
         every { buildNum } returns number
         every { queuedAt } returns Date(number.toLong())
     }
