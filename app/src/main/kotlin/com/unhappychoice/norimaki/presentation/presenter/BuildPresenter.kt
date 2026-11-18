@@ -30,7 +30,10 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         polling(BUILD_POLLING_SECONDS) { getBuildAPI() }
             .takeUntil { it.isFinished() }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { steps.value = it.steps ?: listOf() }
+            .subscribeNext { build ->
+                val snapshot = build.steps.orEmpty()
+                if (steps.value != snapshot) steps.value = snapshot
+            }
             .addTo(bag)
     }
 
