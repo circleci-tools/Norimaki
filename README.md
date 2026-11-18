@@ -18,8 +18,20 @@ Norimaki is a [CircleCI](https://circleci.com) client for Android.
 3. Open Norimaki, paste the token into the token field, and tap **Apply**.
 4. Tap a build in **Recent Builds** to see its details.
 
+## Running tests
+
+With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 installed, run the full unit test suite from the repository root:
+
+```sh
+./gradlew testDebugUnitTest
+```
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)
 
 Logo, app icons are designed by [Carlos Liu](https://github.com/morita7453)
+
+## Screenshot
+
+<img src="app/src/main/play/listings/en-US/graphics/phone-screenshots/328936894989412098.png" alt="Norimaki showing a list of CircleCI builds on Android" width="300">

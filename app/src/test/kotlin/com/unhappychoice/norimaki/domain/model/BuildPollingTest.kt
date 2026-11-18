@@ -51,11 +51,20 @@ class BuildPollingTest : DescribeSpec({
         }
     }
 
-    describe("List<BuildStep>.findByName()") {
-        it("should find the step with the name") {
-            val steps = listOf(BuildStep("checkout", listOf()), BuildStep("test", listOf()))
-            steps.findByName("test")?.name shouldBe "test"
-            steps.findByName("deploy") shouldBe null
+    describe("List<BuildStep>.findByStepNumber()") {
+        it("should match by step number even when step names are identical") {
+            val first = BuildStep("Run tests", listOf(mockk { every { step } returns 2 }))
+            val second = BuildStep("Run tests", listOf(mockk { every { step } returns 5 }))
+            val steps = listOf(first, second)
+
+            steps.findByStepNumber(5) shouldBe second
+            steps.findByStepNumber(3) shouldBe null
+        }
+
+        it("should ignore missing step numbers") {
+            val steps = listOf(BuildStep("Run tests", emptyList()))
+
+            steps.findByStepNumber(null) shouldBe null
         }
     }
 })
