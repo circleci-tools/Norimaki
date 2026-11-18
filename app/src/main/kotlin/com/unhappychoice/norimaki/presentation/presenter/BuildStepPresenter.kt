@@ -52,11 +52,18 @@ class BuildStepPresenter : PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun pollRunningActions(build: Build, buildStep: BuildStep) {
+    internal fun runningOutput(build: Build, buildStep: BuildStep): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
-        pollActionOutputs(outputUrls, stepFinished(), outputClient::fetchRawOutput, fetchFinalOutput = { url, offset ->
-            outputClient.fetchFinalRawOutput(url, offset)
-        })
+        return pollActionOutputs(
+            outputUrls,
+            stepFinished(),
+            outputClient::fetchRawOutput,
+            fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
+        )
+    }
+
+    private fun pollRunningActions(build: Build, buildStep: BuildStep) {
+        runningOutput(build, buildStep)
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(

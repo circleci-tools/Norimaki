@@ -4,9 +4,9 @@ import com.github.unhappychoice.circleci.v1.response.BuildStep
 
 data class BuildStepId(val number: Int?, val position: Int? = null, val legacyName: String? = null) {
     fun resolve(steps: List<BuildStep>?): BuildStep? = when {
-        number != null -> steps?.firstOrNull { it.step() == number }
+        number != null -> steps?.findByStepNumber(number)
         position != null -> steps?.getOrNull(position)
-        else -> legacyName?.let { steps?.findByName(it) }
+        else -> legacyName?.let { name -> steps?.firstOrNull { it.name == name } }
     }
 
     companion object {

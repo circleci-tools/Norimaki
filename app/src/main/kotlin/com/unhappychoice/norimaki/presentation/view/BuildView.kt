@@ -63,10 +63,8 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
 
         presenter.steps.asObservable()
             .subscribeOnIoObserveOnUI()
-            .subscribeNext {
-                adapter.steps.value = it
-                adapter.notifyDataSetChanged()
-            }.addTo(bag)
+            .subscribeNext(adapter::submitSteps)
+            .addTo(bag)
 
         adapter.onClickItem
             .subscribeNext { presenter.goToBuildStepScreen(it) }

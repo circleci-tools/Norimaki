@@ -1,8 +1,12 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
+import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v1.response.BuildAction
+import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -13,12 +17,83 @@ import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
-import java.util.concurrent.TimeUnit
+import java.util.Date
+import java.util.concurrent.TimeUnit.SECONDS
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 
 class BuildStepPresenterTest : DescribeSpec({
+    fun action(number: Int, end: Date?): BuildAction = mockk {
+        every { index } returns 0
+        every { step } returns number
+        every { endTime } returns end
+    }
+
+    fun build(lifecycleStatus: String, buildSteps: List<BuildStep>): Build = mockk {
+        every { lifecycle } returns lifecycleStatus
+        every { steps } returns buildSteps
+        every { vcsUrl } returns null
+        every { username } returns "owner"
+        every { reponame } returns "repo"
+        every { buildNum } returns 42
+    }
+
+    describe("BuildStepPresenter running output") {
+        listOf("selected step", "build").forEach { completion ->
+            it("keeps fetching a same-named running step until the $completion finishes") {
+                val scheduler = TestScheduler()
+                val selected = action(5, null)
+                val first = BuildStep("Run tests", listOf(action(2, Date())))
+                val second = BuildStep("Run tests", listOf(selected))
+                val running = build("running", listOf(first, second))
+                val finished = if (completion == "build") {
+                    build("finished", listOf(first, second))
+                } else {
+                    build("running", listOf(first, BuildStep("Run tests", listOf(action(5, Date())))))
+                }
+                val api = mockk<CircleCIAPIClientV1_1> {
+                    every { getBuild("github", "owner", "repo", 42) } returnsMany
+                        listOf(Observable.just(running), Observable.just(finished))
+                }
+                val output = mockk<BuildOutputClient> {
+                    val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
+                    every { fetchRawOutput(url, any()) } answers {
+                        Observable.just(byteArrayOf(('0'.code + secondArg<Long>().toInt()).toByte()))
+                    }
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just("done".toByteArray())
+                }
+                val presenter = BuildStepPresenter().apply {
+                    di = DI {
+                        bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                        bind<BuildStepId>() with singleton { BuildStepId(5) }
+                        bind<CircleCIAPIClientV1_1>() with singleton { api }
+                        bind<BuildOutputClient>() with singleton { output }
+                    }
+                }
+
+                val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
+                RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+                try {
+                    val observer = presenter.runningOutput(running, second).test()
+                    try {
+                        scheduler.advanceTimeBy(4, SECONDS)
+                        observer.assertNotComplete().assertNoErrors()
+                        observer.assertValues("0", "1", "2", "3", "4")
+
+                        scheduler.advanceTimeBy(1, SECONDS)
+                        observer.assertComplete().assertNoErrors()
+                        observer.assertValues("0", "1", "2", "3", "4", "done")
+                    } finally {
+                        observer.dispose()
+                    }
+                } finally {
+                    RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+                }
+            }
+        }
+    }
+
     it("exposes the initial build load failure without retrying") {
         val scheduler = TestScheduler()
         val api = mockk<CircleCIAPIClientV1_1> {
@@ -45,7 +120,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
             failures.assertValues(false, true)
             stepLoaded shouldBe false
-            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS * 3, TimeUnit.SECONDS)
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS * 3, SECONDS)
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
         } finally {
             presenter.bag.clear()

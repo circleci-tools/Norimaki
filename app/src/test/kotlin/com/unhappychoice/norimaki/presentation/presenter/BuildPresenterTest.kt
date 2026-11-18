@@ -127,6 +127,23 @@ class BuildPresenterTest : DescribeSpec({
 
             verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
         }
+
+        it("should complete the cache-free rebuild and retain its submission guard after detachment") {
+            presenter.rebuildWithoutCache()
+            presenter.bag.clear()
+            presenter.rebuild()
+
+            verify(exactly = 0) { api.retryBuild(any(), any(), any(), any()) }
+
+            deleteCache.onNext(Unit)
+            presenter.rebuildWithoutCache()
+            verify(exactly = 1) { api.deleteCache(any(), any(), any()) }
+            verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
+
+            retry.onComplete()
+            presenter.rebuild()
+            verify(exactly = 2) { api.retryBuild(any(), any(), any(), any()) }
+        }
     }
 })
 
