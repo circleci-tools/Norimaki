@@ -45,6 +45,7 @@ class BuildListPresenterTest : DescribeSpec({
             every { workflows } returns workflow
             every { username } returns "owner"
             every { reponame } returns "repo"
+            every { vcsUrl } returns "https://github.com/owner/repo"
             every { buildNum } returns number
             every { queuedAt } returns null
         }
