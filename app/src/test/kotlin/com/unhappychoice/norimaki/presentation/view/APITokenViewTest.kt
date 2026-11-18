@@ -10,6 +10,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import flow.Flow
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
@@ -48,7 +49,9 @@ class APITokenViewTest {
 
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             val activity = controller.setup().get()
-            Flow.get(activity).set(APITokenScreen())
+            val flow = Flow.get(activity)
+            assertEquals(BuildListScreen(""), flow.history.top<Any>())
+            flow.set(APITokenScreen())
             shadowOf(Looper.getMainLooper()).idle()
             val field = activity.findViewById<EditText>(R.id.accessTokenTextView)
 
