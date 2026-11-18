@@ -52,7 +52,7 @@ jobs:
           name: Run Tests
           command: ./gradlew jacoco
       - store_artifacts:
-          path: app/build/reports/jacoco/jacoco/jacoco.xml
+          path: app/build/reports/coverage/test/debug/report.xml
       - run:
           name: Send coverage
           command: ./scripts/ci/send-coverage-info.sh
@@ -74,10 +74,11 @@ jobs:
 workflows:
   test-and-deploy:
     jobs:
-      - build
-      - test: { requires: [build] }
+      - build:
+          filters: &build_filter pipeline.git.branch or (pipeline.git.tag matches /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/)
+      - test:
+          filters: *build_filter
+          requires: [build]
       - deploy:
-          filters:
-            branches:
-              only: master
+          filters: pipeline.git.tag matches /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
           requires: [test]

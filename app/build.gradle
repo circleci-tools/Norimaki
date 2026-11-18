@@ -4,6 +4,16 @@ plugins {
     id 'jacoco'
 }
 
+def coverageToolVersion = '0.8.16'
+
+jacoco {
+    toolVersion = coverageToolVersion
+}
+
+configurations.matching { it.name in ['jacocoAgent', 'androidJacocoAnt'] }.configureEach {
+    resolutionStrategy.activateDependencyLocking()
+}
+
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'androidx.appcompat:appcompat:1.8.0'
@@ -12,7 +22,7 @@ dependencies {
     implementation 'com.github.gojuno.koptional:koptional:1.7.0'
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
     implementation 'com.github.takuji31.Koreference:koreference:2.0.0'
-    implementation 'com.github.unhappychoice:circleci:2.1.0'
+    implementation 'com.github.unhappychoice:circleci:2.1.2'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'com.google.code.gson:gson:2.15.0'
     implementation 'com.jakewharton.rxbinding2:rxbinding-appcompat-v7-kotlin:2.2.0'
@@ -33,6 +43,7 @@ dependencies {
     testImplementation 'io.mockk:mockk:1.14.12'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.18'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.14.4'
 }
 
 android {
@@ -61,7 +72,7 @@ android {
         debug {
             minifyEnabled false
             debuggable true
-            testCoverageEnabled true
+            enableUnitTestCoverage = true
         }
         release {
             minifyEnabled false
@@ -109,8 +120,12 @@ android {
             ]
         }
     }
+    testCoverage {
+        jacocoVersion = coverageToolVersion
+    }
     testOptions {
         unitTests {
+            includeAndroidResources = true
             all {
                 useJUnitPlatform()
                 jacoco {
@@ -126,30 +141,14 @@ play {
     serviceAccountCredentials.set(decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", ".json"))
 }
 
-jacoco {
-    toolVersion = "0.8.7"
-}
-
 tasks.withType(Test) {
     jacoco.includeNoLocationClasses = true
     jacoco.excludes = ['jdk.internal.*']
 }
 
-tasks.register('jacoco', JacocoReport) {
-    dependsOn 'testDebugUnitTest'
-    description = "Generate Jacoco coverage reports after running tests."
-    def kotlinClasses = tasks.named('compileDebugKotlin').flatMap { it.destinationDirectory }
-    def excludedClasses = ['**/R.class', '**/R$*.class', '**/BuildConfig.class', '**/Manifest*.*', '**/*$inlined$*.*']
-    classDirectories.from(
-            fileTree(dir: './build/intermediates/javac/debug/compileDebugJavaWithJavac/classes', excludes: excludedClasses),
-            files(kotlinClasses).asFileTree.matching { exclude excludedClasses }
-    )
-    reports {
-        xml.required = true
-        html.required = true
-    }
-    sourceDirectories.from files('src/main/kotlin')
-    executionData.from files('build/outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec')
+tasks.register('jacoco') {
+    description = 'Run debug unit tests and generate JaCoCo coverage reports.'
+    dependsOn 'createDebugUnitTestCoverageReport'
 }
 
 static decodeFileFromBase64Env(String name, String fileName, String ext) {
