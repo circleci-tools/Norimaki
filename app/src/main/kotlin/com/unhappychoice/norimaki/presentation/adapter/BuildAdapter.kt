@@ -8,15 +8,11 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.*
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.getTimeAgo
-import com.unhappychoice.norimaki.extension.subscribeNext
 import de.hdodenhof.circleimageview.CircleImageView
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
 class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.ViewHolder>() {
@@ -40,8 +36,14 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
         holder.bind(builds.value[position])
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.clearBoundItem()
+        super.onViewRecycled(holder)
+    }
+
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(build: Build) {
+            boundItem = build
             repositoryTitle.text = build.repositoryWithWorkflowString()
             branchTitle.text = build.revisionString()
             commitTitle.text = build.subject
@@ -50,11 +52,13 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
 
             Glide.with(context).load(build.avatarUrl())
                 .into(author)
-
-            view.clicks()
-                .subscribeNext { onClickItem.onNext(build) }
-                .addTo(bag)
         }
+
+        fun clearBoundItem() {
+            boundItem = null
+        }
+
+        private var boundItem: Build? = null
 
         private val author = view.findViewById<CircleImageView>(R.id.author)
         private val indicator = view.findViewById<View>(R.id.statusIndicator)
@@ -62,9 +66,9 @@ class BuildAdapter(val context: Context) : RecyclerView.Adapter<BuildAdapter.Vie
         private val branchTitle = view.findViewById<TextView>(R.id.branchTitle)
         private val commitTitle = view.findViewById<TextView>(R.id.commitTitle)
         private val createdAt = view.findViewById<TextView>(R.id.createdAt)
+
+        init {
+            view.setOnClickListener { boundItem?.let(onClickItem::onNext) }
+        }
     }
-
-    fun finalize() = bag.dispose()
-
-    private val bag = CompositeDisposable()
 }

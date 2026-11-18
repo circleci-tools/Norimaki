@@ -7,18 +7,13 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Project
-import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.subscribeNext
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
 class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter.ViewHolder>() {
     val projects = Variable<List<Project>>(emptyList())
     val onClickItem = PublishSubject.create<Project>()
-    private val bag = CompositeDisposable()
 
     init {
         setHasStableIds(true)
@@ -37,15 +32,26 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
         holder.bind(projects.value[position])
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.clearBoundItem()
+        super.onViewRecycled(holder)
+    }
+
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
+        fun bind(project: Project) {
+            boundItem = project
+            projectNameView.text = "${project.username}/${project.reponame}"
+        }
+
+        fun clearBoundItem() {
+            boundItem = null
+        }
+
+        private var boundItem: Project? = null
         private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)
 
-        fun bind(project: Project) {
-            projectNameView.text = "${project.username}/${project.reponame}"
-
-            view.clicks()
-                .subscribeNext { onClickItem.onNext(project) }
-                .addTo(bag)
+        init {
+            view.setOnClickListener { boundItem?.let(onClickItem::onNext) }
         }
     }
 }
