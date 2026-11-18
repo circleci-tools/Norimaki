@@ -26,11 +26,12 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         polling(BUILD_POLLING_SECONDS) { buildId.load(api) }
             .takeUntil { it.isFinished() }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext {
+            .subscribeNext { loadedBuild ->
                 val hadWorkflow = hasWorkflow()
-                build = it
-                onLoaded(it)
-                steps.value = it.steps.orEmpty()
+                build = loadedBuild
+                onLoaded(loadedBuild)
+                val snapshot = loadedBuild.steps.orEmpty()
+                if (steps.value != snapshot) steps.value = snapshot
                 if (hasWorkflow() != hadWorkflow) activity.invalidateOptionsMenu()
             }
             .addTo(bag)
