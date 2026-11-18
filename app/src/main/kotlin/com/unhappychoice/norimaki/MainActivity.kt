@@ -12,19 +12,21 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
-import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.di.applicationModule
+import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
+import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
-import com.unhappychoice.norimaki.presentation.view.NavigationView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
+import io.reactivex.disposables.Disposable
 import mortar.MortarScope
 import mortar.bundler.BundleServiceRunner
 import org.kodein.di.DI
+import org.kodein.di.instance
 
 class MainActivity : AppCompatActivity() {
     val module by lazy {
@@ -42,6 +44,8 @@ class MainActivity : AppCompatActivity() {
     val binding by lazy {
         ActivityMainBinding.inflate(layoutInflater)
     }
+
+    private var projectNavigation: Disposable? = null
 
     private val flowBackCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
@@ -74,9 +78,12 @@ class MainActivity : AppCompatActivity() {
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
         setupView()
+        val eventBus: EventBusService by module.instance()
+        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
     }
 
     override fun onDestroy() {
+        projectNavigation?.dispose()
         scope.destroy()
         super.onDestroy()
     }
