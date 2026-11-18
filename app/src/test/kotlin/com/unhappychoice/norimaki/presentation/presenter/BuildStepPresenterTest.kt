@@ -74,11 +74,11 @@ class BuildStepPresenterTest : DescribeSpec({
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
-                        observer.values().map { it.single().toInt() } shouldBe listOf(0, 1, 2, 3, 4)
+                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4)
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.values().map { it.single().toInt() } shouldBe listOf(0, 1, 2, 3, 4, 100)
+                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4, 100)
                     } finally {
                         observer.dispose()
                     }

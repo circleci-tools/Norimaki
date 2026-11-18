@@ -47,6 +47,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
+        binding.testResults.setOnClickListener { presenter.goToTestResultsScreen() }
 
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)

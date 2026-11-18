@@ -8,6 +8,7 @@ import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.NorimakiApplication
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
+import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import org.kodein.di.*
 
@@ -22,6 +23,9 @@ fun applicationModule(application: NorimakiApplication) = DI.Module("application
     }
     bind<CircleCIAPIClientV1_1>() with provider {
         CircleCIAPIClient(APITokenPreference(application).token).client1_1()
+    }
+    bind<TestResultsClient>() with provider {
+        TestResultsClient(APITokenPreference(application).token)
     }
     bind<BuildOutputClient>() with provider {
         BuildOutputClient(APITokenPreference(application).token)

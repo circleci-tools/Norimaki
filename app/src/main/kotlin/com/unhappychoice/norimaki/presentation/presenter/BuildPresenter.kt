@@ -9,6 +9,7 @@ import com.unhappychoice.norimaki.domain.service.rebuildWithoutCache
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
@@ -44,6 +45,8 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         if (buildStep.actions.isEmpty()) return
         goTo(activity, BuildStepScreen(build, buildStep))
     }
+
+    fun goToTestResultsScreen() = goTo(activity, TestResultsScreen(build))
 
     fun hasWorkflow(): Boolean = build.workflows?.workflowId != null
 

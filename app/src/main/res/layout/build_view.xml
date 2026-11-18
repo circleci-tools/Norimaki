@@ -5,8 +5,16 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
+    <Button
+        android:id="@+id/testResults"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/test_results_title" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/stepsView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 </com.unhappychoice.norimaki.presentation.view.BuildView>
