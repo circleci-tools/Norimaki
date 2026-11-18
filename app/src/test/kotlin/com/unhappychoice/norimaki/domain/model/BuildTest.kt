@@ -11,13 +11,18 @@ import io.mockk.unmockkStatic
 import java.util.Date
 
 class BuildTest : DescribeSpec({
-    fun build(number: Int = 1, queued: Date? = null, buildStatus: String? = null): Build = mockk {
+    fun build(
+        number: Int = 1,
+        queued: Date? = null,
+        buildStatus: String? = null,
+        vcsHost: String = "github.com"
+    ): Build = mockk {
         every { username } returns "circleci-tools"
         every { reponame } returns "Norimaki"
         every { branch } returns "master"
         every { buildNum } returns number
         every { vcsRevision } returns "abcdef123456"
-        every { vcsUrl } returns "https://github.com/circleci-tools/Norimaki"
+        every { vcsUrl } returns "https://$vcsHost/circleci-tools/Norimaki"
         every { user } returns mapOf("login" to "unhappychoice")
         every { queuedAt } returns queued
         every { status } returns buildStatus
@@ -42,8 +47,9 @@ class BuildTest : DescribeSpec({
     }
 
     describe("Build.uniqueId()") {
-        it("should combine repository and build number") {
-            build(number = 7).uniqueId() shouldBe "circleci-tools / Norimaki/7"
+        it("should combine VCS provider, repository and build number") {
+            build(number = 7).uniqueId() shouldBe "github/circleci-tools/Norimaki/7"
+            build(number = 7, vcsHost = "bitbucket.org").uniqueId() shouldBe "bitbucket/circleci-tools/Norimaki/7"
         }
     }
 
@@ -61,6 +67,21 @@ class BuildTest : DescribeSpec({
     }
 
     describe("List<Build>.addDistinctByNumber()") {
+        it("should retain builds with matching repository and number across providers when merging pages") {
+            val github = build(number = 7)
+            val bitbucket = build(number = 7, vcsHost = "bitbucket.org")
+
+            listOf(github).addDistinctByNumber(listOf(bitbucket)) shouldBe listOf(bitbucket, github)
+        }
+
+        it("should replace only the matching provider's build when polling") {
+            val github = build(number = 7, buildStatus = "running")
+            val bitbucket = build(number = 7, buildStatus = "running", vcsHost = "bitbucket.org")
+            val updated = build(number = 7, buildStatus = "success", vcsHost = "bitbucket.org")
+
+            listOf(github, bitbucket).addDistinctByNumber(listOf(updated)) shouldBe listOf(updated, github)
+        }
+
         it("should prefer new builds and drop duplicates") {
             val old = build(number = 1, buildStatus = "running")
             val updated = build(number = 1, buildStatus = "success")

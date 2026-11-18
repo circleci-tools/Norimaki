@@ -17,10 +17,12 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import mortar.MortarScope
 import org.kodein.di.instance
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()
     val steps = Variable<List<BuildStep>>(listOf())
+    private val rebuildInFlight = AtomicBoolean()
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
@@ -48,19 +50,27 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuild() {
-        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+        if (!rebuildInFlight.compareAndSet(false, true)) return
+
+        Observable.defer { retryBuild() }
             .subscribeOnIoObserveOnUI()
+            .doFinally { rebuildInFlight.set(false) }
             .subscribeNext { goBack(activity) }
             .addTo(bag)
     }
 
     fun rebuildWithoutCache() {
-        val origin = view ?: return
-        api.rebuildWithoutCache(build)
+        val origin = view
+        if (!rebuildInFlight.compareAndSet(false, true)) return
+
+        api.rebuildWithoutCache(build, onFinished = { rebuildInFlight.set(false) })
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribeBy(onError = {}, onNext = { goBackFrom(origin) })
+            .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
             .addTo(bag)
     }
+
+    private fun retryBuild(): Observable<Build> =
+        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
 
     private fun goBackFrom(origin: BuildView) {
         val container = activity.binding.containerView
