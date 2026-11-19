@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -68,8 +69,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+        Observable.defer {
+            var lastPollIds: Set<String>? = null
+            polling(BUILD_LIST_POLLING_SECONDS) {
+                builds.take(1).flatMap { displayed ->
+                    val knownIds = lastPollIds ?: displayed.mapTo(hashSetOf()) { it.uniqueId() }
+                    fetchLatestBuilds(knownIds, ::getBuildsAPI)
+                }.doOnNext { fetched -> lastPollIds = fetched.mapTo(hashSetOf()) { it.uniqueId() } }
+            }
         }
             .subscribeOnIoObserveOnUI()
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }

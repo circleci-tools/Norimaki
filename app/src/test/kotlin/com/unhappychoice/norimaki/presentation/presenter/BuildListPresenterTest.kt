@@ -58,6 +58,52 @@ class BuildListPresenterTest : DescribeSpec({
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
     describe("workflow polling") {
+        it("stops at the first unchanged project page and displays a new workflow job once") {
+            val scheduler = TestScheduler()
+            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build("target", 1)
+            val added = build("target", 200)
+            var projectBuilds = (199 downTo 2).map { build("other", it) } + known
+            val offsets = mutableListOf<Int>()
+            every {
+                api.getProjectBuilds(
+                    vcsType = "github", userName = "owner", project = "repo",
+                    offset = any(), limit = BUILD_LIST_PAGE_SIZE
+                )
+            } answers {
+                val offset = arg<Int>(3)
+                offsets.add(offset)
+                Observable.just(projectBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            try {
+                presenter.pollLatestBuilds()
+                scheduler.triggerActions()
+                offsets shouldBe (0 until 200 step BUILD_LIST_PAGE_SIZE).toList()
+                builds.assertValues(emptyList(), listOf(known))
+
+                offsets.clear()
+                scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+                offsets shouldBe listOf(0)
+                builds.assertValues(emptyList(), listOf(known))
+
+                projectBuilds = listOf(added) + projectBuilds
+                offsets.clear()
+                repeat(2) {
+                    scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+                }
+                offsets shouldBe listOf(0, 0)
+                builds.assertValues(emptyList(), listOf(known), listOf(added, known))
+            } finally {
+                presenter.bag.dispose()
+                builds.dispose()
+                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+            }
+        }
+
         it("recovers matching builds beyond the first page after pagination ends") {
             val scheduler = TestScheduler()
             val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
