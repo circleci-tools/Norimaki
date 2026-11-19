@@ -21,7 +21,6 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
-import mortar.MortarScope
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
 
@@ -35,23 +34,23 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private val history = Variable(BuildHistory())
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
-    private val pageUpdates = observePages()
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
-
+    override fun onAuthenticated() {
+        observePages().addTo(bag)
         getBuilds()
 
         pollLatestBuilds()
     }
 
-    override fun onExitScope() {
-        pageUpdates.dispose()
-        super.onExitScope()
+    override fun onSessionEnded() {
+        isLoading.value = false
+        history.value = BuildHistory()
+        hasMore.value = true
+        page.value = 0
     }
 
     fun getBuilds() {
-        if (isLoading.value || !hasMore.value) return
+        if (account == null || isLoading.value || !hasMore.value) return
         isLoading.value = true
         getBuildsAPI(offset = page.value * BUILD_LIST_PAGE_SIZE)
             .singleOrError()
@@ -67,7 +66,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         if (isWorkflow && !canScroll) getBuilds()
     }
 
-    fun pollLatestBuilds() {
+    private fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) {
             builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
         }
@@ -77,6 +76,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun goToBuildView(build: Build) {
+        if (account == null) return
         goTo(activity, BuildScreen(build))
     }
 
@@ -102,10 +102,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private data class IncomingPage(val builds: List<Build>, val paginated: Boolean)
 
-    private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
-        when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
-            else -> api.getProjectBuilds(
+    private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
+        val client = account?.client ?: return Observable.empty()
+        return when (projectName) {
+            "" -> client.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
+            else -> client.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),
                 project = repoName(),
@@ -113,6 +114,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
                 limit = BUILD_LIST_PAGE_SIZE
             )
         }
+    }
 
     private fun vcsType(): String = projectName.split("/").let {
         if (it.size >= 3) it[0] else "github"

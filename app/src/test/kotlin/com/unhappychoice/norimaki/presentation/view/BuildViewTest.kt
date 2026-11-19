@@ -8,7 +8,9 @@ import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import flow.Flow
@@ -47,7 +49,6 @@ class BuildViewTest {
         every { vcsRevision } returns "abc123def"
     }
     private val api = mockk<CircleCIAPIClientV1_1> {
-        every { getMe() } returns Observable.never()
         every { getBuild("github", "owner", "repo", 123) } returns Observable.never()
     }
 
@@ -111,7 +112,7 @@ class BuildViewTest {
                 override fun getLayoutResource() = buildScreen.getLayoutResource()
                 override fun module(activityModule: DI) = DI {
                     extend(buildScreen.module(activityModule), allowOverride = true)
-                    bind<CircleCIAPIClientV1_1>(overrides = true) with singleton { api }
+                    bind<SessionService>(overrides = true) with singleton { testSession(api) }
                 }
             })
             shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)

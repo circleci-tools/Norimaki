@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.findByStepNumber
@@ -17,20 +18,19 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
-import mortar.MortarScope
 import org.kodein.di.instance
 
 class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     val build: Build by instance()
     val buildStep: BuildStep by instance()
-    private val outputClient: BuildOutputClient by instance()
+    private lateinit var outputClient: BuildOutputClient
 
     val logString: Variable<String> = Variable("")
 
     val logLoadFailed = Variable(false)
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onAuthenticated() {
+        outputClient = BuildOutputClient(requireNotNull(account).token)
         when (buildStep.isFinished()) {
             true -> getActions()
             false -> pollRunningActions()
@@ -38,25 +38,27 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     }
 
     fun getActions() {
+        if (account == null) return
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
-        Observable.concat(actions.map { outputClient.fetchOutput(it) })
+        completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
             .subscribeNext { appendLog(it) }
             .addTo(bag)
     }
 
-    internal fun runningOutput(): Observable<String> {
+    internal fun runningOutput(client: CircleCIAPIClientV1_1, outputClient: BuildOutputClient): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
             outputUrls,
-            stepFinished(buildStep.step()),
+            stepFinished(client, buildStep.step()),
             outputClient::fetchRawOutput,
             fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
         )
     }
 
     private fun pollRunningActions() {
-        runningOutput()
+        val client = account?.client ?: return
+        runningOutput(client, outputClient)
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
@@ -66,9 +68,9 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun stepFinished(stepNumber: Int?): Observable<Build> =
+    private fun stepFinished(client: CircleCIAPIClientV1_1, stepNumber: Int?): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
-            api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+            client.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
         }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
 
     private fun appendLog(log: String) {
@@ -79,6 +81,15 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
         const val LOG_POLLING_SECONDS = 1L
     }
 }
+
+internal fun completedActionLogs(
+    outputUrls: List<String>,
+    fetchOutput: (String) -> Observable<String>
+): Observable<String> =
+    Observable.fromIterable(outputUrls).concatMap { url ->
+        Observable.defer { fetchOutput(url) }
+            .onErrorReturnItem("\n[Some output could not be loaded.]\n")
+    }
 
 internal fun pollActionOutputs(
     outputUrls: List<String>,

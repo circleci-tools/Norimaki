@@ -6,7 +6,9 @@ import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.view.BuildView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -17,13 +19,17 @@ import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
-import java.util.concurrent.TimeUnit
+import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
+import java.util.concurrent.TimeUnit
 
 class BuildPresenterTest : DescribeSpec({
+    lateinit var scope: MortarScope
     lateinit var presenter: BuildPresenter
+    lateinit var view: BuildView
+    lateinit var session: SessionService
     lateinit var api: CircleCIAPIClientV1_1
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
@@ -36,6 +42,7 @@ class BuildPresenterTest : DescribeSpec({
         retry = PublishSubject.create()
         deleteCache = PublishSubject.create()
         api = mockk {
+            every { getBuild("github", "owner", "repo", 123) } returns Observable.never()
             every { retryBuild("github", "owner", "repo", 123) } answers { retry }
             every { deleteCache("github", "owner", "repo") } answers { deleteCache }
         }
@@ -45,21 +52,35 @@ class BuildPresenterTest : DescribeSpec({
             every { reponame } returns "repo"
             every { buildNum } returns 123
         }
+        session = testSession(api)
         presenter = BuildPresenter().apply {
             di = DI {
                 bind<Build>() with singleton { build }
-                bind<CircleCIAPIClientV1_1>() with singleton { api }
+                bind<SessionService>() with singleton { session }
             }
         }
+        view = mockk()
+        scope = presenter.attachToTestScope(view)
     }
 
     afterEach {
-        presenter.bag.clear()
+        scope.destroy()
         RxAndroidPlugins.reset()
         RxJavaPlugins.reset()
     }
 
     describe("rebuild submissions") {
+        it("cancels cache deletion and blocks rebuilds when the session changes") {
+            presenter.rebuildWithoutCache()
+            deleteCache.hasObservers() shouldBe true
+
+            session.replace("replacement-token").test().assertComplete()
+            deleteCache.hasObservers() shouldBe false
+            presenter.rebuild()
+
+            verify(exactly = 0) { api.retryBuild(any(), any(), any(), any()) }
+        }
+
         it("should block duplicate submissions, report retry failure, and allow another rebuild") {
             presenter.rebuild()
             presenter.rebuild()
@@ -120,21 +141,14 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 2) { api.retryBuild(any(), any(), any(), any()) }
         }
 
-        it("should complete the cache-free rebuild and retain its submission guard after detachment") {
+        it("should complete the cache-free rebuild after detachment") {
             presenter.rebuildWithoutCache()
-            presenter.bag.clear()
-            presenter.rebuild()
-
-            verify(exactly = 0) { api.retryBuild(any(), any(), any(), any()) }
+            presenter.dropView(view)
 
             deleteCache.onNext(Unit)
-            presenter.rebuildWithoutCache()
+            retry.onComplete()
             verify(exactly = 1) { api.deleteCache(any(), any(), any()) }
             verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
-
-            retry.onComplete()
-            presenter.rebuild()
-            verify(exactly = 2) { api.retryBuild(any(), any(), any(), any()) }
         }
     }
 })
@@ -157,18 +171,19 @@ class BuildPresenterPollingTest : DescribeSpec({
             di = DI {
                 bind<Build>() with singleton { build }
                 bind<MainActivity>() with singleton { activity }
-                bind<CircleCIAPIClientV1_1>() with singleton { api }
+                bind<SessionService>() with singleton { testSession(api) }
             }
         }
         val snapshots = presenter.steps.asObservable().test()
 
+        var scope: MortarScope? = null
         try {
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
             RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
-            presenter.pollBuild()
+            scope = presenter.attachToTestScope(mockk<BuildView>())
             snapshots.assertValues(emptyList(), listOf(first))
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
@@ -186,7 +201,7 @@ class BuildPresenterPollingTest : DescribeSpec({
             verify(exactly = 1) { flow.set(capture(screen)) }
             (screen.captured.buildStep === changed) shouldBe true
         } finally {
-            presenter.bag.clear()
+            scope?.destroy()
             snapshots.dispose()
             unmockkStatic(Flow::class)
             RxAndroidPlugins.reset()
