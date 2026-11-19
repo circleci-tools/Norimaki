@@ -3,11 +3,15 @@ package com.unhappychoice.norimaki.presentation.view
 import android.app.Activity
 import android.app.Application
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
-import com.unhappychoice.norimaki.extension.Variable
+import androidx.lifecycle.Observer
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
+import com.unhappychoice.norimaki.presentation.viewmodel.APITokenViewModel
+import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.reactivex.Single
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -28,9 +32,16 @@ class APITokenViewLoggingTest {
         val storedToken = "dummy-stored-token"
         val enteredToken = "dummy-entered-token"
         val editedToken = "dummy-edited-token"
-        val token = Variable(storedToken)
+        val session = mockk<SessionService> {
+            every { savedToken } returns storedToken
+            every { replace(editedToken) } returns Single.just(mockk())
+        }
+        val model = APITokenViewModel(session)
         val presenter = mockk<APITokenPresenter>(relaxed = true) {
-            every { this@mockk.token } returns token
+            every { this@mockk.model } returns model
+            every { observeVerification(any()) } answers {
+                model.verification.observeForever(firstArg<Observer<TokenVerification>>())
+            }
         }
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
@@ -40,11 +51,10 @@ class APITokenViewLoggingTest {
             assertEquals(storedToken, input.text.toString())
 
             input.setText(enteredToken)
-            assertEquals(enteredToken, token.value)
+            assertEquals(enteredToken, input.text.toString())
             input.setText(editedToken)
-            assertEquals(editedToken, token.value)
             form.submitButton.performClick()
-            verify(exactly = 1) { presenter.saveToken() }
+            verify(exactly = 1) { session.replace(editedToken) }
             verify(exactly = 1) { presenter.goToBuildList() }
 
             val reopened = showForm(activity, presenter)
