@@ -21,6 +21,39 @@ class SessionServiceTest : DescribeSpec({
             restored.client shouldBe fixture.firstClient
         }
 
+        it("shares an in-flight restore across screens even when the first screen leaves") {
+            val verification = SingleSubject.create<User>()
+            val fixture = SessionFixture(verification)
+            val firstScreen = fixture.session.restore().test()
+            val secondScreen = fixture.session.restore().test()
+            firstScreen.dispose()
+            val thirdScreen = fixture.session.restore().test()
+
+            fixture.verifiedClients shouldBe listOf(fixture.firstClient)
+            verification.onSuccess(fixture.firstUser)
+
+            val restored = fixture.session.restore().blockingGet()
+            secondScreen.assertResult(restored)
+            thirdScreen.assertResult(restored)
+            fixture.verifiedClients shouldBe listOf(fixture.firstClient)
+        }
+
+        it("shares a restore failure and verifies again on retry") {
+            val verification = SingleSubject.create<User>()
+            val fixture = SessionFixture(verification)
+            val firstScreen = fixture.session.restore().test()
+            val secondScreen = fixture.session.restore().test()
+            val failure = IllegalStateException("Rejected token")
+
+            verification.onError(failure)
+
+            firstScreen.assertError(failure)
+            secondScreen.assertError(failure)
+            fixture.verifiedClients shouldBe listOf(fixture.firstClient)
+            fixture.session.restore().test().assertError(failure)
+            fixture.verifiedClients shouldBe listOf(fixture.firstClient, fixture.firstClient)
+        }
+
         it("clears the first account while verifying and publishes the second account on success") {
             val fixture = SessionFixture()
             val first = fixture.session.restore().blockingGet()
@@ -70,7 +103,7 @@ class SessionServiceTest : DescribeSpec({
     }
 })
 
-private class SessionFixture {
+private class SessionFixture(firstVerification: Single<User>? = null) {
     var savedToken = "first"
     val firstClient = mockk<CircleCIAPIClientV1_1>()
     val secondClient = mockk<CircleCIAPIClientV1_1>()
@@ -85,7 +118,7 @@ private class SessionFixture {
         createClient = { if (it == "first") firstClient else secondClient },
         verify = {
             verifiedClients.add(it)
-            if (it === firstClient) Single.just(firstUser) else secondVerification
+            if (it === firstClient) firstVerification ?: Single.just(firstUser) else secondVerification
         }
     )
 }

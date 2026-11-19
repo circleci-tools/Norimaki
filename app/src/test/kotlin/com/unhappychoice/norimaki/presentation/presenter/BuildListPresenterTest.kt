@@ -20,6 +20,7 @@ import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
+import java.util.concurrent.TimeUnit
 
 class BuildListPresenterTest : DescribeSpec({
     lateinit var scope: MortarScope
@@ -70,6 +71,44 @@ class BuildListPresenterTest : DescribeSpec({
 
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
+
+    describe("workflow polling") {
+        it("recovers matching builds beyond the first page after pagination ends") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build("target", 1)
+            val missed = build("target", 2)
+            val firstPage = (22 downTo 3).map { build("other", it) }
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(known)),
+                Observable.just(listOf(known)),
+                Observable.just(firstPage)
+            )
+            every { api.pageAt(20) } returnsMany listOf(
+                Observable.just(emptyList()),
+                Observable.just(listOf(missed, known))
+            )
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            presenter.getBuilds()
+            presenter.isLoading.value shouldBe true
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            verify(exactly = 2) { api.pageAt(0) }
+            presenter.page.value shouldBe 1
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            presenter.hasMore.value shouldBe false
+
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+
+            builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
+            verify(exactly = 2) { api.pageAt(20) }
+            verify(exactly = 0) { api.pageAt(40) }
+            presenter.page.value shouldBe 2
+            presenter.hasMore.value shouldBe false
+            builds.dispose()
+        }
+    }
 
     describe("workflow pagination") {
         it("loads through filtered-out pages and stops after an empty API page") {

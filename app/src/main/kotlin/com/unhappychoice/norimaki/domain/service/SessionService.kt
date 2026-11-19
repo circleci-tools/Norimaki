@@ -22,27 +22,53 @@ class SessionService(
     private val verify: (CircleCIAPIClientV1_1) -> Single<User>
 ) {
     private val active = BehaviorSubject.createDefault<Optional<VerifiedSession>>(None)
+    private val lock = Any()
     private var attempt = 0
+    private var pendingRestore: Single<VerifiedSession>? = null
 
     val changes: Observable<Optional<VerifiedSession>> = active.hide()
     val savedToken: String get() = readToken()
 
     fun restore(): Single<VerifiedSession> = Single.defer {
-        active.value?.toNullable()?.let { Single.just(it) } ?: authenticate(savedToken)
+        synchronized(lock) {
+            active.value?.toNullable()?.let { Single.just(it) } ?: pendingRestore ?: startRestore()
+        }
     }
 
-    fun replace(token: String): Single<VerifiedSession> = authenticate(token)
+    fun replace(token: String): Single<VerifiedSession> = Single.defer {
+        synchronized(lock) {
+            pendingRestore = null
+            authenticate(token, ++attempt)
+        }
+    }
 
-    private fun authenticate(token: String): Single<VerifiedSession> = Single.defer {
+    private fun startRestore(): Single<VerifiedSession> {
+        val token = savedToken
         val currentAttempt = ++attempt
-        active.onNext(None)
+        return authenticate(token, currentAttempt)
+            .doOnEvent { _, _ ->
+                synchronized(lock) {
+                    if (currentAttempt == attempt) pendingRestore = null
+                }
+            }
+            .cache()
+            .also { pendingRestore = it }
+    }
+
+    private fun authenticate(token: String, currentAttempt: Int): Single<VerifiedSession> = Single.defer {
+        synchronized(lock) {
+            check(currentAttempt == attempt) { "Authentication was superseded" }
+            active.onNext(None)
+        }
         require(token.isNotBlank()) { "Enter an API token" }
         val client = createClient(token)
         verify(client).map { user ->
-            check(currentAttempt == attempt) { "Authentication was superseded" }
-            VerifiedSession(token, user, client).also {
-                writeToken(token)
-                active.onNext(Some(it))
+            synchronized(lock) {
+                check(currentAttempt == attempt) { "Authentication was superseded" }
+                VerifiedSession(token, user, client).also {
+                    writeToken(token)
+                    active.onNext(Some(it))
+                }
             }
         }
     }
