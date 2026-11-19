@@ -20,10 +20,12 @@ import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.CompletableSubject
 import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
+import java.util.concurrent.TimeUnit
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
@@ -33,6 +35,8 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
+    private val initialLoadSettled = CompletableSubject.create()
+    private var initialPage = emptyList<Build>()
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
     private val pageUpdates = observePages()
@@ -40,9 +44,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
 
-        getBuilds()
-
-        pollLatestBuilds()
+        startBuilds()
     }
 
     override fun onExitScope() {
@@ -57,7 +59,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .singleOrError()
             .toObservable()
             .subscribeOnIoObserveOnUI()
-            .doOnError { isLoading.value = false }
+            .doOnError {
+                isLoading.value = false
+                initialLoadSettled.onComplete()
+            }
             .doOnDispose { isLoading.value = false }
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = true)) }
             .addTo(bag)
@@ -67,15 +72,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         if (isWorkflow && !canScroll) getBuilds()
     }
 
-    fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
-        }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
-            .addTo(bag)
-    }
-
     fun goToBuildView(build: Build) {
         goTo(activity, BuildScreen(build))
     }
@@ -83,6 +79,27 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
     }
+
+    internal fun startBuilds() {
+        getBuilds()
+        initialLoadSettled
+            .andThen(Observable.timer(BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS))
+            .flatMap { polling(BUILD_LIST_POLLING_SECONDS, fetch = ::refreshBuilds) }
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
+            .addTo(bag)
+    }
+
+    private fun refreshBuilds(): Observable<List<Build>> = Observable.just(Unit)
+        .observeOn(AndroidSchedulers.mainThread())
+        .flatMap {
+            if (page.value == 0) {
+                getBuilds()
+                Observable.empty()
+            } else {
+                fetchLatestBuilds(history.value.builds + initialPage, ::getBuildsAPI)
+                    .subscribeOnIoObserveOnUI()
+            }
+        }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
         val current = history.value
@@ -94,9 +111,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }.subscribeNext { (incoming, updated) ->
         if (updated !== history.value) history.value = updated
         if (incoming.paginated) {
+            if (page.value == 0) initialPage = incoming.builds
             hasMore.value = incoming.builds.isNotEmpty()
             isLoading.value = false
             page.value += 1
+            initialLoadSettled.onComplete()
         }
     }
 
