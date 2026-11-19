@@ -20,12 +20,6 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
     val onClickItem = PublishSubject.create<Project>()
     private val bag = CompositeDisposable()
 
-    init {
-        setHasStableIds(true)
-    }
-
-    override fun getItemId(position: Int): Long = projects.value[position].vcsUrl.hashCode().toLong()
-
     override fun getItemCount(): Int = projects.value.size
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
