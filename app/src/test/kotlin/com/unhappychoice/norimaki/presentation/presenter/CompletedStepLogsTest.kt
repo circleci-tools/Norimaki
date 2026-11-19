@@ -2,7 +2,9 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
+import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.android.plugins.RxAndroidPlugins
@@ -20,6 +22,7 @@ import org.kodein.di.bind
 import org.kodein.di.singleton
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -27,22 +30,21 @@ class CompletedStepLogsTest {
     @Test
     fun displaysSuccessfulDownloadsAroundAnHttpFailure() {
         val step = BuildStep("Run tests", listOf(action("first"), action("failed"), action("last")))
-        val presenter = BuildStepPresenter().apply {
+        val presenter = BuildStepPresenter(::outputClient).apply {
             di = DI {
                 bind<BuildStep>() with singleton { step }
-                bind<BuildOutputClient>() with singleton { outputClient() }
+                bind<SessionService>() with singleton { testSession(mockk()) }
             }
         }
         val previousIo = RxJavaPlugins.getIoSchedulerHandler()
         val previousMain = RxAndroidPlugins.getOnMainThreadSchedulerHandler()
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+        val scope = presenter.attachToTestScope(mockk<BuildStepView>())
         try {
-            presenter.getActions()
-
             assertEquals("first output<br>[Some output could not be loaded.]<br>last output", presenter.logString.value)
         } finally {
-            presenter.bag.dispose()
+            scope.destroy()
             RxAndroidPlugins.setMainThreadSchedulerHandler(previousMain)
             RxJavaPlugins.setIoSchedulerHandler(previousIo)
         }
@@ -50,9 +52,10 @@ class CompletedStepLogsTest {
 
     private fun action(path: String): BuildAction = mockk {
         every { outputUrl } returns "https://example.com/$path"
+        every { endTime } returns Date(0)
     }
 
-    private fun outputClient(): BuildOutputClient {
+    private fun outputClient(token: String): BuildOutputClient {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             val action = request.url.pathSegments.single()
@@ -68,6 +71,6 @@ class CompletedStepLogsTest {
                 .body(body.toResponseBody())
                 .build()
         }.build()
-        return BuildOutputClient("token", client)
+        return BuildOutputClient(token, client)
     }
 }
