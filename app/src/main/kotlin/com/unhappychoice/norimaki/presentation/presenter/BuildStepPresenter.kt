@@ -21,7 +21,9 @@ import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
 import java.util.concurrent.atomic.AtomicBoolean
 
-class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
+class BuildStepPresenter(
+    private val createOutputClient: (String) -> BuildOutputClient = { BuildOutputClient(it) }
+) : PresenterNeedsToken<BuildStepView>() {
     val build: Build by instance()
     val buildStep: BuildStep by instance()
     private lateinit var outputClient: BuildOutputClient
@@ -31,7 +33,7 @@ class BuildStepPresenter: PresenterNeedsToken<BuildStepView>() {
     val logLoadFailed = Variable(false)
 
     override fun onAuthenticated() {
-        outputClient = BuildOutputClient(requireNotNull(account).token)
+        outputClient = createOutputClient(requireNotNull(account).token)
         when (buildStep.isFinished()) {
             true -> getActions()
             false -> pollRunningActions()

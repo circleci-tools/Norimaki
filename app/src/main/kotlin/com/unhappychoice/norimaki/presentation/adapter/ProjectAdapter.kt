@@ -33,11 +33,13 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
     }
 
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
-        private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)
-
         fun bind(project: Project) {
             projectNameView.text = "${project.username}/${project.reponame}"
+        }
 
+        private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)
+
+        init {
             view.setOnClickListener {
                 projects.value.getOrNull(bindingAdapterPosition)?.let(onClickItem::onNext)
             }
