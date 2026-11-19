@@ -2,6 +2,8 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -12,6 +14,7 @@ import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
+import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
@@ -19,29 +22,40 @@ import java.util.Date
 import java.util.concurrent.TimeUnit
 
 class BuildListPresenterTest : DescribeSpec({
-    beforeSpec {
-        RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
+    lateinit var scope: MortarScope
+
+    lateinit var scheduler: TestScheduler
+
+    beforeEach {
+        scheduler = TestScheduler()
+        RxJavaPlugins.setComputationSchedulerHandler { scheduler }
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
     }
+
+    afterEach { scope.destroy() }
 
     afterSpec {
         RxJavaPlugins.reset()
         RxAndroidPlugins.reset()
     }
 
-    fun presenter(api: CircleCIAPIClientV1_1) = BuildListPresenter().apply {
+    fun presenter(
+        api: CircleCIAPIClientV1_1,
+        session: SessionService = testSession(api)
+    ) = BuildListPresenter().apply {
         di = DI {
-            bind<CircleCIAPIClientV1_1>() with singleton { api }
+            bind<SessionService>() with singleton { session }
             bind<String>() with singleton { "github/owner/repo" }
         }
+        scope = attachToTestScope(mockk<BuildListView>())
     }
 
     fun build(number: Int): Build = mockk {
+        every { vcsUrl } returns "https://github.com/owner/repo"
         every { username } returns "owner"
         every { reponame } returns "repo"
-        every { vcsUrl } returns "https://github.com/owner/repo"
         every { buildNum } returns number
         every { queuedAt } returns Date(number.toLong())
     }
@@ -51,51 +65,39 @@ class BuildListPresenterTest : DescribeSpec({
 
     describe("project build polling") {
         it("recovers builds beyond the first page after pagination ends") {
-            val scheduler = TestScheduler()
-            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
-            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
-            try {
-                val api = mockk<CircleCIAPIClientV1_1>()
-                val known = build(1)
-                val missed = build(2)
-                val firstPage = (22 downTo 3).map(::build)
-                every { api.pageAt(0) } returnsMany listOf(
-                    Observable.just(listOf(known)),
-                    Observable.just(listOf(known)),
-                    Observable.just(firstPage)
-                )
-                every { api.pageAt(20) } returnsMany listOf(
-                    Observable.just(emptyList()),
-                    Observable.just(listOf(missed, known))
-                )
-                val presenter = presenter(api)
-                val builds = presenter.builds.test()
-                try {
-                    presenter.getBuilds()
-                    presenter.isLoading.value shouldBe true
-                    presenter.getBuilds()
-                    scheduler.triggerActions()
-                    verify(exactly = 1) { api.pageAt(0) }
-                    presenter.getBuilds()
-                    scheduler.triggerActions()
-                    presenter.hasMore.value shouldBe false
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build(1)
+            val missed = build(2)
+            val firstPage = (22 downTo 3).map(::build)
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(known)),
+                Observable.just(listOf(known)),
+                Observable.just(firstPage)
+            )
+            every { api.pageAt(20) } returnsMany listOf(
+                Observable.just(emptyList()),
+                Observable.just(listOf(missed, known))
+            )
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            presenter.getBuilds()
+            presenter.isLoading.value shouldBe true
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            verify(exactly = 2) { api.pageAt(0) }
+            presenter.page.value shouldBe 1
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            presenter.hasMore.value shouldBe false
 
-                    presenter.pollLatestBuilds()
-                    scheduler.triggerActions()
-                    scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
 
-                    builds.assertValues(emptyList(), listOf(known), firstPage + listOf(missed, known))
-                    verify(exactly = 2) { api.pageAt(20) }
-                    verify(exactly = 0) { api.pageAt(40) }
-                    presenter.page.value shouldBe 2
-                    presenter.hasMore.value shouldBe false
-                } finally {
-                    presenter.bag.dispose()
-                    builds.dispose()
-                }
-            } finally {
-                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
-            }
+            builds.assertValues(emptyList(), listOf(known), firstPage + listOf(missed, known))
+            verify(exactly = 2) { api.pageAt(20) }
+            verify(exactly = 0) { api.pageAt(40) }
+            presenter.page.value shouldBe 2
+            presenter.hasMore.value shouldBe false
+            builds.dispose()
         }
     }
 
@@ -110,11 +112,35 @@ class BuildListPresenterTest : DescribeSpec({
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
-            repeat(4) { presenter.getBuilds() }
+            scheduler.triggerActions()
+            repeat(3) {
+                presenter.getBuilds()
+                scheduler.triggerActions()
+            }
 
             builds.values().last().toSet() shouldBe setOf(latest, older)
             presenter.hasMore.value shouldBe false
             verify(exactly = 0) { api.pageAt(60) }
+        }
+
+        it("clears loaded builds and discards queued updates when the session changes") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val first = build(2)
+            every { api.pageAt(0) } returns Observable.just(listOf(first))
+            every { api.pageAt(20) } returns Observable.just(listOf(build(1)))
+            val presenter = presenter(api, session = session)
+            val builds = presenter.builds.test()
+            scheduler.triggerActions()
+            builds.assertValues(emptyList(), listOf(first))
+
+            presenter.getBuilds()
+            session.replace("replacement-token").test().assertComplete()
+            scheduler.triggerActions()
+
+            builds.assertValues(emptyList(), listOf(first), emptyList())
+            presenter.page.value shouldBe 0
+            presenter.isLoading.value shouldBe false
         }
     }
 })

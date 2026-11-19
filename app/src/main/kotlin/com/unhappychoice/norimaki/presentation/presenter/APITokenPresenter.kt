@@ -1,27 +1,35 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.unhappychoice.norimaki.MainActivity
-import com.unhappychoice.norimaki.extension.Variable
-import com.unhappychoice.norimaki.extension.goTo
-import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.core.Presenter
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
-import mortar.MortarScope
+import com.unhappychoice.norimaki.presentation.viewmodel.APITokenViewModel
+import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
+import flow.Direction
+import flow.Flow
 import org.kodein.di.instance
 
-class APITokenPresenter: Presenter<APITokenView>() {
-    val activity: MainActivity by instance()
-    val token: Variable<String> = Variable("")
+class APITokenPresenter : Presenter<APITokenView>() {
+    private val activity: MainActivity by instance()
+    private val session: SessionService by instance()
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
-        token.value = APITokenPreference(activity.applicationContext).token
+    val model: APITokenViewModel by lazy {
+        val factory = viewModelFactory { initializer { APITokenViewModel(session) } }
+        ViewModelProvider(activity, factory)[APITokenViewModel::class.java]
     }
 
-    fun saveToken() {
-        APITokenPreference(activity).token = token.value
+    fun observeVerification(observer: Observer<TokenVerification>) {
+        model.verification.observe(activity, observer)
     }
 
-    fun goToBuildList() = goTo(activity, BuildListScreen(""))
+    fun goToBuildList() {
+        model.reset()
+        Flow.get(activity).replaceHistory(BuildListScreen(""), Direction.REPLACE)
+    }
 }

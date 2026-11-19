@@ -5,10 +5,12 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowHttpException
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
+import com.unhappychoice.norimaki.presentation.view.WorkflowView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -25,6 +27,7 @@ import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.CompletableSubject
+import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
@@ -34,10 +37,17 @@ class WorkflowPresenterTest : DescribeSpec({
     val hold = WorkflowJob("job", "deploy", "approval", "on_hold", null, "request")
     val resolved = hold.copy(status = "success")
 
+    var scope: MortarScope? = null
+
     beforeSpec {
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+    }
+
+    afterEach {
+        scope?.destroy()
+        scope = null
     }
 
     afterSpec {
@@ -48,14 +58,18 @@ class WorkflowPresenterTest : DescribeSpec({
     fun presenter(
         client: WorkflowClient,
         api: CircleCIAPIClientV1_1 = mockk(),
-        activity: MainActivity = mockk()
+        activity: MainActivity = mockk(),
+        session: SessionService = testSession(api)
     ) =
-        WorkflowPresenter(WorkflowScreen("github/owner/repo", "run", "deploy")).apply {
+        WorkflowPresenter(WorkflowScreen("github/owner/repo", "run", "deploy")) { token ->
+            token shouldBe "test-token"
+            client
+        }.apply {
             di = DI {
                 bind<MainActivity>() with singleton { activity }
-                bind<WorkflowClient>() with singleton { client }
-                bind<CircleCIAPIClientV1_1>() with singleton { api }
+                bind<SessionService>() with singleton { session }
             }
+            scope = attachToTestScope(mockk<WorkflowView>())
         }
 
     describe("workflow approvals") {
@@ -68,7 +82,6 @@ class WorkflowPresenterTest : DescribeSpec({
             val presenter = presenter(client)
             val updates = presenter.updates.test()
 
-            presenter.refresh()
             presenter.canApprove(hold) shouldBe true
             presenter.approve(hold)
             presenter.approve(hold)
@@ -89,13 +102,31 @@ class WorkflowPresenterTest : DescribeSpec({
             val presenter = presenter(client)
             val updates = presenter.updates.test()
 
-            presenter.refresh()
             presenter.approve(hold)
             presenter.approve(hold)
 
             presenter.canApprove(hold) shouldBe false
             updates.values().last().refreshFailed shouldBe true
             verify(exactly = 1) { client.approve("run", "request") }
+        }
+
+        it("clears held jobs and blocks requests when the verified session changes") {
+            val session = testSession(mockk())
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returns Single.just(listOf(hold))
+            }
+            val presenter = presenter(client, session = session)
+            val updates = presenter.updates.test()
+
+            presenter.canApprove(hold) shouldBe true
+            session.replace("replacement-token").test().assertComplete()
+            presenter.approve(hold)
+            presenter.refresh()
+
+            updates.values().last() shouldBe WorkflowState()
+            presenter.canApprove(hold) shouldBe false
+            verify(exactly = 0) { client.approve(any(), any()) }
+            verify(exactly = 1) { client.jobs("run") }
         }
 
         listOf(
@@ -111,7 +142,6 @@ class WorkflowPresenterTest : DescribeSpec({
                 val presenter = presenter(client)
                 val updates = presenter.updates.test()
 
-                presenter.refresh()
                 presenter.approve(hold)
 
                 updates.values().last() shouldBe WorkflowState(listOf(latestJob), message = message)
@@ -123,7 +153,7 @@ class WorkflowPresenterTest : DescribeSpec({
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.error(IOException())
         }
-        val presenter = presenter(mockk(), api)
+        val presenter = presenter(mockk { every { jobs("run") } returns Single.just(emptyList()) }, api)
         val updates = presenter.updates.test()
 
         presenter.openBuild(hold)
@@ -139,7 +169,7 @@ class WorkflowPresenterTest : DescribeSpec({
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
         }
-        val presenter = presenter(mockk(), api, activity)
+        val presenter = presenter(mockk { every { jobs("run") } returns Single.just(emptyList()) }, api, activity)
         val flow = mockk<Flow>(relaxed = true)
         val destination = slot<BuildScreen>()
         mockkStatic(Flow::class)
@@ -151,7 +181,6 @@ class WorkflowPresenterTest : DescribeSpec({
             verify(exactly = 1) { flow.set(capture(destination)) }
             (destination.captured.build === build) shouldBe true
         } finally {
-            presenter.bag.dispose()
             unmockkStatic(Flow::class)
         }
     }

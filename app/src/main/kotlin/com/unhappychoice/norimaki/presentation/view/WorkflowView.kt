@@ -34,7 +34,6 @@ class WorkflowView(context: Context, attr: AttributeSet) : BaseView<WorkflowView
         }
         binding.refresh.setOnClickListener { presenter.refresh() }
         updates = presenter.updates.subscribe(::render)
-        presenter.refresh()
     }
 
     override fun onDetachedFromWindow() {
