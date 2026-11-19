@@ -88,13 +88,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    private fun getBuildDetails(build: Build): Observable<Build> {
-        val client = account?.client ?: return Observable.empty()
+    internal fun getBuildDetails(build: Build): Observable<Build> {
         val username = build.username ?: return Observable.empty()
         val repository = build.reponame ?: return Observable.empty()
         val number = build.buildNum ?: return Observable.empty()
-        return Observable.defer { client.getBuild(build.vcsType(), username, repository, number) }
-            .subscribeOnIoObserveOnUI()
+        return Observable.defer {
+            val client = account?.client ?: return@defer Observable.empty<Build>()
+            client.getBuild(build.vcsType(), username, repository, number)
+        }.subscribeOnIoObserveOnUI()
     }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->

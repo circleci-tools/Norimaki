@@ -74,6 +74,22 @@ class BuildListPresenterTest : DescribeSpec({
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
     describe("build list polling") {
+        it("does not fetch build details when the session ends before subscription") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val running = build("target", 1, state = "running")
+            every { api.pageAt(0) } returns Observable.just(listOf(running))
+            val presenter = presenter(api, session = session)
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(running))
+
+            val details = presenter.getBuildDetails(running)
+            session.replace("replacement-token").test().assertComplete()
+
+            details.test().assertResult()
+            verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
+        }
+
         it("updates a paginated workflow build from its details without advancing pagination") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build("target", 3)
@@ -85,23 +101,20 @@ class BuildListPresenterTest : DescribeSpec({
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
-            try {
-                scheduler.triggerActions()
-                presenter.getBuilds()
-                scheduler.triggerActions()
-                builds.assertValueAt(2, listOf(running, newest))
+            scheduler.triggerActions()
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            builds.assertValueAt(2, listOf(running, newest))
 
-                scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
-                builds.assertValueAt(3, listOf(finished, newest))
-                scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            builds.assertValueAt(3, listOf(finished, newest))
+            scheduler.advanceTimeBy(20, TimeUnit.SECONDS)
 
-                builds.assertValueCount(4)
-                verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
-                presenter.page.value shouldBe 2
-                presenter.hasMore.value shouldBe true
-            } finally {
-                builds.dispose()
-            }
+            builds.assertValueCount(4)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
+            presenter.page.value shouldBe 2
+            presenter.hasMore.value shouldBe true
+            builds.dispose()
         }
     }
 
