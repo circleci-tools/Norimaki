@@ -53,9 +53,9 @@ class BuildStepPresenterTest : DescribeSpec({
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(('A' + secondArg<Long>().toInt()).toString().toByteArray())
+                        Observable.just(secondArg<Long>().toString().toByteArray())
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just("F".toByteArray())
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just("done".toByteArray())
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
@@ -73,11 +73,11 @@ class BuildStepPresenterTest : DescribeSpec({
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
-                        observer.assertValues("A", "B", "C", "D", "E")
+                        observer.assertValues("0", "1", "2", "3", "4")
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.assertValues("A", "B", "C", "D", "E", "F")
+                        observer.assertValues("0", "1", "2", "3", "4", "done")
                     } finally {
                         observer.dispose()
                     }

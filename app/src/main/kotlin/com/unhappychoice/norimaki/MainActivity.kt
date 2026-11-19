@@ -80,8 +80,8 @@ class MainActivity : AppCompatActivity() {
         setupView()
     }
 
-    override fun onPostResume() {
-        super.onPostResume()
+    override fun onResume() {
+        super.onResume()
         if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
