@@ -1,14 +1,19 @@
 package com.unhappychoice.norimaki.presentation.core
 
 import android.os.Looper
+import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.widget.PopupMenu
 import androidx.core.view.children
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
+import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
@@ -24,6 +29,7 @@ import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -44,7 +50,6 @@ class ToolbarTransitionTest {
     private val pausedIo = TestScheduler()
     private val retryIo = TestScheduler()
     private val api = mockk<CircleCIAPIClientV1_1> {
-        every { getMe() } returns Observable.never()
         every { retryBuild("github", "owner", "repo", 42) } returns Observable.never()
     }
 
@@ -96,6 +101,64 @@ class ToolbarTransitionTest {
         }
     }
 
+    @Test
+    fun homeItemReturnsToThePreviousScreen() {
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            val flow = Flow.get(activity)
+            val previousScreen = flow.history.top<Screen>()
+            flow.set(buildScreen())
+            finishAnimation()
+
+            val home = activity.newMenu().add(Menu.NONE, android.R.id.home, Menu.NONE, "Home")
+            assertTrue(activity.onOptionsItemSelected(home))
+            finishAnimation()
+            assertEquals(previousScreen, flow.history.top<Screen>())
+        }
+    }
+
+    @Test
+    fun leavesPreexistingItemsOutOfTheScreenMenuEvenWhenTheirIdsMatch() {
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            val menu = activity.newMenu()
+            val existingItem = menu.add("Existing action")
+
+            assertTrue(activity.onCreateOptionsMenu(menu))
+            val screenItem = menu.children.single { it.title == "Change API Token" }
+            assertEquals(screenItem.itemId, existingItem.itemId)
+            assertFalse(activity.onOptionsItemSelected(existingItem))
+            assertTrue(activity.onOptionsItemSelected(screenItem))
+            finishAnimation()
+            assertTrue(Flow.get(activity).history.top<Any>() is APITokenScreen)
+        }
+    }
+
+    @Test
+    fun clearsScreenActionsWhenTheMenuIsNullOrTheOwnerHasNoMenu() {
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            val menu = activity.newMenu()
+            assertTrue(activity.onCreateOptionsMenu(menu))
+            val oldItem = menu.getItem(0)
+
+            assertTrue(activity.onCreateOptionsMenu(null))
+            assertFalse(activity.onOptionsItemSelected(oldItem))
+
+            val rebuiltMenu = activity.newMenu()
+            assertTrue(activity.onCreateOptionsMenu(rebuiltMenu))
+            val rebuiltItem = rebuiltMenu.getItem(0)
+            activity.setMenuOwner(View(activity))
+            assertFalse(activity.onOptionsItemSelected(rebuiltItem))
+
+            val emptyMenu = activity.newMenu()
+            assertTrue(activity.onCreateOptionsMenu(emptyMenu))
+            assertEquals(0, emptyMenu.size())
+        }
+    }
+
+    private fun MainActivity.newMenu(): Menu = PopupMenu(this, binding.toolbar).menu
+
     private fun dispatch(activity: MainActivity, item: MenuItem) {
         RxJavaPlugins.setIoSchedulerHandler { retryIo }
         try {
@@ -125,7 +188,7 @@ class ToolbarTransitionTest {
             override fun getLayoutResource() = screen.getLayoutResource()
             override fun module(activityModule: DI) = DI {
                 extend(screen.module(activityModule), allowOverride = true)
-                bind<CircleCIAPIClientV1_1>(overrides = true) with singleton { api }
+                bind<SessionService>(overrides = true) with singleton { testSession(api) }
             }
         }
     }
