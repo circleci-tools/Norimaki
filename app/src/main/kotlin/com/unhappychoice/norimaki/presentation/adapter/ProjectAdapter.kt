@@ -7,7 +7,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Project
-import com.jakewharton.rxbinding2.view.clicks
+import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.subscribeNext

@@ -8,7 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.jakewharton.rxbinding2.view.clicks
+import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.runTime
 import com.unhappychoice.norimaki.domain.model.statusColor

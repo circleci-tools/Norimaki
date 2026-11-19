@@ -2,8 +2,8 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
-import com.jakewharton.rxbinding2.view.clicks
-import com.jakewharton.rxbinding2.widget.textChanges
+import com.jakewharton.rxbinding3.view.clicks
+import com.jakewharton.rxbinding3.widget.textChanges
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.extension.bindTo
 import com.unhappychoice.norimaki.extension.subscribeNext
