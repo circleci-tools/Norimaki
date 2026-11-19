@@ -52,23 +52,51 @@ class BuildListPresenterTest : DescribeSpec({
         scope = attachToTestScope(mockk<BuildListView>())
     }
 
-    fun build(number: Int): Build = mockk {
+    fun build(number: Int, state: String = "finished"): Build = mockk {
         every { vcsUrl } returns "https://github.com/owner/repo"
         every { username } returns "owner"
         every { reponame } returns "repo"
         every { buildNum } returns number
         every { queuedAt } returns Date(number.toLong())
+        every { lifecycle } returns state
     }
 
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
     describe("project build polling") {
+        it("updates a paginated build from its details without advancing pagination") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val newest = build(3)
+            val running = build(1, state = "running")
+            val finished = build(1)
+            every { api.pageAt(0) } returns Observable.just(listOf(newest))
+            every { api.pageAt(20) } returns Observable.just(listOf(running))
+            every { api.getBuild("github", "owner", "repo", 1) } returns Observable.just(finished)
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+
+            scheduler.triggerActions()
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            builds.assertValues(emptyList(), listOf(newest), listOf(newest, running))
+
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            builds.assertValueAt(3, listOf(newest, finished))
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+
+            builds.assertValueCount(4)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
+            presenter.page.value shouldBe 2
+            presenter.hasMore.value shouldBe true
+            builds.dispose()
+        }
+
         it("recovers builds beyond the first page after pagination ends") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val known = build(1)
             val missed = build(2)
-            val firstPage = (22 downTo 3).map(::build)
+            val firstPage = (22 downTo 3).map { build(it) }
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.just(listOf(known)),
                 Observable.just(listOf(known)),
