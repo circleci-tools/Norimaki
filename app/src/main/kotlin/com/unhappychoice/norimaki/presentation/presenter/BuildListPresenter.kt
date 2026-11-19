@@ -3,6 +3,8 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
+import com.unhappychoice.norimaki.domain.model.refreshBuildList
+import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -22,7 +24,6 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.CompletableSubject
 import io.reactivex.subjects.PublishSubject
-import mortar.MortarScope
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
 import java.util.concurrent.TimeUnit
@@ -35,25 +36,27 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
-    private val initialLoadSettled = CompletableSubject.create()
+    private var initialLoadSettled = CompletableSubject.create()
     private var initialPage = emptyList<Build>()
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
-    private val pageUpdates = observePages()
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
-
+    override fun onAuthenticated() {
+        initialLoadSettled = CompletableSubject.create()
+        initialPage = emptyList()
+        observePages().addTo(bag)
         startBuilds()
     }
 
-    override fun onExitScope() {
-        pageUpdates.dispose()
-        super.onExitScope()
+    override fun onSessionEnded() {
+        isLoading.value = false
+        history.value = BuildHistory()
+        hasMore.value = true
+        page.value = 0
     }
 
     fun getBuilds() {
-        if (isLoading.value || !hasMore.value) return
+        if (account == null || isLoading.value || !hasMore.value) return
         isLoading.value = true
         getBuildsAPI(offset = page.value * BUILD_LIST_PAGE_SIZE)
             .singleOrError()
@@ -73,6 +76,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun goToBuildView(build: Build) {
+        if (account == null) return
         goTo(activity, BuildScreen(build))
     }
 
@@ -80,7 +84,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    internal fun startBuilds() {
+    private fun startBuilds() {
         getBuilds()
         initialLoadSettled
             .andThen(Observable.timer(BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS))
@@ -98,12 +102,22 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             } else {
                 fetchLatestBuilds(history.value.builds + initialPage, ::getBuildsAPI)
                     .subscribeOnIoObserveOnUI()
+                    .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
             }
         }
 
+    private fun getBuildDetails(build: Build): Observable<Build> {
+        val username = build.username ?: return Observable.empty()
+        val repository = build.reponame ?: return Observable.empty()
+        val number = build.buildNum ?: return Observable.empty()
+        val client = account?.client ?: return Observable.empty()
+        return Observable.defer { client.getBuild(build.vcsType(), username, repository, number) }
+            .subscribeOnIoObserveOnUI()
+    }
+
     private fun observePages() = incomingPages.concatMapSingle { page ->
         val current = history.value
-        val filter = workflowId
+        val filter = workflowId.takeIf { page.paginated }
         Single.fromCallable { current.merge(page.builds.inWorkflow(filter)) ?: current }
             .subscribeOn(Schedulers.computation())
             .observeOn(AndroidSchedulers.mainThread())
@@ -121,10 +135,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private data class IncomingPage(val builds: List<Build>, val paginated: Boolean)
 
-    private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
-        when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
-            else -> api.getProjectBuilds(
+    private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
+        val client = account?.client ?: return Observable.empty()
+        return when (projectName) {
+            "" -> client.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
+            else -> client.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),
                 project = repoName(),
@@ -132,6 +147,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
                 limit = BUILD_LIST_PAGE_SIZE
             )
         }
+    }
 
     private fun vcsType(): String = projectName.split("/").let {
         if (it.size >= 3) it[0] else "github"

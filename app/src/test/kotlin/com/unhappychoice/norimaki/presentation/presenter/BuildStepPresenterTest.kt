@@ -15,6 +15,7 @@ import io.reactivex.schedulers.TestScheduler
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
+import java.io.IOException
 import java.util.Date
 import java.util.concurrent.TimeUnit.SECONDS
 
@@ -32,6 +33,29 @@ class BuildStepPresenterTest : DescribeSpec({
         every { username } returns "owner"
         every { reponame } returns "repo"
         every { buildNum } returns 42
+    }
+
+    describe("completedActionLogs()") {
+        it("should keep earlier output, show a missing output notice, and continue") {
+            completedActionLogs(listOf("first", "second", "third")) { url ->
+                when (url) {
+                    "second" -> Observable.error(IOException("HTTP 503"))
+                    else -> Observable.just(url)
+                }
+            }.test().assertResult("first", "\n[Some output could not be loaded.]\n", "third")
+        }
+
+        it("should preserve action order when all downloads succeed") {
+            completedActionLogs(listOf("first", "second")) { Observable.just(it) }
+                .test().assertResult("first", "second")
+        }
+
+        it("should continue when creating a download throws") {
+            completedActionLogs(listOf("invalid", "valid")) { url ->
+                if (url == "invalid") throw IllegalArgumentException("Invalid URL")
+                Observable.just(url)
+            }.test().assertResult("\n[Some output could not be loaded.]\n", "valid")
+        }
     }
 
     describe("BuildStepPresenter running output") {
@@ -54,31 +78,29 @@ class BuildStepPresenterTest : DescribeSpec({
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(secondArg<Long>().toString().toByteArray())
+                        Observable.just(byteArrayOf(secondArg<Long>().toByte()))
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just("done".toByteArray())
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(byteArrayOf(100))
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
                         bind<Build>() with singleton { running }
                         bind<BuildStep>() with singleton { second }
-                        bind<CircleCIAPIClientV1_1>() with singleton { api }
-                        bind<BuildOutputClient>() with singleton { output }
                     }
                 }
 
                 val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
                 RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                 try {
-                    val observer = presenter.runningOutput().test()
+                    val observer = presenter.runningOutput(api, output).test()
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
-                        observer.values() shouldBe listOf("0", "1", "2", "3", "4")
+                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4)
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.values() shouldBe listOf("0", "1", "2", "3", "4", "done")
+                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4, 100)
                     } finally {
                         observer.dispose()
                     }
