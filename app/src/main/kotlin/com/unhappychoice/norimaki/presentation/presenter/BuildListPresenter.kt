@@ -92,9 +92,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         val username = build.username ?: return Observable.empty()
         val repository = build.reponame ?: return Observable.empty()
         val number = build.buildNum ?: return Observable.empty()
-        return Observable.defer {
-            account?.client?.getBuild(build.vcsType(), username, repository, number) ?: Observable.empty()
-        }
+        return Observable.defer { api.getBuild(build.vcsType(), username, repository, number) }
             .subscribeOnIoObserveOnUI()
     }
 
