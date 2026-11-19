@@ -7,11 +7,17 @@ import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
+import okhttp3.MediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import okio.Source
+import okio.Timeout
+import okio.buffer
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -22,6 +28,59 @@ import java.util.concurrent.atomic.AtomicInteger
 class BuildOutputClientTest : DescribeSpec({
     val url = "https://example.com/log"
     val offset = 42L
+
+    listOf(true, false).forEach { declaredLength ->
+        describe("log reads with declared length = $declaredLength") {
+            it("keeps complete messages from an oversized completed log and stops at the byte limit") {
+                val prefix = """[{"message":"first line"},{"message":"partial"""
+                val body = TrackedBody(prefix + """ message"}]""", declaredLength)
+                val client = outputClient(prefix.toByteArray().size) { request ->
+                    response(request, 200).newBuilder().body(body).build()
+                }
+
+                client.fetchOutput(url).test().assertResult("first line" + OUTPUT_LIMIT_MESSAGE)
+                body.bytesRead shouldBe prefix.toByteArray().size.toLong()
+                body.closed shouldBe true
+            }
+
+            it("keeps live bytes up to the remaining budget and closes the response") {
+                val bodies = List(2) { TrackedBody("é and more", declaredLength) }
+                val pending = bodies.iterator()
+                val client = outputClient(5) { request ->
+                    request.header("Range") shouldBe "bytes=3-"
+                    response(request, 206).newBuilder().body(pending.next()).build()
+                }
+
+                listOf(client.fetchRawOutput(url, 3), client.fetchFinalRawOutput(url, 3, TestScheduler()))
+                    .forEach { output ->
+                        output.test()
+                            .assertValue { it.bytes.decodeToString() == "é" && it.limitReached }
+                            .assertComplete().assertNoErrors()
+                    }
+                bodies.forEach { body ->
+                    body.bytesRead shouldBe 2L
+                    body.closed shouldBe true
+                }
+                client.fetchRawOutput(url, 5).test()
+                    .assertValue { it.bytes.isEmpty() && it.limitReached }
+                    .assertComplete().assertNoErrors()
+            }
+
+            it("returns normal completed and live logs without a limit status") {
+                val completed = TrackedBody("""[{"message":"one"},{"message":"two"}]""", declaredLength)
+                val live = TrackedBody("live", declaredLength)
+                val client = outputClient(64) { request ->
+                    val body = if (request.header("Range") == null) completed else live
+                    response(request, 200).newBuilder().body(body).build()
+                }
+
+                client.fetchOutput(url).test().assertResult("onetwo")
+                client.fetchRawOutput(url, 0).test()
+                    .assertValue { it.bytes.decodeToString() == "live" && !it.limitReached }
+                    .assertComplete().assertNoErrors()
+            }
+        }
+    }
 
     describe("fetchOutput()") {
         it("should report the HTTP status before parsing an error body") {
@@ -46,7 +105,7 @@ class BuildOutputClientTest : DescribeSpec({
                         else -> throw IOException("Connection lost")
                     }
                 }
-                val observer = client.fetchFinalRawOutput(url, offset, scheduler).map { String(it) }.test()
+                val observer = client.fetchFinalRawOutput(url, offset, scheduler).map { String(it.bytes) }.test()
 
                 observer.assertEmpty()
                 scheduler.advanceTimeBy(5, SECONDS)
@@ -81,7 +140,7 @@ class BuildOutputClientTest : DescribeSpec({
         it("should accept an empty successful response") {
             val client = outputClient { response(it, 204) }
 
-            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.size }.test().assertResult(0)
+            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.bytes.size }.test().assertResult(0)
         }
 
         it("should accept a range response confirming that the entire log was already read") {
@@ -89,7 +148,7 @@ class BuildOutputClientTest : DescribeSpec({
                 response(it, 416).newBuilder().header("Content-Range", "bytes */42").build()
             }
 
-            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.size }.test().assertResult(0)
+            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.bytes.size }.test().assertResult(0)
         }
     }
 
@@ -140,7 +199,7 @@ private fun verifyRawOutputPolling() {
     val observer = polling(5, SECONDS, timer, fetch)
         .takeUntil(finished)
         .concatWith(Observable.defer { client.fetchFinalRawOutput(url, offset, timer) })
-        .doOnNext { offset += it.size }
+        .doOnNext { offset += it.bytes.size }
         .test()
 
     try {
@@ -178,11 +237,12 @@ private fun verifyRawOutputPolling() {
     }
 }
 
-private fun outputClient(respond: (Request) -> Response): BuildOutputClient =
+private fun outputClient(limit: Int = 1024 * 1024, respond: (Request) -> Response): BuildOutputClient =
     BuildOutputClient(
         "token",
         OkHttpClient.Builder().addInterceptor { respond(it.request()) }.build(),
-        Schedulers.trampoline()
+        Schedulers.trampoline(),
+        limit
     )
 
 private fun response(request: Request, status: Int, body: String = ""): Response =
@@ -193,3 +253,29 @@ private fun response(request: Request, status: Int, body: String = ""): Response
         .message("Test response")
         .body(body.toResponseBody())
         .build()
+
+
+private class TrackedBody(text: String, declaredLength: Boolean) : ResponseBody() {
+    private val buffer = Buffer().writeUtf8(text)
+    private val length = if (declaredLength) buffer.size else -1L
+    var bytesRead = 0L
+        private set
+    var closed = false
+        private set
+
+    private val trackedSource = object : Source {
+        override fun read(sink: Buffer, byteCount: Long): Long =
+            buffer.read(sink, minOf(byteCount, 1)).also { if (it > 0) bytesRead += it }
+
+        override fun timeout(): Timeout = Timeout.NONE
+
+        override fun close() {
+            closed = true
+            buffer.close()
+        }
+    }.buffer()
+
+    override fun contentType(): MediaType? = null
+    override fun contentLength(): Long = length
+    override fun source() = trackedSource
+}

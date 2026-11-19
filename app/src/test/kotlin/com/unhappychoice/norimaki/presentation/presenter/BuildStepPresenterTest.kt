@@ -5,6 +5,7 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
+import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -78,9 +79,9 @@ class BuildStepPresenterTest : DescribeSpec({
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(byteArrayOf(secondArg<Long>().toByte()))
+                        Observable.just(RawOutputChunk(byteArrayOf(secondArg<Long>().toByte())))
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(byteArrayOf(100))
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(RawOutputChunk(byteArrayOf(100)))
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {

@@ -1,39 +1,45 @@
 package com.unhappychoice.norimaki.infrastructure.output
 
-import com.unhappychoice.norimaki.extension.asSequence
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.schedulers.Schedulers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.json.JSONArray
+import okhttp3.ResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class BuildOutputClient(
     private val token: String,
     private val client: OkHttpClient = OkHttpClient(),
-    private val ioScheduler: Scheduler = Schedulers.io()
+    private val ioScheduler: Scheduler = Schedulers.io(),
+    private val outputByteLimit: Int = 1024 * 1024
 ) {
     fun fetchOutput(outputUrl: String): Observable<String> =
         Observable.fromCallable {
             execute(Request.Builder().url(outputUrl).build()).use { response ->
                 if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
-                joinMessages(response.body.string())
+                completedOutput(response.body)
             }
         }
 
-    fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<ByteArray> =
+    fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<RawOutputChunk> =
         Observable.fromCallable {
-            execute(rawOutputRequest(rawOutputUrl, offset)).use { rawOutputBytes(it, offset) }
+            val remaining = (outputByteLimit - offset).coerceAtLeast(0)
+            if (remaining == 0L) RawOutputChunk(ByteArray(0), limitReached = true)
+            else execute(rawOutputRequest(rawOutputUrl, offset)).use { rawOutputChunk(it, offset, remaining) }
         }.subscribeOn(ioScheduler)
 
     fun fetchFinalRawOutput(
         rawOutputUrl: String,
         offset: Long,
         scheduler: Scheduler = Schedulers.io()
-    ): Observable<ByteArray> =
+    ): Observable<RawOutputChunk> =
         fetchRawOutput(rawOutputUrl, offset).retryWhen { errors ->
             errors.zipWith(Observable.range(1, FINAL_RETRIES + 1)) { error, attempt -> error to attempt }
                 .flatMap { (error, attempt) ->
@@ -54,9 +60,12 @@ class BuildOutputClient(
             .header("Range", "bytes=$offset-")
             .build()
 
-    private fun rawOutputBytes(response: Response, offset: Long): ByteArray = when {
-        response.isSuccessful -> response.body.bytes()
-        response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> ByteArray(0)
+    private fun rawOutputChunk(response: Response, offset: Long, remaining: Long): RawOutputChunk = when {
+        response.isSuccessful -> {
+            val bytes = response.body.readPrefix(remaining)
+            RawOutputChunk(bytes, limitReached = bytes.size.toLong() == remaining)
+        }
+        response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> RawOutputChunk(ByteArray(0))
         else -> throw RawOutputHttpException(response.code)
     }
 
@@ -65,10 +74,23 @@ class BuildOutputClient(
         else -> error is IOException
     }
 
-    private fun joinMessages(json: String): String =
-        JSONArray(json).asSequence()
-            .map { it.getString("message") }
-            .joinToString("")
+    private fun completedOutput(body: ResponseBody): String {
+        val bytes = body.readPrefix(outputByteLimit.toLong())
+        val limitReached = bytes.size == outputByteLimit && body.contentLength() != bytes.size.toLong()
+        return buildString {
+            JsonReader(bytes.toResponseBody(body.contentType()).charStream()).use { reader ->
+                try {
+                    reader.beginArray()
+                    while (reader.hasNext()) append(reader.readMessage())
+                    reader.endArray()
+                    check(reader.peek() == JsonToken.END_DOCUMENT) { "Unexpected content after action output" }
+                } catch (error: IOException) {
+                    if (!limitReached) throw error
+                }
+            }
+            if (limitReached) append(OUTPUT_LIMIT_MESSAGE)
+        }
+    }
 
     private companion object {
         const val FINAL_RETRIES = 2
@@ -76,3 +98,26 @@ class BuildOutputClient(
 }
 
 internal class RawOutputHttpException(val status: Int) : IOException("Raw log request failed with HTTP $status")
+
+data class RawOutputChunk(val bytes: ByteArray, val limitReached: Boolean = false)
+
+internal const val OUTPUT_LIMIT_MESSAGE = "\n[Action output limit reached.]\n"
+
+private fun ResponseBody.readPrefix(limit: Long): ByteArray {
+    val source = source()
+    val prefix = Buffer()
+    while (prefix.size < limit) {
+        if (source.read(prefix, limit - prefix.size) == -1L) break
+    }
+    return prefix.readByteArray()
+}
+
+private fun JsonReader.readMessage(): String {
+    var message: String? = null
+    beginObject()
+    while (hasNext()) {
+        if (nextName() == "message") message = nextString() else skipValue()
+    }
+    endObject()
+    return requireNotNull(message) { "Missing action output message" }
+}

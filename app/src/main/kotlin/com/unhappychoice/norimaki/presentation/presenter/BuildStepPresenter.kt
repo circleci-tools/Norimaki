@@ -10,6 +10,8 @@ import com.unhappychoice.norimaki.domain.model.step
 import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
+import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
+import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
@@ -94,31 +96,41 @@ internal fun completedActionLogs(
 internal fun pollActionOutputs(
     outputUrls: List<String>,
     stepFinished: Observable<Build>,
-    fetchOutput: (String, Long) -> Observable<ByteArray>,
+    fetchOutput: (String, Long) -> Observable<RawOutputChunk>,
     scheduler: Scheduler = Schedulers.computation(),
-    fetchFinalOutput: (String, Long) -> Observable<ByteArray> = fetchOutput
+    fetchFinalOutput: (String, Long) -> Observable<RawOutputChunk> = fetchOutput
 ): Observable<String> = Observable.defer {
     val urls = outputUrls.distinct()
     val decoders = urls.associateWith { Utf8StreamDecoder() }
+    val limitedUrls = mutableSetOf<String>()
     val offsets = mutableMapOf<String, Long>()
     // Stop scheduling reads at completion, then drain after any in-flight reads.
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = urls.map { url ->
+            val reads = urls.filterNot(limitedUrls::contains).map { url ->
                 val read = Observable.defer {
                     val decoder = decoders.getValue(url)
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
-                    val chunks = fetch(url, offset)
-                        .filter { it.isNotEmpty() }
-                        .doOnNext { offsets[url] = offsets.getOrDefault(url, 0L) + it.size }
-                        .map { decoder.decode(it) }
-                    if (finishing) chunks.concatWith(Observable.fromCallable { decoder.finish() }) else chunks
+                    val chunks = fetch(url, offset).map { chunk ->
+                        offsets[url] = offset + chunk.bytes.size
+                        val log = decoder.decode(chunk.bytes)
+                        if (chunk.limitReached) {
+                            limitedUrls.add(url)
+                            log + decoder.finish() + OUTPUT_LIMIT_MESSAGE
+                        } else {
+                            log
+                        }
+                    }
+                    if (finishing) chunks.concatWith(Observable.fromCallable {
+                        if (url in limitedUrls) "" else decoder.finish()
+                    }) else chunks
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }
             Observable.concatDelayError(reads).filter { it.isNotEmpty() }
         }
+        .takeUntil { limitedUrls.size == urls.size }
 }
