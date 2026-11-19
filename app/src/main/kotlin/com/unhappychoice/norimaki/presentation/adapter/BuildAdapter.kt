@@ -19,12 +19,6 @@ import io.reactivex.subjects.PublishSubject
 class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewHolder>(BuildDiff) {
     val onClickItem = PublishSubject.create<Build>()
 
-    init {
-        setHasStableIds(true)
-    }
-
-    override fun getItemId(position: Int) = getItem(position).uniqueId().hashCode().toLong()
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(context).inflate(R.layout.build_list_item_view, parent, false)
         return ViewHolder(view)

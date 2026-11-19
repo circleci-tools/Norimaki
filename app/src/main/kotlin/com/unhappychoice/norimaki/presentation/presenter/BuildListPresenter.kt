@@ -4,6 +4,7 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.inWorkflow
+import com.unhappychoice.norimaki.domain.model.refreshBuildList
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -69,9 +70,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+            builds.take(1)
+                .flatMap { displayed -> fetchLatestBuilds(displayed, ::getBuildsAPI) }
+                .subscribeOnIoObserveOnUI()
+                .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
         }
-            .subscribeOnIoObserveOnUI()
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
             .addTo(bag)
     }
@@ -86,9 +89,16 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
+    private fun getBuildDetails(build: Build): Observable<Build> {
+        val client = account?.client ?: return Observable.empty()
+        val buildId = BuildId.from(build) ?: return Observable.empty()
+        return Observable.defer { buildId.load(client) }
+            .subscribeOnIoObserveOnUI()
+    }
+
     private fun observePages() = incomingPages.concatMapSingle { page ->
         val current = history.value
-        val filter = workflowId
+        val filter = workflowId.takeIf { page.paginated }
         Single.fromCallable { current.merge(page.builds.inWorkflow(filter)) ?: current }
             .subscribeOn(Schedulers.computation())
             .observeOn(AndroidSchedulers.mainThread())
