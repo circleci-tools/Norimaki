@@ -61,6 +61,7 @@ class BuildListPresenterTest : DescribeSpec({
     describe("build list polling") {
         it("updates a paginated workflow build from its details without advancing pagination") {
             val scheduler = TestScheduler()
+            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build("target", 3)
@@ -90,7 +91,58 @@ class BuildListPresenterTest : DescribeSpec({
                 presenter.hasMore.value shouldBe true
             } finally {
                 presenter.bag.dispose()
-                RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
+                builds.dispose()
+                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+            }
+        }
+    }
+
+    describe("workflow polling") {
+        it("recovers matching builds beyond the first page after pagination ends") {
+            val scheduler = TestScheduler()
+            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            try {
+                val api = mockk<CircleCIAPIClientV1_1>()
+                val known = build("target", 1)
+                val missed = build("target", 2)
+                val firstPage = (22 downTo 3).map { build("other", it) }
+                every { api.pageAt(0) } returnsMany listOf(
+                    Observable.just(listOf(known)),
+                    Observable.just(listOf(known)),
+                    Observable.just(firstPage)
+                )
+                every { api.pageAt(20) } returnsMany listOf(
+                    Observable.just(emptyList()),
+                    Observable.just(listOf(missed, known))
+                )
+                val presenter = presenter(api)
+                val builds = presenter.builds.test()
+                try {
+                    presenter.getBuilds()
+                    presenter.isLoading.value shouldBe true
+                    presenter.getBuilds()
+                    scheduler.triggerActions()
+                    verify(exactly = 1) { api.pageAt(0) }
+                    presenter.getBuilds()
+                    scheduler.triggerActions()
+                    presenter.hasMore.value shouldBe false
+
+                    presenter.pollLatestBuilds()
+                    scheduler.triggerActions()
+                    scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+
+                    builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
+                    verify(exactly = 2) { api.pageAt(20) }
+                    verify(exactly = 0) { api.pageAt(40) }
+                    presenter.page.value shouldBe 2
+                    presenter.hasMore.value shouldBe false
+                } finally {
+                    presenter.bag.dispose()
+                    builds.dispose()
+                }
+            } finally {
+                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
             }
         }
     }
