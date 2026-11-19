@@ -40,7 +40,7 @@ class CompletedStepLogsTest {
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
         }
-        val presenter = BuildStepPresenter { outputClient() }.apply {
+        val presenter = BuildStepPresenter(::outputClient).apply {
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(null, legacyName = step.name) }
@@ -65,11 +65,11 @@ class CompletedStepLogsTest {
 
     private fun action(path: String): BuildAction = mockk {
         every { step } returns null
-        every { endTime } returns Date()
+        every { endTime } returns Date(0)
         every { outputUrl } returns "https://example.com/$path"
     }
 
-    private fun outputClient(): BuildOutputClient {
+    private fun outputClient(token: String): BuildOutputClient {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             val action = request.url.pathSegments.single()
@@ -85,6 +85,6 @@ class CompletedStepLogsTest {
                 .body(body.toResponseBody())
                 .build()
         }.build()
-        return BuildOutputClient("token", client)
+        return BuildOutputClient(token, client)
     }
 }

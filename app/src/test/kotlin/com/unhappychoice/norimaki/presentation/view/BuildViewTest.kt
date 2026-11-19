@@ -3,7 +3,10 @@ package com.unhappychoice.norimaki.presentation.view
 import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
+import androidx.appcompat.app.ActionBar
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
+import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
@@ -50,6 +53,33 @@ class BuildViewTest {
 
             failed.value = false
             assertEquals(View.GONE, error.visibility)
+        }
+    }
+
+    @Test
+    fun showsTheLoadedBuildTitleInTheActionBar() {
+        val actionBar = mockk<ActionBar>(relaxed = true)
+        val host = mockk<MainActivity> { every { supportActionBar } returns actionBar }
+        val presenter = mockk<BuildPresenter>(relaxed = true) {
+            every { activity } returns host
+            every { buildLoadFailed } returns Variable(false)
+            every { steps } returns Variable(emptyList<BuildStep>())
+        }
+        val build = mockk<Build> {
+            every { branch } returns "main"
+            every { buildNum } returns 42
+            every { vcsRevision } returns "abcdef123"
+        }
+        Robolectric.buildActivity(Activity::class.java).use { controller ->
+            val activity = controller.setup().get().apply { setTheme(R.style.AppTheme) }
+            val view = LayoutInflater.from(activity).inflate(R.layout.build_view, null) as BuildView
+            view.di = DI { bind<BuildPresenter>() with singleton { presenter } }
+            activity.setContentView(view)
+
+            view.showBuild(build)
+
+            assertEquals("main #42 (abcdef)", view.screenTitle)
+            verify { actionBar.title = "main #42 (abcdef)" }
         }
     }
 }

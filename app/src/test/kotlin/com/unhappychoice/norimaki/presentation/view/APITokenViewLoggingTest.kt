@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
@@ -43,7 +44,7 @@ class APITokenViewLoggingTest {
         }
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
-            val activity = controller.get()
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
             val form = showForm(activity, presenter)
             val input = form.accessTokenTextView
             assertEquals(storedToken, input.text.toString())
@@ -51,6 +52,7 @@ class APITokenViewLoggingTest {
             input.setText(enteredToken)
             assertEquals(storedToken, savedToken)
             input.setText(editedToken)
+            assertEquals(storedToken, savedToken)
             form.submitButton.performClick()
             assertEquals(editedToken, savedToken)
             verify(exactly = 1) { presenter.goToBuildList() }

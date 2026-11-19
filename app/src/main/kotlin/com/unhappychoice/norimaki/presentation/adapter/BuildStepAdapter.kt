@@ -35,24 +35,37 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
         holder.bind(steps[position])
     }
 
-    inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
-        init {
-            view.setOnClickListener {
-                val position = bindingAdapterPosition
-                val step = steps.getOrNull(position) ?: return@setOnClickListener
-                if (step.actions.isNotEmpty()) onClickItem.onNext(BuildStepId.from(step, position))
-            }
-        }
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.clearBoundItem()
+        super.onViewRecycled(holder)
+    }
 
+    inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(step: BuildStep) {
+            boundItem = step
             buildTitle.text = step.name
             time.text = step.runTime()
             indicator.setBackgroundColor(step.statusColor())
         }
 
+        fun clearBoundItem() {
+            boundItem = null
+        }
+
+        private var boundItem: BuildStep? = null
+
         private val indicator = view.findViewById<View>(R.id.statusIndicator)
         private val buildTitle = view.findViewById<TextView>(R.id.buildTitle)
         private val time = view.findViewById<TextView>(R.id.time)
+
+        init {
+            view.setOnClickListener {
+                if (boundItem == null) return@setOnClickListener
+                val position = bindingAdapterPosition
+                val step = steps.getOrNull(position) ?: return@setOnClickListener
+                if (step.actions.isNotEmpty()) onClickItem.onNext(BuildStepId.from(step, position))
+            }
+        }
     }
 
     private var steps = emptyList<BuildStep>()

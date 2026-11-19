@@ -8,10 +8,12 @@ import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.google.gson.Gson
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -36,13 +38,17 @@ class BuildStepAdapterTest {
 
             adapter.submitSteps(listOf(numbered, unnumbered, empty))
             layoutRows(rows)
-            val holder = requireNotNull(rows.findViewHolderForAdapterPosition(0))
+            val holder = rows.findViewHolderForAdapterPosition(0) as BuildStepAdapter.ViewHolder
+            val listener = shadowOf(holder.itemView).onClickListener
             adapter.submitSteps(listOf(empty, numbered, unnumbered))
             layoutRows(rows)
 
+            assertSame(listener, shadowOf(holder.itemView).onClickListener)
             holder.itemView.performClick()
             requireNotNull(rows.findViewHolderForAdapterPosition(2)).itemView.performClick()
             requireNotNull(rows.findViewHolderForAdapterPosition(0)).itemView.performClick()
+            adapter.onViewRecycled(holder)
+            holder.itemView.performClick()
             selection.assertValues(BuildStepId(5), BuildStepId(null, position = 2))
         }
     }

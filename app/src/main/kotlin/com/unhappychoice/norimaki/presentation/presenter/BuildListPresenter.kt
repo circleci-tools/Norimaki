@@ -90,10 +90,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     private fun getBuildDetails(build: Build): Observable<Build> {
-        val client = account?.client ?: return Observable.empty()
         val buildId = BuildId.from(build) ?: return Observable.empty()
-        return Observable.defer { buildId.load(client) }
-            .subscribeOnIoObserveOnUI()
+        return Observable.defer {
+            val client = account?.client ?: return@defer Observable.empty<Build>()
+            buildId.load(client)
+        }.subscribeOnIoObserveOnUI()
     }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
