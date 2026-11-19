@@ -6,6 +6,7 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.domain.model.BuildHistory
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
@@ -15,9 +16,9 @@ import java.util.Date
 class BuildListUpdatesTest : DescribeSpec({
     val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create()
 
-    fun build(number: Int, status: String = "success"): Build =
+    fun build(number: Int, status: String = "success", repository: String = "Norimaki"): Build =
         gson.fromJson(
-            """{"build_num":$number,"username":"circleci-tools","reponame":"Norimaki","status":"$status"}""",
+            """{"build_num":$number,"username":"circleci-tools","reponame":"$repository","status":"$status"}""",
             Build::class.java
         ).copy(queuedAt = Date(number * 1000L))
 
@@ -69,6 +70,31 @@ class BuildListUpdatesTest : DescribeSpec({
 
             verify(exactly = 1) { updates.onInserted(0, 1) }
             verify(exactly = 0) { updates.onChanged(any(), any(), anyNullable()) }
+        }
+
+        it("updates each repository independently when build identity hashes collide") {
+            val builds = listOf(
+                build(1, repository = "Aa").copy(queuedAt = Date(2000L)),
+                build(1, repository = "BB")
+            )
+            builds[0].uniqueId().hashCode() shouldBe builds[1].uniqueId().hashCode()
+            val recent = checkNotNull(BuildHistory().merge(builds))
+            recent.builds shouldBe builds
+
+            builds.forEachIndexed { position, build ->
+                val changed = build.copy(status = "failed")
+                val refreshed = checkNotNull(recent.merge(listOf(changed)))
+                refreshed.builds shouldBe builds.map { if (it == build) changed else it }
+                val updates = dispatchUpdates(recent.builds, refreshed.builds)
+
+                verify(exactly = 1) { updates.onChanged(position, 1, null) }
+                verify(exactly = 1) { updates.onChanged(any(), any(), anyNullable()) }
+                verify(exactly = 0) {
+                    updates.onInserted(any(), any())
+                    updates.onRemoved(any(), any())
+                    updates.onMoved(any(), any())
+                }
+            }
         }
     }
 })

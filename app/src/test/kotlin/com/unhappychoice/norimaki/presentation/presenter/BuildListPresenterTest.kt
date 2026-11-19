@@ -84,15 +84,16 @@ class BuildListPresenterTest : DescribeSpec({
             every { api.getBuild("github", "owner", "repo", 1) } returns Observable.just(finished)
             val presenter = presenter(api)
             val builds = presenter.builds.test()
-            scheduler.triggerActions()
 
+            scheduler.triggerActions()
             presenter.getBuilds()
             scheduler.triggerActions()
             builds.assertValueAt(2, listOf(running, newest))
 
-            scheduler.advanceTimeBy(3 * BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
-
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
             builds.assertValueAt(3, listOf(finished, newest))
+            scheduler.advanceTimeBy(20, TimeUnit.SECONDS)
+
             builds.assertValueCount(4)
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
             presenter.page.value shouldBe 2
