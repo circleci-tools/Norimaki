@@ -41,12 +41,12 @@ class BuildViewTest {
             val retry = view.findViewById<View>(R.id.retryBuildLoad)
             assertEquals(View.GONE, error.visibility)
             retry.performClick()
-            verify(exactly = 1) { presenter.pollBuild(any()) }
+            verify(exactly = 0) { presenter.pollBuild() }
 
             failed.value = true
             assertEquals(View.VISIBLE, error.visibility)
             retry.performClick()
-            verify(exactly = 2) { presenter.pollBuild(any()) }
+            verify(exactly = 1) { presenter.pollBuild() }
 
             failed.value = false
             assertEquals(View.GONE, error.visibility)

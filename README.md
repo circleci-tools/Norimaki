@@ -26,6 +26,10 @@ With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 insta
 ./gradlew testDebugUnitTest
 ```
 
+## Release checklist
+
+- When updating `versionName` in `app/build.gradle`, review and update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before publishing to Google Play.
+
 ## Author
 
 [@unhappychoice](https://unhappychoice.com)

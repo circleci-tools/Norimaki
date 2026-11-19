@@ -7,6 +7,7 @@ import android.view.MenuItem
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.databinding.BuildViewBinding
 import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.subscribeNext
@@ -54,9 +55,8 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
             }
             .addTo(bag)
         binding.retryBuildLoad.setOnClickListener {
-            if (presenter.buildLoadFailed.value) loadBuild()
+            if (presenter.buildLoadFailed.value) presenter.pollBuild()
         }
-        loadBuild()
 
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
@@ -71,8 +71,8 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
             .addTo(bag)
     }
 
-    private fun loadBuild() {
-        presenter.pollBuild { updateScreenTitle(presenter.activity, it.revisionString()) }
+    internal fun showBuild(build: Build) {
+        updateScreenTitle(presenter.activity, build.revisionString())
     }
 
     override fun onDetachedFromWindow() {

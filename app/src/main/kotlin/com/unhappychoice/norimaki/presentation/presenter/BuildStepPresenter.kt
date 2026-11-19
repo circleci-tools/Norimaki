@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.BuildId
@@ -16,54 +17,70 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
-import java.util.concurrent.TimeUnit
 import org.kodein.di.instance
+import java.util.concurrent.TimeUnit
 
-class BuildStepPresenter : PresenterNeedsToken<BuildStepView>() {
+class BuildStepPresenter internal constructor(
+    private val createOutputClient: (String) -> BuildOutputClient
+) : PresenterNeedsToken<BuildStepView>() {
+    constructor() : this({ BuildOutputClient(it) })
+
     private val buildId: BuildId by instance()
     private val stepId: BuildStepId by instance()
-    private val outputClient: BuildOutputClient by instance()
 
     val logString: Variable<String> = Variable("")
 
     val logLoadFailed = Variable(false)
 
-    fun loadStep(onLoaded: (BuildStep) -> Unit) {
+    override fun onAuthenticated() {
+        val verified = account ?: return
+        val client = verified.client
+        val outputClient = createOutputClient(verified.token)
         logString.value = ""
         logLoadFailed.value = false
-        pollBuildStep(stepId) { buildId.load(api) }
+        pollBuildStep(stepId) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
             .subscribeBy(
                 onNext = { (build, step) ->
-                    onLoaded(step)
-                    if (step.isFinished()) getActions(step)
-                    else pollRunningActions(build, step)
+                    view?.showStep(step)
+                    if (step.isFinished()) getActions(step, outputClient)
+                    else pollRunningActions(build, step, client, outputClient)
                 },
                 onError = { logLoadFailed.value = true }
             )
             .addTo(bag)
     }
 
-    private fun getActions(buildStep: BuildStep) {
+    private fun getActions(buildStep: BuildStep, outputClient: BuildOutputClient) {
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
-        Observable.concat(actions.map { outputClient.fetchOutput(it) })
+        completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
             .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
             .addTo(bag)
     }
 
-    internal fun runningOutput(build: Build, buildStep: BuildStep): Observable<String> {
+    internal fun runningOutput(
+        build: Build,
+        buildStep: BuildStep,
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient
+    ): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
             outputUrls,
-            stepFinished(),
+            stepFinished(client),
             outputClient::fetchRawOutput,
             fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
         )
     }
 
-    private fun pollRunningActions(build: Build, buildStep: BuildStep) {
-        runningOutput(build, buildStep)
+    private fun pollRunningActions(
+        build: Build,
+        buildStep: BuildStep,
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient
+    ) {
+        runningOutput(build, buildStep, client, outputClient)
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
@@ -73,9 +90,9 @@ class BuildStepPresenter : PresenterNeedsToken<BuildStepView>() {
             .addTo(bag)
     }
 
-    private fun stepFinished(): Observable<Build> =
+    private fun stepFinished(client: CircleCIAPIClientV1_1): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
-            buildId.load(api)
+            buildId.load(client)
         }.filter { it.isFinished() || stepId.resolve(it.steps)?.isFinished() == true }
 
     private fun appendLog(log: String) {
@@ -106,6 +123,15 @@ internal fun pollBuildStep(
             }
         }
         .take(1)
+
+internal fun completedActionLogs(
+    outputUrls: List<String>,
+    fetchOutput: (String) -> Observable<String>
+): Observable<String> =
+    Observable.fromIterable(outputUrls).concatMap { url ->
+        Observable.defer { fetchOutput(url) }
+            .onErrorReturnItem("\n[Some output could not be loaded.]\n")
+    }
 
 internal fun pollActionOutputs(
     outputUrls: List<String>,

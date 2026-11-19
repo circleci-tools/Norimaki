@@ -10,6 +10,7 @@ import io.reactivex.schedulers.Schedulers
 internal fun CircleCIAPIClientV1_1.rebuildWithoutCache(
     buildId: BuildId,
     scheduler: Scheduler = Schedulers.io(),
+    cancel: Observable<*> = Observable.never<Any>(),
     onFinished: () -> Unit = {}
 ): Observable<Build> {
     return Observable.defer {
@@ -18,6 +19,7 @@ internal fun CircleCIAPIClientV1_1.rebuildWithoutCache(
             .flatMap { retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number) }
     }
         .subscribeOn(scheduler)
+        .takeUntil(cancel)
         .doOnError { it.printStackTrace() }
         .doFinally { onFinished() }
         // Once started, the cached source stays subscribed even if the view stops observing.

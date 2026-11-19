@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.BuildId
@@ -27,12 +28,15 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val buildLoadFailed = Variable(false)
     private val rebuildInFlight = AtomicBoolean()
 
-    fun pollBuild(onLoaded: (Build) -> Unit) {
+    override fun onAuthenticated() = pollBuild()
+
+    fun pollBuild() {
+        val client = account?.client ?: return
         buildLoadFailed.value = false
-        Observable.defer { buildId.load(api) }
+        Observable.defer { buildId.load(client) }
             .concatWith(
                 Observable.timer(BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
-                    .flatMap { polling(BUILD_POLLING_SECONDS) { buildId.load(api) } }
+                    .flatMap { polling(BUILD_POLLING_SECONDS) { buildId.load(client) } }
             )
             .takeUntil { it.isFinished() }
             .subscribeOnIoObserveOnUI()
@@ -40,7 +44,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
                 onNext = { loadedBuild ->
                     val hadWorkflow = hasWorkflow()
                     build = loadedBuild
-                    onLoaded(loadedBuild)
+                    view?.showBuild(loadedBuild)
                     val snapshot = loadedBuild.steps.orEmpty()
                     if (steps.value != snapshot) steps.value = snapshot
                     if (hasWorkflow() != hadWorkflow) activity.invalidateOptionsMenu()
@@ -51,6 +55,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun goToBuildStepScreen(stepId: BuildStepId) {
+        if (account == null) return
         goTo(activity, BuildStepScreen(buildId, stepId))
     }
 
@@ -63,9 +68,10 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuild() {
+        val client = account?.client ?: return
         if (!rebuildInFlight.compareAndSet(false, true)) return
 
-        Observable.defer { retryBuild() }
+        Observable.defer { retryBuild(client) }
             .subscribeOnIoObserveOnUI()
             .doFinally { rebuildInFlight.set(false) }
             .subscribeNext { goBack(activity) }
@@ -73,17 +79,22 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuildWithoutCache() {
+        val verified = account ?: return
         val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
 
-        api.rebuildWithoutCache(buildId, onFinished = { rebuildInFlight.set(false) })
+        verified.client.rebuildWithoutCache(
+            buildId,
+            cancel = sessionEnded(verified),
+            onFinished = { rebuildInFlight.set(false) }
+        )
             .observeOn(AndroidSchedulers.mainThread())
             .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
             .addTo(bag)
     }
 
-    private fun retryBuild(): Observable<Build> =
-        api.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
+    private fun retryBuild(client: CircleCIAPIClientV1_1): Observable<Build> =
+        client.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
 
     private fun goBackFrom(origin: BuildView) {
         val container = activity.binding.containerView
