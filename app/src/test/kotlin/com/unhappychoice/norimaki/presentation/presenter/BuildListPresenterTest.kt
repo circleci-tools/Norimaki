@@ -75,9 +75,6 @@ class BuildListPresenterTest : DescribeSpec({
 
     describe("build list polling") {
         it("updates a paginated workflow build from its details without advancing pagination") {
-            val scheduler = TestScheduler()
-            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
-            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build("target", 3)
             val running = build("target", 1, state = "running")
@@ -89,25 +86,21 @@ class BuildListPresenterTest : DescribeSpec({
             val builds = presenter.builds.test()
 
             try {
-                presenter.getBuilds()
                 scheduler.triggerActions()
                 presenter.getBuilds()
                 scheduler.triggerActions()
                 builds.assertValueAt(2, listOf(running, newest))
 
-                presenter.pollLatestBuilds()
-                scheduler.triggerActions()
+                scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
                 builds.assertValueAt(3, listOf(finished, newest))
-                scheduler.advanceTimeBy(20, TimeUnit.SECONDS)
+                scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
 
                 builds.assertValueCount(4)
                 verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
                 presenter.page.value shouldBe 2
                 presenter.hasMore.value shouldBe true
             } finally {
-                presenter.bag.dispose()
                 builds.dispose()
-                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
             }
         }
     }
