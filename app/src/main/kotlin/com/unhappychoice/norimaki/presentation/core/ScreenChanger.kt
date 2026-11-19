@@ -30,7 +30,7 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
 
         val screen = incomingState.getScreen() ?: return callback.onTraversalCompleted()
         val incomingView = screen.inflateView().also { inject(screen, it) }
-        val onCompleted = { completeTraversal(screen, callback) }
+        val onCompleted = { completeTraversal(screen, incomingView, callback) }
 
         outgoingView?.let { showWithTransition(it, incomingView, incomingState, direction, onCompleted) }
             ?: show(incomingView, incomingState, onCompleted)
@@ -58,7 +58,8 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         }
     }
 
-    private fun completeTraversal(screen: Screen, callback: TraversalCallback) {
+    private fun completeTraversal(screen: Screen, view: View, callback: TraversalCallback) {
+        activity.setMenuOwner(view)
         callback.onTraversalCompleted()
         updateActionBar(screen)
     }
@@ -69,7 +70,6 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
         activity.supportActionBar?.setDisplayShowHomeEnabled(false)
         activity.supportActionBar?.title = screen.getTitle()
-        activity.invalidateOptionsMenu()
 
         if (showsDrawerIndicator(screen)) { activity.drawerToggle.syncState() }
     }

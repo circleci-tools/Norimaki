@@ -10,6 +10,7 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.children
 import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.di.activityModule
@@ -46,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var projectNavigation: Disposable? = null
+    private var menuOwner: HasMenu? = null
+    private var screenMenuItems = emptyList<MenuItem>()
 
     private val flowBackCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
@@ -99,16 +102,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        (getCurrentView() as? HasMenu)?.onCreateOptionsMenu(menu)
+        val existingItems = menu?.children?.toList().orEmpty()
+        menuOwner?.onCreateOptionsMenu(menu)
+        screenMenuItems = menu?.children?.filter { item -> existingItems.none { it === item } }?.toList().orEmpty()
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            android.R.id.home -> Flow.get(this).goBack()
+        if (item.itemId == android.R.id.home) {
+            Flow.get(this).goBack()
+            return true
         }
-        (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
+        if (screenMenuItems.none { it === item }) return super.onOptionsItemSelected(item)
+        menuOwner?.onOptionsItemSelected(item)
         return true
+    }
+
+    internal fun setMenuOwner(view: View) {
+        menuOwner = view as? HasMenu
+        screenMenuItems = emptyList()
+        invalidateOptionsMenu()
     }
 
     private fun setupView() {
@@ -146,6 +159,4 @@ class MainActivity : AppCompatActivity() {
             .defaultKey(BuildListScreen(""))
             .keyParceler(GsonParceler())
             .install()
-
-    private fun getCurrentView(): View? = binding.containerView.getChildAt(0)
 }
