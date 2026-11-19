@@ -52,6 +52,9 @@ jobs:
           name: Run Tests
           command: ./gradlew jacoco
       - run:
+          name: Test release tag validation
+          command: bash scripts/ci/test-release-tag.sh
+      - run:
           name: Send coverage
           command: ./scripts/ci/send-coverage-info.sh
   deploy:
@@ -65,6 +68,9 @@ jobs:
     steps:
       - checkout
       - restore_gradle_cache
+      - run:
+          name: Validate release tag
+          command: ./gradlew :app:validateReleaseTag
       - run:
           name: Publish APK
           command: ./gradlew publishReleaseApk
