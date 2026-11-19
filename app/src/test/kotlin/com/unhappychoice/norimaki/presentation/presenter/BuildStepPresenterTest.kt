@@ -59,7 +59,7 @@ class BuildStepPresenterTest : DescribeSpec({
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(byteArrayOf(('0'.code + secondArg<Long>().toInt()).toByte()))
+                        Observable.just(secondArg<Long>().toString().toByteArray())
                     }
                     every { fetchFinalRawOutput(url, 5L) } returns Observable.just("done".toByteArray())
                 }
@@ -79,17 +79,63 @@ class BuildStepPresenterTest : DescribeSpec({
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
-                        observer.assertValues("0", "1", "2", "3", "4")
+                        observer.values() shouldBe listOf("0", "1", "2", "3", "4")
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.assertValues("0", "1", "2", "3", "4", "done")
+                        observer.values() shouldBe listOf("0", "1", "2", "3", "4", "done")
                     } finally {
                         observer.dispose()
                     }
                 } finally {
                     RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
                 }
+            }
+        }
+    }
+
+    listOf(false, true).forEach { outputFails ->
+        it("reports the finished step output result when output fails: $outputFails") {
+            val expectedUrl = "https://circleci.com/output"
+            val finishedAction = action(5, Date()).apply {
+                every { outputUrl } returns expectedUrl
+            }
+            val finishedStep = BuildStep("Run tests", listOf(finishedAction))
+            val finishedBuild = build("finished", listOf(finishedStep))
+            val api = mockk<CircleCIAPIClientV1_1> {
+                every { getBuild("github", "owner", "repo", 42) } returns Observable.just(finishedBuild)
+            }
+            val output = mockk<BuildOutputClient> {
+                every { fetchOutput(expectedUrl) } returns if (outputFails) {
+                    Observable.error(IllegalStateException("Output load failed"))
+                } else {
+                    Observable.just("done")
+                }
+            }
+            val presenter = BuildStepPresenter().apply {
+                di = DI {
+                    bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                    bind<BuildStepId>() with singleton { BuildStepId(5) }
+                    bind<CircleCIAPIClientV1_1>() with singleton { api }
+                    bind<BuildOutputClient>() with singleton { output }
+                }
+            }
+            val loaded = mutableListOf<BuildStep>()
+
+            try {
+                RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+                RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+
+                presenter.loadStep { loaded.add(it) }
+
+                loaded shouldBe listOf(finishedStep)
+                presenter.logLoadFailed.value shouldBe outputFails
+                presenter.logString.value shouldBe (if (outputFails) "" else "done")
+            } finally {
+                presenter.bag.clear()
+                RxAndroidPlugins.reset()
+                RxJavaPlugins.reset()
             }
         }
     }

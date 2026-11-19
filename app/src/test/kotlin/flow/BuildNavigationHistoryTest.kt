@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import io.kotest.core.spec.style.DescribeSpec
@@ -60,6 +61,17 @@ class BuildNavigationHistoryTest : DescribeSpec({
                 keys[1],
                 """{"${BuildStepScreen::class.java.name}":{"build":$savedBuildWithoutSteps,"buildStep":$savedStep}}"""
             ) shouldBe keys[1]
+        }
+
+        it("returns to the build list when a legacy route has an incomplete build identifier") {
+            val build = buildFixture(2, 1)
+            listOf(build.copy(username = null), build.copy(reponame = null), build.copy(buildNum = null))
+                .forEach { incomplete ->
+                    val savedBuild = Gson().toJson(incomplete)
+                    val key = routes(build).first()
+                    restore(key, """{"${BuildScreen::class.java.name}":{"build":$savedBuild}}""") shouldBe
+                        BuildListScreen("")
+                }
         }
 
         it("uses the saved position when the API does not supply a step number") {
