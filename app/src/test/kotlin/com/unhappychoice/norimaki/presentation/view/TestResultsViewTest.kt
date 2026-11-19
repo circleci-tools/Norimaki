@@ -8,9 +8,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.testresults.TestFailure
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
+import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import io.mockk.every
 import io.mockk.mockk
@@ -27,6 +29,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.kodein.di.DI
 import org.kodein.di.bind
+import org.kodein.di.factory
 import org.kodein.di.singleton
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -86,7 +89,22 @@ class TestResultsViewTest {
         assertFalse(pending.hasObservers())
     }
 
-    private fun withResults(vararg responses: Single<TestResults>, verify: (TestResultsView) -> Unit) {
+    @Test
+    fun disposesPendingRequestWhenTheSessionChanges() {
+        val pending = SingleSubject.create<TestResults>()
+        val session = testSession(mockk())
+        withResults(pending, session = session) {
+            assertTrue(pending.hasObservers())
+            session.replace("new-token").blockingGet()
+            assertFalse(pending.hasObservers())
+        }
+    }
+
+    private fun withResults(
+        vararg responses: Single<TestResults>,
+        session: SessionService = testSession(mockk()),
+        verify: (TestResultsView) -> Unit
+    ) {
         val build = mockk<Build>()
         val client = mockk<TestResultsClient> {
             every { fetch(build) } returnsMany responses.toList()
@@ -96,7 +114,13 @@ class TestResultsViewTest {
             val activity = controller.setup().get()
             val container = activity.binding.containerView
             val view = activity.layoutInflater.inflate(screen.getLayoutResource(), container, false) as TestResultsView
-            view.di = screen.module(DI { bind<TestResultsClient>() with singleton { client } })
+            view.di = screen.module(DI {
+                bind<SessionService>() with singleton { session }
+                bind<TestResultsClient>() with factory { token: String ->
+                    assertEquals("test-token", token)
+                    client
+                }
+            })
             view.presenter.di = view.di
             container.addView(view)
             shadowOf(Looper.getMainLooper()).idle()
