@@ -55,9 +55,23 @@ class BuildOutputClient(
             .build()
 
     private fun rawOutputBytes(response: Response, offset: Long): ByteArray = when {
-        response.isSuccessful -> response.body.bytes()
+        response.code == 206 -> partialOutputBytes(response, offset)
+        response.isSuccessful -> response.body.bytes().let { bytes ->
+            when {
+                offset == 0L -> bytes
+                offset >= bytes.size -> ByteArray(0)
+                else -> bytes.copyOfRange(offset.toInt(), bytes.size)
+            }
+        }
         response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> ByteArray(0)
         else -> throw RawOutputHttpException(response.code)
+    }
+
+    private fun partialOutputBytes(response: Response, offset: Long): ByteArray {
+        val range = response.header("Content-Range").orEmpty()
+        val start = CONTENT_RANGE.matchEntire(range)?.groupValues?.get(1)?.toLongOrNull()
+        if (start != offset) throw IOException("Invalid Content-Range for raw log offset $offset: $range")
+        return response.body.bytes()
     }
 
     private fun isRetryable(error: Throwable): Boolean = when (error) {
@@ -72,6 +86,7 @@ class BuildOutputClient(
 
     private companion object {
         const val FINAL_RETRIES = 2
+        val CONTENT_RANGE = Regex("""bytes ([0-9]+)-[0-9]+/(?:[0-9]+|\*)""", RegexOption.IGNORE_CASE)
     }
 }
 
