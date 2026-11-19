@@ -68,8 +68,9 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun pollLatestBuilds() {
+        val latest = BuildListPolling(::getBuildsAPI)
         polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+            builds.take(1).flatMap(latest::fetchLatestBuilds)
         }
             .subscribeOnIoObserveOnUI()
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }

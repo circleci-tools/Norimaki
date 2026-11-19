@@ -6,22 +6,28 @@ import io.reactivex.Observable
 
 internal const val BUILD_LIST_PAGE_SIZE = 20
 
-internal fun fetchLatestBuilds(
-    knownBuilds: List<Build>,
-    fetchPage: (Int) -> Observable<List<Build>>
-): Observable<List<Build>> = Observable.defer {
-    val knownIds = knownBuilds.mapTo(hashSetOf()) { it.uniqueId() }
-    var offset = 0
-    var shouldStop = false
+internal class BuildListPolling(private val fetchPage: (Int) -> Observable<List<Build>>) {
+    private var backfillBoundary: Set<String>? = null
 
-    Observable.defer {
-        shouldStop = true
-        fetchPage(offset).doOnNext { page ->
-            shouldStop = page.size < BUILD_LIST_PAGE_SIZE || page.any { it.uniqueId() in knownIds }
-            offset += BUILD_LIST_PAGE_SIZE
-        }
-    }.repeatUntil { shouldStop }
-        .toList()
-        .map { it.flatten() }
-        .toObservable()
+    fun fetchLatestBuilds(knownBuilds: List<Build>): Observable<List<Build>> = Observable.defer {
+        val knownIds = backfillBoundary ?: knownBuilds.mapTo(hashSetOf()) { it.uniqueId() }
+        var offset = 0
+        var shouldStop = false
+
+        Observable.defer {
+            shouldStop = true
+            fetchPage(offset).doOnNext { page ->
+                shouldStop = page.size < BUILD_LIST_PAGE_SIZE || page.any { it.uniqueId() in knownIds }
+                // Retry from the head using the original boundary, since newer builds can shift offsets.
+                if (!shouldStop) backfillBoundary = knownIds
+                offset += BUILD_LIST_PAGE_SIZE
+            }
+        }.repeatUntil { shouldStop }
+            .doOnComplete { backfillBoundary = null }
+            .onErrorResumeNext(Observable.empty<List<Build>>())
+            .toList()
+            .filter { it.isNotEmpty() }
+            .map { it.flatten() }
+            .toObservable()
+    }
 }
