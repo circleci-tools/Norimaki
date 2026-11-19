@@ -80,19 +80,15 @@ class MainActivity : AppCompatActivity() {
         setupView()
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
+        if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
     }
 
-    override fun onStop() {
-        projectNavigation?.dispose()
-        projectNavigation = null
-        super.onStop()
-    }
-
     override fun onDestroy() {
+        projectNavigation?.dispose()
         scope.destroy()
         super.onDestroy()
     }
