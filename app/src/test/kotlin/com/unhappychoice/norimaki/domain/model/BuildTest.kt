@@ -15,14 +15,14 @@ class BuildTest : DescribeSpec({
         number: Int = 1,
         queued: Date? = null,
         buildStatus: String? = null,
-        vcsHost: String = "github.com"
+        repositoryUrl: String = "https://github.com/circleci-tools/Norimaki"
     ): Build = mockk {
         every { username } returns "circleci-tools"
         every { reponame } returns "Norimaki"
         every { branch } returns "master"
         every { buildNum } returns number
         every { vcsRevision } returns "abcdef123456"
-        every { vcsUrl } returns "https://$vcsHost/circleci-tools/Norimaki"
+        every { vcsUrl } returns repositoryUrl
         every { user } returns mapOf("login" to "unhappychoice")
         every { queuedAt } returns queued
         every { status } returns buildStatus
@@ -49,35 +49,42 @@ class BuildTest : DescribeSpec({
     describe("Build.uniqueId()") {
         it("should combine VCS provider, repository and build number") {
             build(number = 7).uniqueId() shouldBe "github/circleci-tools/Norimaki/7"
-            build(number = 7, vcsHost = "bitbucket.org").uniqueId() shouldBe "bitbucket/circleci-tools/Norimaki/7"
+            build(number = 7, repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki").uniqueId() shouldBe "bitbucket/circleci-tools/Norimaki/7"
         }
     }
 
     describe("vcsTypeFromUrl()") {
         it("should detect bitbucket") {
-            vcsTypeFromUrl("https://bitbucket.org/user/repo") shouldBe "bitbucket"
+            vcsTypeFromUrl("https://bitbucket.org/acme/repo") shouldBe "bitbucket"
+            vcsTypeFromUrl("https://BITBUCKET.ORG:443/acme/repo") shouldBe "bitbucket"
+        }
+        it("should only match the Bitbucket hostname") {
+            vcsTypeFromUrl("https://github.com/acme/bitbucket.org") shouldBe "github"
+            vcsTypeFromUrl("https://bitbucket.org.example.com/acme/repo") shouldBe "github"
         }
         it("should fall back to github") {
             vcsTypeFromUrl("https://github.com/user/repo") shouldBe "github"
             vcsTypeFromUrl(null) shouldBe "github"
+            vcsTypeFromUrl("bitbucket.org/acme/repo") shouldBe "github"
         }
-        it("should be used by Build.vcsType()") {
-            build().vcsType() shouldBe "github"
+        it("should resolve the provider used by build detail requests") {
+            build(repositoryUrl = "https://github.com/acme/bitbucket.org").vcsType() shouldBe "github"
+            build(repositoryUrl = "https://bitbucket.org/acme/repo").vcsType() shouldBe "bitbucket"
         }
     }
 
     describe("List<Build>.addDistinctByNumber()") {
         it("should retain builds with matching repository and number across providers when merging pages") {
             val github = build(number = 7)
-            val bitbucket = build(number = 7, vcsHost = "bitbucket.org")
+            val bitbucket = build(number = 7, repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki")
 
             listOf(github).addDistinctByNumber(listOf(bitbucket)) shouldBe listOf(bitbucket, github)
         }
 
         it("should replace only the matching provider's build when polling") {
             val github = build(number = 7, buildStatus = "running")
-            val bitbucket = build(number = 7, buildStatus = "running", vcsHost = "bitbucket.org")
-            val updated = build(number = 7, buildStatus = "success", vcsHost = "bitbucket.org")
+            val bitbucket = build(number = 7, buildStatus = "running", repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki")
+            val updated = build(number = 7, buildStatus = "success", repositoryUrl = "https://bitbucket.org/circleci-tools/Norimaki")
 
             listOf(github, bitbucket).addDistinctByNumber(listOf(updated)) shouldBe listOf(updated, github)
         }

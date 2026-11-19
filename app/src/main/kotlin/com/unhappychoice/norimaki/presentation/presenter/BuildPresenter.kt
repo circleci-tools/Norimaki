@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.isFinished
@@ -15,7 +16,6 @@ import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
-import mortar.MortarScope
 import org.kodein.di.instance
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -24,8 +24,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val steps = Variable<List<BuildStep>>(listOf())
     private val rebuildInFlight = AtomicBoolean()
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onAuthenticated() {
         pollBuild()
     }
 
@@ -53,9 +52,10 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuild() {
+        val client = account?.client ?: return
         if (!rebuildInFlight.compareAndSet(false, true)) return
 
-        Observable.defer { retryBuild() }
+        Observable.defer { retryBuild(client) }
             .subscribeOnIoObserveOnUI()
             .doFinally { rebuildInFlight.set(false) }
             .subscribeNext { goBack(activity) }
@@ -63,17 +63,22 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun rebuildWithoutCache() {
+        val verified = account ?: return
         val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
 
-        api.rebuildWithoutCache(build, onFinished = { rebuildInFlight.set(false) })
+        verified.client.rebuildWithoutCache(
+            build,
+            cancel = sessionEnded(verified),
+            onFinished = { rebuildInFlight.set(false) }
+        )
             .observeOn(AndroidSchedulers.mainThread())
             .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
             .addTo(bag)
     }
 
-    private fun retryBuild(): Observable<Build> =
-        api.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+    private fun retryBuild(client: CircleCIAPIClientV1_1): Observable<Build> =
+        client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
 
     private fun goBackFrom(origin: BuildView) {
         val container = activity.binding.containerView
@@ -83,7 +88,8 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     private fun getBuildAPI(): Observable<Build> =
-        api.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+        account?.client?.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
+            ?: Observable.empty()
 
     companion object {
         const val BUILD_POLLING_SECONDS = 5L

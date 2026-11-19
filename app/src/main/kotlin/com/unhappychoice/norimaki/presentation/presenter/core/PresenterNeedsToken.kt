@@ -1,66 +1,73 @@
 package com.unhappychoice.norimaki.presentation.presenter.core
 
 import android.os.Handler
+import android.os.Looper
 import android.view.View
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
-import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.service.EventBusService
-import com.unhappychoice.norimaki.extension.goTo
+import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.domain.service.VerifiedSession
 import com.unhappychoice.norimaki.extension.subscribeNext
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
-import com.unhappychoice.norimaki.extension.withLog
-import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import flow.Direction
+import flow.Flow
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.disposables.Disposables
 import io.reactivex.rxkotlin.addTo
 import mortar.MortarScope
 import org.kodein.di.instance
 
 abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     val activity: MainActivity by instance()
-    val api: CircleCIAPIClientV1_1 by instance()
     val eventBus: EventBusService by instance()
-
-    companion object {
-        var currentUser: User? = null
-    }
-
-    val token
-        get() = APITokenPreference(activity).token
-
-    val bag = CompositeDisposable()
+    private val session: SessionService by instance()
+    private val lifecycle = CompositeDisposable()
+    protected val bag = CompositeDisposable()
+    @Volatile protected var account: VerifiedSession? = null
+        private set
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
-        authenticate()
+        session.restore()
+            .subscribe(::useAccount, { goToAPITokenView() })
+            .addTo(lifecycle)
     }
 
     override fun dropView(view: T) {
+        account = null
+        lifecycle.clear()
         bag.clear()
         super.dropView(view)
     }
 
     override fun onExitScope() {
+        lifecycle.dispose()
         bag.dispose()
         super.onExitScope()
     }
 
-    private fun authenticate() {
-        if (token.isBlank()) return goToAPITokenView()
-        if (currentUser != null) return
+    protected abstract fun onAuthenticated()
+    protected open fun onSessionEnded() {}
 
-        api.getMe()
-            .subscribeOnIoObserveOnUI()
-            .withLog("getMe")
-            .doOnError { goToAPITokenView() }
-            .doOnNext { currentUser = it }
-            .subscribeNext { eventBus.authenticated.onNext(Pair(token, it.pusherId)) }
-            .addTo(bag)
+    protected fun sessionEnded(verified: VerifiedSession) =
+        session.changes.filter { it.toNullable() !== verified }.take(1)
+
+    private fun useAccount(verified: VerifiedSession) {
+        account = verified
+        sessionEnded(verified)
+            .subscribeNext {
+                account = null
+                bag.clear()
+                onSessionEnded()
+            }
+            .addTo(lifecycle)
+        onAuthenticated()
     }
 
     private fun goToAPITokenView() {
-        Handler().postDelayed({ goTo(activity, APITokenScreen()) }, 500)
+        val handler = Handler(Looper.getMainLooper())
+        val redirect = Runnable { Flow.get(activity).replaceHistory(APITokenScreen(), Direction.REPLACE) }
+        handler.postDelayed(redirect, 500)
+        Disposables.fromAction { handler.removeCallbacks(redirect) }.addTo(lifecycle)
     }
 }
-
