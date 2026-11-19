@@ -8,10 +8,15 @@ import flow.Direction
 import flow.Flow
 import io.reactivex.disposables.Disposable
 
-internal fun Flow.subscribeToProjectNavigation(eventBus: EventBusService): Disposable =
-    eventBus.selectProject.subscribeNext { selection ->
-        val projectName = selection.toNullable()?.let { project ->
-            "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
-        }.orEmpty()
-        replaceTop(BuildListScreen(projectName), Direction.REPLACE)
-    }
+internal fun Flow.subscribeToProjectNavigation(
+    eventBus: EventBusService,
+    isTokenScreenVisible: () -> Boolean
+): Disposable =
+    eventBus.selectProject
+        .filter { !isTokenScreenVisible() }
+        .subscribeNext { selection ->
+            val projectName = selection.toNullable()?.let { project ->
+                "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
+            }.orEmpty()
+            replaceTop(BuildListScreen(projectName), Direction.REPLACE)
+        }
