@@ -54,31 +54,29 @@ class BuildStepPresenterTest : DescribeSpec({
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(secondArg<Long>().toString().toByteArray())
+                        Observable.just(byteArrayOf(secondArg<Long>().toByte()))
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just("done".toByteArray())
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(byteArrayOf(100))
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
                         bind<Build>() with singleton { running }
                         bind<BuildStep>() with singleton { second }
-                        bind<CircleCIAPIClientV1_1>() with singleton { api }
-                        bind<BuildOutputClient>() with singleton { output }
                     }
                 }
 
                 val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
                 RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                 try {
-                    val observer = presenter.runningOutput().test()
+                    val observer = presenter.runningOutput(api, output).test()
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
-                        observer.values() shouldBe listOf("0", "1", "2", "3", "4")
+                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4)
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.values() shouldBe listOf("0", "1", "2", "3", "4", "done")
+                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4, 100)
                     } finally {
                         observer.dispose()
                     }
