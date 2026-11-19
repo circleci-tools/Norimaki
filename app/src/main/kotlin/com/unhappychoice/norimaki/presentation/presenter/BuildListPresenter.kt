@@ -69,7 +69,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+            history.asObservable().take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
         }
             .subscribeOnIoObserveOnUI()
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
