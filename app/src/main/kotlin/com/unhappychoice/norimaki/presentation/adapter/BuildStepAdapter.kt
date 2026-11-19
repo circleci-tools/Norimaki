@@ -8,13 +8,9 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.runTime
 import com.unhappychoice.norimaki.domain.model.statusColor
-import com.unhappychoice.norimaki.extension.subscribeNext
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
 class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
@@ -38,24 +34,33 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
         holder.bind(steps[position])
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.clearBoundItem()
+        super.onViewRecycled(holder)
+    }
+
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(step: BuildStep) {
+            boundItem = step
             buildTitle.text = step.name
             time.text = step.runTime()
             indicator.setBackgroundColor(step.statusColor())
-
-            view.clicks()
-                .subscribeNext { onClickItem.onNext(step) }
-                .addTo(bag)
         }
+
+        fun clearBoundItem() {
+            boundItem = null
+        }
+
+        private var boundItem: BuildStep? = null
 
         private val indicator = view.findViewById<View>(R.id.statusIndicator)
         private val buildTitle = view.findViewById<TextView>(R.id.buildTitle)
         private val time = view.findViewById<TextView>(R.id.time)
+
+        init {
+            view.setOnClickListener { boundItem?.let(onClickItem::onNext) }
+        }
     }
 
-    fun finalize() = bag.dispose()
-
     private var steps = emptyList<BuildStep>()
-    private val bag = CompositeDisposable()
 }

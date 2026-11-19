@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
@@ -39,11 +38,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     val builds = history.asObservable().map { it.builds }
 
     override fun onAuthenticated() {
-        val client = account!!.client
         observePages().addTo(bag)
         getBuilds()
 
-        pollLatestBuilds(client)
+        pollLatestBuilds()
     }
 
     override fun onSessionEnded() {
@@ -70,14 +68,12 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         if (isWorkflow && !canScroll) getBuilds()
     }
 
-    private fun pollLatestBuilds(client: CircleCIAPIClientV1_1) {
+    private fun pollLatestBuilds() {
         polling(BUILD_LIST_POLLING_SECONDS) {
             builds.take(1)
                 .flatMap { displayed -> fetchLatestBuilds(displayed, ::getBuildsAPI) }
                 .subscribeOnIoObserveOnUI()
-                .concatMap { latest ->
-                    refreshBuildList(history.value.builds, latest, workflowId) { getBuildDetails(client, it) }
-                }
+                .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
         }
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
             .addTo(bag)
@@ -92,12 +88,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    private fun getBuildDetails(client: CircleCIAPIClientV1_1, build: Build): Observable<Build> {
+    private fun getBuildDetails(build: Build): Observable<Build> {
         val username = build.username ?: return Observable.empty()
         val repository = build.reponame ?: return Observable.empty()
         val number = build.buildNum ?: return Observable.empty()
-        return Observable.defer { client.getBuild(build.vcsType(), username, repository, number) }
-            .subscribeOnIoObserveOnUI()
+        return Observable.defer {
+            val client = account?.client ?: return@defer Observable.empty<Build>()
+            client.getBuild(build.vcsType(), username, repository, number)
+        }.subscribeOnIoObserveOnUI()
     }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
