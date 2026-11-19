@@ -58,13 +58,13 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> =
         when (projectName) {
-            "" -> api.getRecentBuilds(offset = offset, limit = BuildListRequests.PAGE_SIZE)
+            "" -> api.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
             else -> api.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),
                 project = repoName(),
                 offset = offset,
-                limit = BuildListRequests.PAGE_SIZE
+                limit = BUILD_LIST_PAGE_SIZE
             )
         }
 

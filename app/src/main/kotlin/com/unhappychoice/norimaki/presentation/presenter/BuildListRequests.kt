@@ -36,19 +36,28 @@ internal class BuildListRequests(
 
     fun poll(period: Long): Disposable = CompositeDisposable(
         incoming.concatMapSingle(::merge).subscribeNext(::publish),
-        polling(period, scheduler = ui) { request(offset = 0, paginated = page.value == 0) }
+        polling(period, scheduler = ui, fetch = ::pollLatest)
             .subscribeNext {}
     )
 
     fun loadNextPage(): Disposable? {
         if (page.value == 0 || isLoading.value || !hasMore.value) return null
-        return request(offset = page.value * PAGE_SIZE, paginated = true).subscribeNext {}
+        return requestPage(page.value * BUILD_LIST_PAGE_SIZE).subscribeNext {}
     }
 
-    private fun request(offset: Int, paginated: Boolean): Observable<Unit> {
+    private fun pollLatest(): Observable<Unit> {
+        if (page.value == 0) return requestPage(0)
+
+        val knownBuilds = history.value.builds
+        return request(fetchLatestBuilds(knownBuilds, fetch), paginated = false)
+    }
+
+    private fun requestPage(offset: Int): Observable<Unit> =
+        request(Observable.defer { fetch(offset) }.singleOrError().toObservable(), paginated = true)
+
+    private fun request(source: Observable<List<Build>>, paginated: Boolean): Observable<Unit> {
         val number = ++requestNumber
-        val source = Observable.defer { fetch(offset) }
-        val response = (if (paginated) source.singleOrError().toObservable() else source)
+        val response = source
             .subscribeOn(io)
             .observeOn(ui)
             .concatMapSingle { builds ->
@@ -96,8 +105,4 @@ internal class BuildListRequests(
     )
 
     private data class Update(val response: Response, val builds: List<Build>, val history: BuildHistory)
-
-    companion object {
-        const val PAGE_SIZE = 20
-    }
 }
