@@ -80,9 +80,9 @@ class MainActivity : AppCompatActivity() {
         setupView()
     }
 
-    override fun onPostCreate(savedInstanceState: Bundle?) {
-        super.onPostCreate(savedInstanceState)
-        // Flow initializes its lifecycle fragment after onCreate.
+    override fun onResume() {
+        super.onResume()
+        if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
     }

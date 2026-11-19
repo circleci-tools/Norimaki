@@ -1,15 +1,22 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
+import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowHttpException
+import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
+import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.slot
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.reactivex.Completable
 import io.reactivex.Observable
@@ -38,9 +45,14 @@ class WorkflowPresenterTest : DescribeSpec({
         RxAndroidPlugins.reset()
     }
 
-    fun presenter(client: WorkflowClient, api: CircleCIAPIClientV1_1 = mockk()) =
+    fun presenter(
+        client: WorkflowClient,
+        api: CircleCIAPIClientV1_1 = mockk(),
+        activity: MainActivity = mockk()
+    ) =
         WorkflowPresenter(WorkflowScreen("github/owner/repo", "run", "deploy")).apply {
             di = DI {
+                bind<MainActivity>() with singleton { activity }
                 bind<WorkflowClient>() with singleton { client }
                 bind<CircleCIAPIClientV1_1>() with singleton { api }
             }
@@ -119,5 +131,28 @@ class WorkflowPresenterTest : DescribeSpec({
 
         verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
         updates.values().last().message shouldBe R.string.workflow_build_load_error
+    }
+
+    it("opens build details with the fetched build for a numbered job") {
+        val activity = mockk<MainActivity>()
+        val build = mockk<Build>()
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
+        }
+        val presenter = presenter(mockk(), api, activity)
+        val flow = mockk<Flow>(relaxed = true)
+        val destination = slot<BuildScreen>()
+        mockkStatic(Flow::class)
+        try {
+            every { Flow.get(activity) } returns flow
+
+            presenter.openBuild(WorkflowJob("build", "test", "build", "success", 42, null))
+
+            verify(exactly = 1) { flow.set(capture(destination)) }
+            (destination.captured.build === build) shouldBe true
+        } finally {
+            presenter.bag.dispose()
+            unmockkStatic(Flow::class)
+        }
     }
 })
