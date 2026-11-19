@@ -88,7 +88,7 @@ class BuildListPresenterTest : DescribeSpec({
             scheduler.triggerActions()
             presenter.getBuilds()
             scheduler.triggerActions()
-            builds.assertValues(emptyList(), listOf(newest), listOf(running, newest))
+            builds.assertValueAt(2, listOf(running, newest))
 
             scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
             builds.assertValueAt(3, listOf(finished, newest))

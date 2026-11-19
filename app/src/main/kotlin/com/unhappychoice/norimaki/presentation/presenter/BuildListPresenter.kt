@@ -17,7 +17,6 @@ import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
-import io.reactivex.Maybe
 import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
@@ -93,9 +92,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         val username = build.username ?: return Observable.empty()
         val repository = build.reponame ?: return Observable.empty()
         val number = build.buildNum ?: return Observable.empty()
-        return Maybe.fromCallable { account }
-            .flatMapObservable { it.client.getBuild(build.vcsType(), username, repository, number) }
-            .subscribeOnIoObserveOnUI()
+        return Observable.defer {
+            val client = account?.client ?: return@defer Observable.empty<Build>()
+            client.getBuild(build.vcsType(), username, repository, number)
+        }.subscribeOnIoObserveOnUI()
     }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->

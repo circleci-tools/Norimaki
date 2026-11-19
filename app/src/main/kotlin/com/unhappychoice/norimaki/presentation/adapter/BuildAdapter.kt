@@ -28,8 +28,14 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
         holder.bind(getItem(position))
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.clearBoundItem()
+        super.onViewRecycled(holder)
+    }
+
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(build: Build) {
+            boundItem = build
             repositoryTitle.text = build.repositoryWithWorkflowString()
             branchTitle.text = build.revisionString()
             commitTitle.text = build.subject
@@ -38,9 +44,13 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
 
             Glide.with(context).load(build.avatarUrl())
                 .into(author)
-
-            view.setOnClickListener { onClickItem.onNext(build) }
         }
+
+        fun clearBoundItem() {
+            boundItem = null
+        }
+
+        private var boundItem: Build? = null
 
         private val author = view.findViewById<CircleImageView>(R.id.author)
         private val indicator = view.findViewById<View>(R.id.statusIndicator)
@@ -48,6 +58,10 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
         private val branchTitle = view.findViewById<TextView>(R.id.branchTitle)
         private val commitTitle = view.findViewById<TextView>(R.id.commitTitle)
         private val createdAt = view.findViewById<TextView>(R.id.createdAt)
+
+        init {
+            view.setOnClickListener { boundItem?.let(onClickItem::onNext) }
+        }
     }
 }
 

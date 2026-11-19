@@ -12,7 +12,7 @@ jobs:
   build:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:2026.10.1
+      - image: cimg/android:2026.02.1
     environment:
       JVM_OPTS: -Xmx3200m
     steps:
@@ -40,7 +40,7 @@ jobs:
   test:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:2026.10.1
+      - image: cimg/android:2026.02.1
     resource_class: large
     environment:
       JVM_OPTS: -Xmx3200m
@@ -60,7 +60,7 @@ jobs:
   deploy:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:2026.10.1
+      - image: cimg/android:2026.02.1
     resource_class: large
     environment:
       JVM_OPTS: -Xmx6g
