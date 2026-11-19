@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
@@ -21,7 +22,8 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     private val buildList by lazy {
         BuildListRequests(
-            workflowId, Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(), ::getBuildsAPI
+            workflowId, Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
+            ::getBuildDetails, ::getBuildsAPI
         )
     }
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
@@ -53,6 +55,14 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
 
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
+    }
+
+    private fun getBuildDetails(build: Build): Observable<Build> {
+        val client = account?.client ?: return Observable.empty()
+        val username = build.username ?: return Observable.empty()
+        val repository = build.reponame ?: return Observable.empty()
+        val number = build.buildNum ?: return Observable.empty()
+        return client.getBuild(build.vcsType(), username, repository, number)
     }
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> {

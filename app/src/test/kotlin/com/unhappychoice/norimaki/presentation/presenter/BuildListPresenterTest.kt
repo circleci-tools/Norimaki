@@ -16,6 +16,7 @@ import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
+import io.reactivex.subjects.PublishSubject
 import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
@@ -57,8 +58,8 @@ class BuildListPresenterTest : DescribeSpec({
         scope = attachToTestScope(mockk<BuildListView>())
     }
 
-    fun build(id: String, number: Int): Build {
-        val workflow = mockk<Workflow> { every { workflowId } returns id }
+    fun build(id: String?, number: Int, state: String = "finished"): Build {
+        val workflow = id?.let { mockk<Workflow> { every { workflowId } returns it } }
         return mockk {
             every { workflows } returns workflow
             every { vcsUrl } returns "https://github.com/owner/repo"
@@ -66,11 +67,52 @@ class BuildListPresenterTest : DescribeSpec({
             every { reponame } returns "repo"
             every { buildNum } returns number
             every { queuedAt } returns null
+            every { lifecycle } returns state
         }
     }
 
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
+
+    describe("build list polling") {
+        it("keeps refreshed workflow build details when an older page arrives late") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val newest = build("target", 3)
+            val running = build("target", 1, state = "running")
+            val finished = build(null, 1)
+            val unseen = build("target", 0)
+            val latePage = PublishSubject.create<List<Build>>()
+            every { api.pageAt(0) } returns Observable.just(listOf(newest, build("other", 2)))
+            every { api.pageAt(20) } returns Observable.just(listOf(running))
+            every { api.pageAt(40) } returns latePage
+            every { api.getBuild("github", "owner", "repo", 1) } returns Observable.just(finished)
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+
+            scheduler.triggerActions()
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            builds.assertValueAt(2, listOf(running, newest))
+            presenter.getBuilds()
+            scheduler.triggerActions()
+
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            builds.assertValueAt(3, listOf(finished, newest))
+            scheduler.advanceTimeBy(20, TimeUnit.SECONDS)
+
+            builds.assertValueCount(4)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
+            presenter.page.value shouldBe 2
+            presenter.hasMore.value shouldBe true
+
+            latePage.onNext(listOf(running, unseen))
+            latePage.onComplete()
+            scheduler.triggerActions()
+            builds.assertValueAt(4, listOf(unseen, finished, newest))
+            presenter.page.value shouldBe 3
+            builds.dispose()
+        }
+    }
 
     describe("workflow polling") {
         it("recovers matching builds beyond the first page after pagination ends") {

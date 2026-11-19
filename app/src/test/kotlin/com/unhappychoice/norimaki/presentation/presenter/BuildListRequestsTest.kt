@@ -17,7 +17,7 @@ class BuildListRequestsTest : DescribeSpec({
             val scheduler = TestScheduler()
             val initialPage = PublishSubject.create<List<Build>>()
             val offsets = mutableListOf<Int>()
-            val requests = BuildListRequests(null, scheduler, scheduler, scheduler) { offset ->
+            val requests = BuildListRequests(null, scheduler, scheduler, scheduler, { Observable.empty() }) { offset ->
                 offsets.add(offset)
                 if (offset == 0) initialPage else Observable.just(emptyList<Build>())
             }
@@ -43,7 +43,7 @@ class BuildListRequestsTest : DescribeSpec({
             val offsets = mutableListOf<Int>()
             val first = build(42, "running")
             val next = build(41, "success")
-            val requests = BuildListRequests(null, scheduler, computation, scheduler) { offset ->
+            val requests = BuildListRequests(null, scheduler, computation, scheduler, { Observable.empty() }) { offset ->
                 offsets.add(offset)
                 Observable.just(listOf(if (offset == 0) first else next))
             }
@@ -80,7 +80,7 @@ class BuildListRequestsTest : DescribeSpec({
             val successful = build(42, "success")
             val unseen = build(41, "success")
             val offsets = mutableListOf<Int>()
-            val requests = BuildListRequests(null, scheduler, scheduler, scheduler) { offset ->
+            val requests = BuildListRequests(null, scheduler, scheduler, scheduler, { Observable.empty() }) { offset ->
                 offsets.add(offset)
                 when {
                     offsets.size == 1 -> Observable.just(listOf(running))
@@ -113,6 +113,7 @@ private fun build(number: Int, buildStatus: String): Build = mockk {
     every { username } returns "circleci-tools"
     every { reponame } returns "Norimaki"
     every { buildNum } returns number
+    every { lifecycle } returns if (buildStatus == "running") "running" else "finished"
     every { status } returns buildStatus
     every { queuedAt } returns Date(number.toLong())
 }

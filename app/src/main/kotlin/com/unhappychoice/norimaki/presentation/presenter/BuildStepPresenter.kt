@@ -19,6 +19,7 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildStepPresenter internal constructor(
     private val createOutputClient: (String) -> BuildOutputClient
@@ -105,8 +106,9 @@ internal fun pollActionOutputs(
     val urls = outputUrls.distinct()
     val decoders = urls.associateWith { Utf8StreamDecoder() }
     val offsets = mutableMapOf<String, Long>()
-    // Stop scheduling reads at completion, then drain after any in-flight reads.
+    val reading = AtomicBoolean()
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
+        .filter { reading.compareAndSet(false, true) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
@@ -123,6 +125,7 @@ internal fun pollActionOutputs(
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }
-            Observable.concatDelayError(reads).filter { it.isNotEmpty() }
+            val batch = Observable.concatDelayError(reads).filter { it.isNotEmpty() }
+            if (finishing) batch else batch.doOnComplete { reading.set(false) }
         }
 }

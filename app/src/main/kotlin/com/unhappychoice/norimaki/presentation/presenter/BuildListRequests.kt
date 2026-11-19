@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
+import com.unhappychoice.norimaki.domain.model.refreshBuildList
 import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
@@ -22,6 +23,7 @@ internal class BuildListRequests(
     private val io: Scheduler,
     private val computation: Scheduler,
     private val ui: Scheduler,
+    private val fetchDetails: (Build) -> Observable<Build>,
     private val fetch: (Int) -> Observable<List<Build>>
 ) : Loadable, Paginatable {
     override val isLoading = Variable(false)
@@ -57,7 +59,14 @@ internal class BuildListRequests(
         if (page.value == 0) return requestPage(0)
 
         val knownBuilds = history.value.builds
-        return request(fetchLatestBuilds(knownBuilds, fetch), paginated = false)
+        val refreshed = fetchLatestBuilds(knownBuilds, fetch)
+            .observeOn(ui)
+            .concatMap { latest ->
+                refreshBuildList(history.value.builds, latest, workflowId) { build ->
+                    Observable.defer { fetchDetails(build) }.subscribeOn(io)
+                }
+            }
+        return request(refreshed, paginated = false)
     }
 
     private fun requestPage(offset: Int): Observable<Unit> =
@@ -83,7 +92,8 @@ internal class BuildListRequests(
 
     private fun merge(response: Response): Single<Update> {
         val current = history.value
-        val eligible = response.builds.inWorkflow(workflowId).filter { build ->
+        val filter = workflowId.takeIf { response.paginated }
+        val eligible = response.builds.inWorkflow(filter).filter { build ->
             val latest = latestRequestByBuild[build.uniqueId()]
             latest == null || latest <= response.number
         }
