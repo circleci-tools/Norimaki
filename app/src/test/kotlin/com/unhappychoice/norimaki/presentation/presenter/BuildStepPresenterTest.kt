@@ -15,6 +15,7 @@ import io.reactivex.schedulers.TestScheduler
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
+import java.io.IOException
 import java.util.Date
 import java.util.concurrent.TimeUnit.SECONDS
 
@@ -32,6 +33,29 @@ class BuildStepPresenterTest : DescribeSpec({
         every { username } returns "owner"
         every { reponame } returns "repo"
         every { buildNum } returns 42
+    }
+
+    describe("completedActionLogs()") {
+        it("should keep earlier output, show a missing output notice, and continue") {
+            completedActionLogs(listOf("first", "second", "third")) { url ->
+                when (url) {
+                    "second" -> Observable.error(IOException("HTTP 503"))
+                    else -> Observable.just(url)
+                }
+            }.test().assertResult("first", "\n[Some output could not be loaded.]\n", "third")
+        }
+
+        it("should preserve action order when all downloads succeed") {
+            completedActionLogs(listOf("first", "second")) { Observable.just(it) }
+                .test().assertResult("first", "second")
+        }
+
+        it("should continue when creating a download throws") {
+            completedActionLogs(listOf("invalid", "valid")) { url ->
+                if (url == "invalid") throw IllegalArgumentException("Invalid URL")
+                Observable.just(url)
+            }.test().assertResult("\n[Some output could not be loaded.]\n", "valid")
+        }
     }
 
     describe("BuildStepPresenter running output") {
