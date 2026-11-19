@@ -141,6 +141,18 @@ play {
     serviceAccountCredentials.set(decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", ".json"))
 }
 
+tasks.register('validateReleaseTag') {
+    description = 'Verify that the release tag matches the APK version name.'
+    def expectedTag = "v${android.defaultConfig.versionName}"
+    def releaseTag = providers.environmentVariable('CIRCLE_TAG')
+    doLast {
+        def actualTag = releaseTag.getOrElse('')
+        if (actualTag != expectedTag) {
+            throw new GradleException("Release tag '${actualTag}' does not match APK version tag '${expectedTag}'.")
+        }
+    }
+}
+
 tasks.withType(Test) {
     jacoco.includeNoLocationClasses = true
     jacoco.excludes = ['jdk.internal.*']
