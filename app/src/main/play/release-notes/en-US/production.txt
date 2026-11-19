@@ -1,1 +1,4 @@
-- Fix build list won't save its scrolling state
+- Live build status updates are back.
+- See workflow and job names in the build list and browse all jobs in a workflow.
+- On tablets, keep project navigation visible and browse builds in two columns.
+- Enjoy animated screen transitions and more reliable system Back navigation.

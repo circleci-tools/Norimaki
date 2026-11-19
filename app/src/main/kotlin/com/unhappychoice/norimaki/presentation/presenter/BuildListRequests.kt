@@ -45,6 +45,14 @@ internal class BuildListRequests(
         return requestPage(page.value * BUILD_LIST_PAGE_SIZE).subscribeNext {}
     }
 
+    fun reset() {
+        latestRequestByBuild.clear()
+        page.value = 0
+        hasMore.value = true
+        isLoading.value = false
+        if (history.value.builds.isNotEmpty()) history.value = BuildHistory()
+    }
+
     private fun pollLatest(): Observable<Unit> {
         if (page.value == 0) return requestPage(0)
 

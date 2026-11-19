@@ -3,7 +3,9 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.Workflow
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
+import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -14,34 +16,45 @@ import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
+import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.util.concurrent.TimeUnit
 
 class BuildListPresenterTest : DescribeSpec({
-    val ui = TestScheduler()
+    lateinit var scope: MortarScope
 
-    beforeSpec {
-        RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
+    lateinit var scheduler: TestScheduler
+
+    beforeEach {
+        scheduler = TestScheduler()
+        RxJavaPlugins.setComputationSchedulerHandler { scheduler }
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { ui }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { scheduler }
     }
+
+    afterEach { scope.destroy() }
 
     afterSpec {
         RxJavaPlugins.reset()
         RxAndroidPlugins.reset()
     }
 
-    fun presenter(api: CircleCIAPIClientV1_1, workflowId: String? = "target") = BuildListPresenter().apply {
+    fun presenter(
+        api: CircleCIAPIClientV1_1,
+        workflowId: String? = "target",
+        session: SessionService = testSession(api)
+    ) = BuildListPresenter().apply {
         di = DI {
-            bind<CircleCIAPIClientV1_1>() with singleton { api }
+            bind<SessionService>() with singleton { session }
             bind<String>() with singleton { "github/owner/repo" }
             workflowId?.let { id ->
                 bind<String>(tag = WorkflowScreen.WORKFLOW_ID_TAG) with singleton { id }
             }
         }
+        scope = attachToTestScope(mockk<BuildListView>())
     }
 
     fun build(id: String, number: Int): Build {
@@ -75,28 +88,24 @@ class BuildListPresenterTest : DescribeSpec({
             )
             val presenter = presenter(api)
             val builds = presenter.builds.test()
-            try {
-                presenter.pollLatestBuilds()
-                presenter.isLoading.value shouldBe true
-                presenter.getBuilds()
-                ui.triggerActions()
-                verify(exactly = 1) { api.pageAt(0) }
-                presenter.getBuilds()
-                ui.triggerActions()
-                presenter.hasMore.value shouldBe false
+            presenter.isLoading.value shouldBe true
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            verify(exactly = 1) { api.pageAt(0) }
+            presenter.page.value shouldBe 1
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            presenter.hasMore.value shouldBe false
 
-                ui.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
 
-                builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
-                verify(exactly = 2) { api.pageAt(0) }
-                verify(exactly = 2) { api.pageAt(20) }
-                verify(exactly = 0) { api.pageAt(40) }
-                presenter.page.value shouldBe 2
-                presenter.hasMore.value shouldBe false
-            } finally {
-                presenter.bag.dispose()
-                builds.dispose()
-            }
+            builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
+            verify(exactly = 2) { api.pageAt(0) }
+            verify(exactly = 2) { api.pageAt(20) }
+            verify(exactly = 0) { api.pageAt(40) }
+            presenter.page.value shouldBe 2
+            presenter.hasMore.value shouldBe false
+            builds.dispose()
         }
     }
 
@@ -112,36 +121,66 @@ class BuildListPresenterTest : DescribeSpec({
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
-            presenter.pollLatestBuilds()
-            ui.triggerActions()
+            scheduler.triggerActions()
             builds.assertValue(emptyList())
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            ui.triggerActions()
+            scheduler.triggerActions()
             builds.assertValue(emptyList())
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            ui.triggerActions()
+            scheduler.triggerActions()
             builds.assertValues(emptyList(), listOf(matchingJob))
 
             presenter.getBuildsIfUnderfilled(canScroll = true)
             verify(exactly = 0) { api.pageAt(60) }
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            ui.triggerActions()
+            scheduler.triggerActions()
             presenter.hasMore.value shouldBe true
             presenter.page.value shouldBe 4
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            ui.triggerActions()
+            scheduler.triggerActions()
             presenter.hasMore.value shouldBe false
             presenter.getBuildsIfUnderfilled(canScroll = false)
-            ui.triggerActions()
+            scheduler.triggerActions()
             verify(exactly = 0) { api.pageAt(100) }
             builds.assertValues(emptyList(), listOf(matchingJob))
-            presenter.bag.clear()
+        }
+
+        it("clears loaded builds and discards queued updates when the session changes") {
+            val computation = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { computation }
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val first = build("target", 2)
+            every { api.pageAt(0) } returns Observable.just(listOf(first))
+            every { api.pageAt(20) } returns Observable.just(listOf(build("target", 1)))
+            val presenter = presenter(api, session = session)
+            val builds = presenter.builds.test()
+            scheduler.triggerActions()
+            computation.triggerActions()
+            scheduler.triggerActions()
+            builds.assertValues(emptyList(), listOf(first))
+
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            session.replace("replacement-token").test().assertComplete()
+            computation.triggerActions()
+            scheduler.triggerActions()
+
+            builds.assertValues(emptyList(), listOf(first), emptyList())
+            presenter.page.value shouldBe 0
+            presenter.isLoading.value shouldBe false
+            presenter.hasMore.value shouldBe true
+            presenter.getBuilds()
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.pageAt(0) }
+            verify(exactly = 1) { api.pageAt(20) }
         }
 
         it("does not auto-load pages for an unfiltered project") {
             val api = mockk<CircleCIAPIClientV1_1>()
+            every { api.pageAt(0) } returns Observable.just(listOf(build("other", 3)))
             presenter(api, workflowId = null).getBuildsIfUnderfilled(canScroll = false)
-            verify(exactly = 0) { api.pageAt(0) }
+            verify(exactly = 0) { api.pageAt(20) }
         }
     }
 })

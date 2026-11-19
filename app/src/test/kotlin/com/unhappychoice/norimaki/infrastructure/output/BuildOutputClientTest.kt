@@ -23,6 +23,16 @@ class BuildOutputClientTest : DescribeSpec({
     val url = "https://example.com/log"
     val offset = 42L
 
+    describe("fetchOutput()") {
+        it("should report the HTTP status before parsing an error body") {
+            val client = outputClient { response(it, 503, "Service Unavailable") }
+
+            client.fetchOutput(url).test()
+                .assertError { it is IOException && it.message == "Action output request failed with HTTP 503" }
+                .assertNoValues()
+        }
+    }
+
     describe("fetchFinalRawOutput()") {
         listOf("HTTP 503", "I/O error").forEach { failure ->
             it("should emit the remaining bytes once at the same offset after an initial $failure") {

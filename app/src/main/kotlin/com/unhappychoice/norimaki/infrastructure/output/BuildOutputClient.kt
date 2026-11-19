@@ -17,8 +17,12 @@ class BuildOutputClient(
     private val ioScheduler: Scheduler = Schedulers.io()
 ) {
     fun fetchOutput(outputUrl: String): Observable<String> =
-        Observable.fromCallable { execute(Request.Builder().url(outputUrl).build()).use { it.body.string() } }
-            .map { joinMessages(it) }
+        Observable.fromCallable {
+            execute(Request.Builder().url(outputUrl).build()).use { response ->
+                if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
+                joinMessages(response.body.string())
+            }
+        }
 
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<ByteArray> =
         Observable.fromCallable {
