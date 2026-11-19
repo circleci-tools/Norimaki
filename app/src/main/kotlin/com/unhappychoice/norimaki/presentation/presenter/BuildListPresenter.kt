@@ -88,7 +88,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    private fun getBuildDetails(build: Build): Observable<Build> {
+    internal fun getBuildDetails(build: Build): Observable<Build> {
         val client = account?.client ?: return Observable.empty()
         val username = build.username ?: return Observable.empty()
         val repository = build.reponame ?: return Observable.empty()

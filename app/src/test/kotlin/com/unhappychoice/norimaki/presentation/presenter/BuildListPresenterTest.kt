@@ -74,6 +74,19 @@ class BuildListPresenterTest : DescribeSpec({
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
     describe("build list polling") {
+        it("does not request build details after the session ends") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val running = build("target", 1, state = "running")
+            every { api.pageAt(0) } returns Observable.just(listOf(running))
+            val presenter = presenter(api, session = session)
+
+            session.replace("replacement-token").test().assertComplete()
+
+            presenter.getBuildDetails(running).test().assertResult()
+            verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
+        }
+
         it("updates a paginated workflow build from its details without advancing pagination") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build("target", 3)
