@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val build: Build by instance()
     val steps = Variable<List<BuildStep>>(listOf())
+    val rebuildFailed = Variable(false)
     private val rebuildInFlight = AtomicBoolean()
 
     override fun onEnterScope(scope: MortarScope?) {
@@ -54,21 +55,32 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
 
     fun rebuild() {
         if (!rebuildInFlight.compareAndSet(false, true)) return
+        rebuildFailed.value = false
 
         Observable.defer { retryBuild() }
             .subscribeOnIoObserveOnUI()
             .doFinally { rebuildInFlight.set(false) }
-            .subscribeNext { goBack(activity) }
+            .subscribeBy(
+                onError = {
+                    it.printStackTrace()
+                    rebuildFailed.value = true
+                },
+                onNext = { goBack(activity) }
+            )
             .addTo(bag)
     }
 
     fun rebuildWithoutCache() {
         val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
+        rebuildFailed.value = false
 
         api.rebuildWithoutCache(build, onFinished = { rebuildInFlight.set(false) })
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
+            .subscribeBy(
+                onError = { rebuildFailed.value = true },
+                onNext = { origin?.let(::goBackFrom) }
+            )
             .addTo(bag)
     }
 

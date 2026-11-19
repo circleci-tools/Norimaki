@@ -5,6 +5,7 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.unhappychoice.norimaki.databinding.BuildViewBinding
@@ -50,6 +51,10 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
 
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
+
+        presenter.rebuildFailed.asObservable()
+            .subscribeNext { failed -> binding.rebuildError.visibility = if (failed) View.VISIBLE else View.GONE }
+            .addTo(bag)
 
         presenter.steps.asObservable()
             .subscribeOnIoObserveOnUI()

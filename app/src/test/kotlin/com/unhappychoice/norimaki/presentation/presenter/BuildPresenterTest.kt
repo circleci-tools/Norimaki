@@ -60,7 +60,7 @@ class BuildPresenterTest : DescribeSpec({
     }
 
     describe("rebuild submissions") {
-        it("should ignore both actions during retry and allow a submission after retry fails") {
+        it("should block duplicate submissions, report retry failure, and allow another rebuild") {
             presenter.rebuild()
             presenter.rebuild()
             presenter.rebuildWithoutCache()
@@ -69,7 +69,10 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 0) { api.deleteCache(any(), any(), any()) }
 
             retry.onError(IllegalStateException("Retry failed"))
+            presenter.rebuildFailed.value shouldBe true
+
             presenter.rebuildWithoutCache()
+            presenter.rebuildFailed.value shouldBe false
 
             verify(exactly = 1) { api.deleteCache(any(), any(), any()) }
         }
@@ -91,14 +94,30 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
         }
 
-        it("should allow a submission after cache deletion fails") {
+        it("should report cache deletion failure and allow another rebuild") {
             presenter.rebuildWithoutCache()
             deleteCache.onError(IllegalStateException("Cache deletion failed"))
+            presenter.rebuildFailed.value shouldBe true
             verify(exactly = 0) { api.retryBuild(any(), any(), any(), any()) }
 
             presenter.rebuild()
+            presenter.rebuildFailed.value shouldBe false
 
             verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
+        }
+
+        it("should report retry failure after cache deletion succeeds") {
+            presenter.rebuildWithoutCache()
+            deleteCache.onNext(Unit)
+            presenter.rebuildFailed.value shouldBe false
+
+            retry.onError(IllegalStateException("Retry failed"))
+            presenter.rebuildFailed.value shouldBe true
+
+            retry = PublishSubject.create()
+            presenter.rebuild()
+            presenter.rebuildFailed.value shouldBe false
+            verify(exactly = 2) { api.retryBuild(any(), any(), any(), any()) }
         }
 
         it("should complete the cache-free rebuild and retain its submission guard after detachment") {
