@@ -14,12 +14,12 @@ import androidx.core.view.children
 import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.di.activityModule
-import com.unhappychoice.norimaki.di.applicationModule
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
+import com.unhappychoice.norimaki.presentation.view.APITokenView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
@@ -32,7 +32,7 @@ import org.kodein.di.instance
 class MainActivity : AppCompatActivity() {
     val module by lazy {
         DI {
-            import(applicationModule(application as NorimakiApplication))
+            extend((application as NorimakiApplication).module)
             import(activityModule(this@MainActivity))
         }
     }
@@ -83,15 +83,22 @@ class MainActivity : AppCompatActivity() {
         setupView()
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onPostResume() {
+        super.onPostResume()
         if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
-        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus)
+        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus) {
+            binding.containerView.children.any { it is APITokenView }
+        }
+    }
+
+    override fun onPause() {
+        projectNavigation?.dispose()
+        projectNavigation = null
+        super.onPause()
     }
 
     override fun onDestroy() {
-        projectNavigation?.dispose()
         scope.destroy()
         super.onDestroy()
     }
@@ -125,10 +132,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupView() {
+        binding.navigationView.di = module
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
 
-        binding.navigationView.di = module
         binding.drawerLayout.addDrawerListener(drawerToggle)
         lockDrawerOnTwoPane()
         applySystemBarInsets()

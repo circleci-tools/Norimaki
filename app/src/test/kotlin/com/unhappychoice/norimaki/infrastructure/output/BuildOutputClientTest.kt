@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.infrastructure.output
 
 import com.unhappychoice.norimaki.extension.polling
+import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.reactivex.Observable
@@ -23,6 +24,16 @@ class BuildOutputClientTest : DescribeSpec({
     val url = "https://example.com/log"
     val offset = 42L
 
+    describe("fetchOutput()") {
+        it("should report the HTTP status before parsing an error body") {
+            val client = outputClient { response(it, 503, "Service Unavailable") }
+
+            client.fetchOutput(url).test()
+                .assertError { it is IOException && it.message == "Action output request failed with HTTP 503" }
+                .assertNoValues()
+        }
+    }
+
     describe("fetchFinalRawOutput()") {
         listOf("HTTP 503", "I/O error").forEach { failure ->
             it("should emit the remaining bytes once at the same offset after an initial $failure") {
@@ -31,7 +42,7 @@ class BuildOutputClientTest : DescribeSpec({
                 val client = outputClient { request ->
                     ranges.add(request.header("Range"))
                     when {
-                        ranges.size > 1 -> response(request, 206, "last lines")
+                        ranges.size > 1 -> response(request, 206, "last lines", "bytes 42-51/52")
                         failure == "HTTP 503" -> response(request, 503, "Unavailable")
                         else -> throw IOException("Connection lost")
                     }
@@ -84,6 +95,40 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchRawOutput()") {
+        it("should append only new bytes when the server returns full logs") {
+            val scheduler = TestScheduler()
+            val ranges = mutableListOf<String?>()
+            val client = outputClient { request ->
+                ranges.add(request.header("Range"))
+                val body = if (ranges.size == 1) "abc" else "abcdef"
+                response(request, 200, body)
+            }
+            val observer = pollActionOutputs(listOf(url), Observable.never(), client::fetchRawOutput, scheduler).test()
+
+            try {
+                scheduler.advanceTimeBy(2, SECONDS)
+
+                observer.assertValues("abc", "def").assertNoErrors()
+                ranges shouldBe listOf("bytes=0-", "bytes=3-", "bytes=6-")
+            } finally {
+                observer.dispose()
+            }
+        }
+
+        it("should interpret the full response offset as bytes") {
+            val client = outputClient { response(it, 200, "猫log") }
+
+            client.fetchRawOutput(url, 3L).map { it.decodeToString() }.test().assertResult("log")
+        }
+
+        listOf(null, "invalid", "bytes 41-43/44", "bytes 43-45/46").forEach { range ->
+            it("should reject a partial response with Content-Range ${range ?: "missing"}") {
+                val client = outputClient { response(it, 206, "log", range) }
+
+                client.fetchRawOutput(url, offset).test().assertFailure(IOException::class.java)
+            }
+        }
+
         it("should run every fetch on IO and keep the polling timer free during a request") {
             verifyRawOutputPolling()
         }
@@ -110,17 +155,13 @@ private fun verifyRawOutputPolling() {
     val httpClient = OkHttpClient.Builder().addInterceptor { chain ->
         val request = chain.request()
         requests.add(Thread.currentThread().name to request.header("Range"))
-        if (requestCount.incrementAndGet() == 2) {
+        val requestNumber = requestCount.incrementAndGet()
+        if (requestNumber == 2) {
             repeatedRequestStarted.countDown()
             check(releaseRepeatedRequest.await(10, SECONDS))
         }
-        Response.Builder()
-            .request(request)
-            .protocol(Protocol.HTTP_1_1)
-            .code(206)
-            .message("Partial Content")
-            .body("log".toResponseBody())
-            .build()
+        val start = (requestNumber - 1) * 3
+        response(request, 206, "log", "bytes $start-${start + 2}/*")
     }.build()
     val client = BuildOutputClient("token", httpClient, ioScheduler)
     val finished = PublishSubject.create<Unit>()
@@ -175,11 +216,12 @@ private fun outputClient(respond: (Request) -> Response): BuildOutputClient =
         Schedulers.trampoline()
     )
 
-private fun response(request: Request, status: Int, body: String = ""): Response =
+private fun response(request: Request, status: Int, body: String = "", contentRange: String? = null): Response =
     Response.Builder()
         .request(request)
         .protocol(Protocol.HTTP_1_1)
         .code(status)
         .message("Test response")
         .body(body.toResponseBody())
+        .apply { contentRange?.let { header("Content-Range", it) } }
         .build()

@@ -14,6 +14,7 @@ import flow.Flow
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -40,7 +41,7 @@ class APITokenViewTest {
     }
 
     @Test
-    fun masksSavedAndPastedTokensAndSavesTheExactReplacement() {
+    fun masksSavedAndPastedTokensWhileWaitingForVerification() {
         val preference = APITokenPreference(RuntimeEnvironment.getApplication())
         val savedToken = "saved-dummy-token"
         val replacement = "replacement_Dummy-Token.123"
@@ -62,8 +63,12 @@ class APITokenViewTest {
             assertTrue(field.onTextContextMenuItem(android.R.id.paste))
             assertMasked(field, replacement)
 
-            activity.findViewById<Button>(R.id.submitButton).performClick()
-            assertEquals(replacement, preference.token)
+            val submit = activity.findViewById<Button>(R.id.submitButton)
+            submit.performClick()
+
+            assertFalse(submit.isEnabled)
+            assertFalse(field.isEnabled)
+            assertEquals(savedToken, preference.token)
         }
     }
 

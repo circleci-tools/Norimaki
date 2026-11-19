@@ -8,6 +8,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
+import com.unhappychoice.norimaki.presentation.view.APITokenView
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import flow.*
 
@@ -29,6 +30,7 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         outgoingView?.let { outgoingState?.save(it) }
 
         val screen = incomingState.getScreen() ?: return callback.onTraversalCompleted()
+        if (screen !is APITokenScreen) (outgoingView as? APITokenView)?.onScreenLeft()
         val incomingView = screen.inflateView().also { inject(screen, it) }
         val onCompleted = { completeTraversal(screen, incomingView, callback) }
 
