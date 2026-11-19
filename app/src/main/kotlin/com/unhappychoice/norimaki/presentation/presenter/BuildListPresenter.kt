@@ -1,5 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.inWorkflow
@@ -18,6 +21,8 @@ import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.Disposables
+import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
@@ -41,8 +46,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         super.onEnterScope(scope)
 
         getBuilds()
-
-        pollLatestBuilds()
     }
 
     override fun onExitScope() {
@@ -67,13 +70,22 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         if (isWorkflow && !canScroll) getBuilds()
     }
 
-    fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+    internal fun observePolling(lifecycle: Lifecycle = activity.lifecycle) {
+        val pollingSubscription = SerialDisposable()
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                pollingSubscription.set(pollLatestBuilds())
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+                pollingSubscription.set(null)
+            }
         }
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
-            .addTo(bag)
+        val registration = Disposables.fromAction {
+            lifecycle.removeObserver(observer)
+            pollingSubscription.dispose()
+        }
+        if (bag.add(registration)) lifecycle.addObserver(observer)
     }
 
     fun goToBuildView(build: Build) {
@@ -83,6 +95,13 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
     }
+
+    private fun pollLatestBuilds() =
+        polling(BUILD_LIST_POLLING_SECONDS) {
+            builds.take(1).flatMap { fetchLatestBuilds(it, ::getBuildsAPI) }
+        }
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
         val current = history.value

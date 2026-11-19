@@ -1,5 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.Workflow
@@ -57,6 +60,55 @@ class BuildListPresenterTest : DescribeSpec({
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
+    describe("polling lifecycle") {
+        it("stops polling while the attached screen is stopped and resumes one loop immediately") {
+            val scheduler = TestScheduler()
+            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val owner = PollingLifecycleOwner()
+            val api = mockk<CircleCIAPIClientV1_1>()
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            val presenter = presenter(api)
+            val interval = BuildListPresenter.BUILD_LIST_POLLING_SECONDS
+
+            try {
+                owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+                presenter.observePolling(owner.lifecycle)
+                scheduler.advanceTimeBy(interval, TimeUnit.SECONDS)
+                verify(exactly = 0) { api.pageAt(0) }
+
+                owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                scheduler.triggerActions()
+                verify(exactly = 1) { api.pageAt(0) }
+
+                owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+                scheduler.advanceTimeBy(interval * 3, TimeUnit.SECONDS)
+                verify(exactly = 1) { api.pageAt(0) }
+
+                owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                scheduler.triggerActions()
+                verify(exactly = 2) { api.pageAt(0) }
+                scheduler.advanceTimeBy(interval * 2, TimeUnit.SECONDS)
+                verify(exactly = 4) { api.pageAt(0) }
+
+                presenter.dropView(mockk())
+                owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+                owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                scheduler.advanceTimeBy(interval * 2, TimeUnit.SECONDS)
+                verify(exactly = 4) { api.pageAt(0) }
+
+                presenter.observePolling(owner.lifecycle)
+                scheduler.triggerActions()
+                verify(exactly = 5) { api.pageAt(0) }
+                scheduler.advanceTimeBy(interval, TimeUnit.SECONDS)
+                verify(exactly = 6) { api.pageAt(0) }
+            } finally {
+                presenter.bag.dispose()
+                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+            }
+        }
+    }
+
     describe("workflow polling") {
         it("recovers matching builds beyond the first page after pagination ends") {
             val scheduler = TestScheduler()
@@ -88,7 +140,9 @@ class BuildListPresenterTest : DescribeSpec({
                     scheduler.triggerActions()
                     presenter.hasMore.value shouldBe false
 
-                    presenter.pollLatestBuilds()
+                    val owner = PollingLifecycleOwner()
+                    owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                    presenter.observePolling(owner.lifecycle)
                     scheduler.triggerActions()
                     scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
 
@@ -145,3 +199,7 @@ class BuildListPresenterTest : DescribeSpec({
         }
     }
 })
+
+private class PollingLifecycleOwner : LifecycleOwner {
+    override val lifecycle = LifecycleRegistry.createUnsafe(this)
+}
