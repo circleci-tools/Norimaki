@@ -103,6 +103,35 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("workflow polling") {
+        it("stops at the first unchanged project page and displays a new workflow job once") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build("target", 1)
+            val added = build("target", 200)
+            var projectBuilds = (199 downTo 2).map { build("other", it) } + known
+            val offsets = mutableListOf<Int>()
+            every { api.pageAt(any()) } answers {
+                val offset = arg<Int>(3)
+                offsets.add(offset)
+                Observable.just(projectBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+            val builds = presenter(api).builds.test()
+            scheduler.triggerActions()
+            offsets shouldBe listOf(0) + (0 until 200 step BUILD_LIST_PAGE_SIZE).toList()
+            builds.assertValues(emptyList(), listOf(known))
+
+            offsets.clear()
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            offsets shouldBe listOf(0)
+            builds.assertValues(emptyList(), listOf(known))
+
+            projectBuilds = listOf(added) + projectBuilds
+            offsets.clear()
+            scheduler.advanceTimeBy(2 * BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            offsets shouldBe listOf(0, 0)
+            builds.assertValues(emptyList(), listOf(known), listOf(added, known))
+            builds.dispose()
+        }
+
         it("recovers matching builds beyond the first page after pagination ends") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val known = build("target", 1)
