@@ -63,6 +63,15 @@ class CompletedStepLogsTest {
         }
     }
 
+    @Test
+    fun returnsSuccessfulDownloadsAroundAnHttpFailure() {
+        val urls = listOf("first", "failed", "last").map { "https://example.com/$it" }
+
+        completedActionLogs(urls, outputClient("token")::fetchOutput)
+            .test()
+            .assertResult("first output", "\n[Some output could not be loaded.]\n", "last output")
+    }
+
     private fun action(path: String): BuildAction = mockk {
         every { step } returns null
         every { endTime } returns Date(0)

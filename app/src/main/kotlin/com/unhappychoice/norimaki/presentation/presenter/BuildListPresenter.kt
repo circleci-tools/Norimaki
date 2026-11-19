@@ -5,6 +5,7 @@ import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.refreshBuildList
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -69,11 +70,16 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     private fun pollLatestBuilds() {
-        polling(BUILD_LIST_POLLING_SECONDS) {
-            builds.take(1)
-                .flatMap { displayed -> fetchLatestBuilds(displayed, ::getBuildsAPI) }
-                .subscribeOnIoObserveOnUI()
-                .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
+        Observable.defer {
+            var lastPollIds: Set<String>? = null
+            polling(BUILD_LIST_POLLING_SECONDS) {
+                builds.take(1).flatMap { displayed ->
+                    val knownIds = lastPollIds ?: displayed.mapTo(hashSetOf()) { it.uniqueId() }
+                    fetchLatestBuilds(knownIds, ::getBuildsAPI)
+                }.doOnNext { fetched -> lastPollIds = fetched.mapTo(hashSetOf()) { it.uniqueId() } }
+                    .subscribeOnIoObserveOnUI()
+                    .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
+            }
         }
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
             .addTo(bag)
@@ -89,7 +95,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         goTo(activity, APITokenScreen())
     }
 
-    private fun getBuildDetails(build: Build): Observable<Build> {
+    internal fun getBuildDetails(build: Build): Observable<Build> {
         val buildId = BuildId.from(build) ?: return Observable.empty()
         return Observable.defer {
             val client = account?.client ?: return@defer Observable.empty<Build>()

@@ -113,6 +113,22 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("build list polling") {
+        it("does not fetch build details when the session ends before subscription") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val running = build("target", 1, state = "running")
+            every { api.pageAt(0) } returns Observable.just(listOf(running))
+            val presenter = presenter(api, session = session)
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(running))
+
+            val details = presenter.getBuildDetails(running)
+            session.replace("replacement-token").test().assertComplete()
+
+            details.test().assertResult()
+            verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
+        }
+
         it("updates a paginated workflow build from its details without advancing pagination") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build("target", 3)
@@ -142,6 +158,35 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("workflow polling") {
+        it("stops at the first unchanged project page and displays a new workflow job once") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build("target", 1)
+            val added = build("target", 200)
+            var projectBuilds = (199 downTo 2).map { build("other", it) } + known
+            val offsets = mutableListOf<Int>()
+            every { api.pageAt(any()) } answers {
+                val offset = arg<Int>(3)
+                offsets.add(offset)
+                Observable.just(projectBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+            val builds = presenter(api).builds.test()
+            scheduler.triggerActions()
+            offsets shouldBe listOf(0) + (0 until 200 step BUILD_LIST_PAGE_SIZE).toList()
+            builds.assertValues(emptyList(), listOf(known))
+
+            offsets.clear()
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            offsets shouldBe listOf(0)
+            builds.assertValues(emptyList(), listOf(known))
+
+            projectBuilds = listOf(added) + projectBuilds
+            offsets.clear()
+            scheduler.advanceTimeBy(2 * BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            offsets shouldBe listOf(0, 0)
+            builds.assertValues(emptyList(), listOf(known), listOf(added, known))
+            builds.dispose()
+        }
+
         it("recovers matching builds beyond the first page after pagination ends") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val known = build("target", 1)
