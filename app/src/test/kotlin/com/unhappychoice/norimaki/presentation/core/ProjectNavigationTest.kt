@@ -19,10 +19,12 @@ class ProjectNavigationTest : DescribeSpec({
         val eventBus = EventBusService()
         val flow = mockk<Flow>(relaxed = true)
         lateinit var subscription: Disposable
+        var isTokenScreenVisible = false
 
         beforeEach {
             clearMocks(flow)
-            subscription = flow.subscribeToProjectNavigation(eventBus)
+            isTokenScreenVisible = false
+            subscription = flow.subscribeToProjectNavigation(eventBus) { isTokenScreenVisible }
         }
 
         afterEach { subscription.dispose() }
@@ -52,6 +54,20 @@ class ProjectNavigationTest : DescribeSpec({
             eventBus.selectProject.onNext(None)
 
             verify(exactly = 0) { flow.replaceTop(any(), any()) }
+        }
+
+        it("ignores Recent Builds and project selections while the token screen is active") {
+            isTokenScreenVisible = true
+
+            eventBus.selectProject.onNext(None)
+            eventBus.selectProject.onNext(Some(mockk<Project>(relaxed = true)))
+
+            verify(exactly = 0) { flow.replaceTop(any(), any()) }
+
+            isTokenScreenVisible = false
+            eventBus.selectProject.onNext(None)
+
+            verify(exactly = 1) { flow.replaceTop(BuildListScreen(""), Direction.REPLACE) }
         }
     }
 })

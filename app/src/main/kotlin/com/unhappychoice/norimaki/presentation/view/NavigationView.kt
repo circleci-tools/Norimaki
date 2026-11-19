@@ -7,7 +7,7 @@ import android.view.LayoutInflater
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
+import com.github.unhappychoice.circleci.v1.response.Project
 import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
 import com.jakewharton.rxbinding2.view.clicks
@@ -15,9 +15,11 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.domain.service.EventBusService
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.ProjectAdapter
+import io.reactivex.Observable
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import org.kodein.di.DI
@@ -32,7 +34,7 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         NavigationViewBinding.bind(this)
     }
 
-    private val client: CircleCIAPIClientV1_1 by instance()
+    private val session: SessionService by instance()
     private val eventBus: EventBusService by instance()
     private val adapter = ProjectAdapter(context)
     private val bag = CompositeDisposable()
@@ -48,19 +50,19 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         binding.projectsView.adapter = adapter
         binding.projectsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
-        client.getProjects()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext {
-                adapter.projects.value = it
-                adapter.notifyDataSetChanged()
-            }.addTo(bag)
-
-        client.getMe()
-            .subscribeOnIoObserveOnUI()
-            .subscribeNext {
-                Glide.with(context).load(it.avatarUrl).into(binding.profileImageView)
-                binding.nameView.text = it.login
+        session.changes
+            .switchMap { state ->
+                setProjects(emptyList())
+                Glide.with(context).clear(binding.profileImageView)
+                val account = state.toNullable()
+                binding.nameView.text = account?.user?.login.orEmpty()
+                if (account == null) return@switchMap Observable.empty<List<Project>>()
+                Glide.with(context).load(account.user.avatarUrl).into(binding.profileImageView)
+                account.client.getProjects()
+                    .subscribeOnIoObserveOnUI()
+                    .onErrorReturnItem(emptyList())
             }
+            .subscribeNext(::setProjects)
             .addTo(bag)
 
         binding.recentView.clicks()
@@ -82,5 +84,10 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
     override fun onDetachedFromWindow() {
         bag.clear()
         super.onDetachedFromWindow()
+    }
+
+    private fun setProjects(projects: List<Project>) {
+        adapter.projects.value = projects
+        adapter.notifyDataSetChanged()
     }
 }
