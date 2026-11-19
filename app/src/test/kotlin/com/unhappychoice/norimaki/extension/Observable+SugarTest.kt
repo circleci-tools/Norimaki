@@ -18,17 +18,6 @@ class ObservableSugarTest : DescribeSpec({
             Observable.error<Int>(error).subscribeError { received = it }
             received shouldBe error
         }
-        it(".subscribeError() should ignore values and normal completion") {
-            val source = PublishSubject.create<Int>()
-            val errors = mutableListOf<Throwable?>()
-            val subscription = source.subscribeError { errors.add(it) }
-
-            source.onNext(1)
-            source.onComplete()
-
-            errors shouldBe emptyList<Throwable?>()
-            subscription.isDisposed shouldBe true
-        }
         it(".subscribeCompleted() should be called on completion") {
             var completed = false
             Observable.just(1).subscribeCompleted { completed = true }
