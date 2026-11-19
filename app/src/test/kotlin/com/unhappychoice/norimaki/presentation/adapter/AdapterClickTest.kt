@@ -5,6 +5,7 @@ import android.content.Context
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
@@ -20,6 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -49,15 +51,45 @@ class AdapterClickTest {
     }
 
     @Test
-    fun projectClickFollowsTheBoundItem() {
+    fun projectClickUsesTheCurrentAdapterPositionAcrossSessionChanges() {
         val adapter = ProjectAdapter(context)
-        val row = rowWithTextViews(R.id.projectNameView)
+        val observer = adapter.onClickItem.test()
         val projects = List(10) {
-            gson.fromJson("""{"username":"circleci-tools","reponame":"project-$it"}""", Project::class.java)
+            Project(
+                branches = emptyMap(),
+                parallel = 1,
+                reponame = "project-$it",
+                username = "circleci-tools",
+                vcsUrl = "https://github.com/circleci-tools/project-$it"
+            )
         }
-        assertReboundClicks(row, adapter, { adapter.projects.value = it }, adapter.onClickItem, projects) {
-            adapter.ViewHolder(row)
+        adapter.projects.value = listOf(projects.first())
+        val recycler = RecyclerView(context).apply {
+            layoutManager = LinearLayoutManager(context)
+            this.adapter = adapter
+            val size = View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY)
+            measure(size, size)
+            layout(0, 0, 400, 400)
         }
+        val holder = recycler.findViewHolderForAdapterPosition(0) as ProjectAdapter.ViewHolder
+        val row = holder.itemView
+        val listener = shadowOf(row).onClickListener
+
+        projects.forEach { project ->
+            adapter.projects.value = listOf(project)
+            adapter.onBindViewHolder(holder, 0)
+        }
+        assertSame(listener, shadowOf(row).onClickListener)
+        row.performClick()
+        observer.assertValueCount(1)
+        assertSame(projects.last(), observer.values().single())
+
+        adapter.projects.value = emptyList()
+        adapter.notifyDataSetChanged()
+        adapter.projects.value = listOf(projects.first())
+        adapter.notifyDataSetChanged()
+        row.performClick()
+        observer.assertValueCount(1)
     }
 
     private val context: Context get() = RuntimeEnvironment.getApplication()

@@ -32,26 +32,17 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
         holder.bind(projects.value[position])
     }
 
-    override fun onViewRecycled(holder: ViewHolder) {
-        holder.clearBoundItem()
-        super.onViewRecycled(holder)
-    }
-
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(project: Project) {
-            boundItem = project
             projectNameView.text = "${project.username}/${project.reponame}"
         }
 
-        fun clearBoundItem() {
-            boundItem = null
-        }
-
-        private var boundItem: Project? = null
         private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)
 
         init {
-            view.setOnClickListener { boundItem?.let(onClickItem::onNext) }
+            view.setOnClickListener {
+                projects.value.getOrNull(bindingAdapterPosition)?.let(onClickItem::onNext)
+            }
         }
     }
 }
