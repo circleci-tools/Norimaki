@@ -6,6 +6,7 @@ import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
@@ -73,11 +74,11 @@ class BuildStepPresenterTest : DescribeSpec({
                     try {
                         scheduler.advanceTimeBy(4, SECONDS)
                         observer.assertNotComplete().assertNoErrors()
-                        observer.assertValues("0", "1", "2", "3", "4")
+                        observer.values() shouldBe listOf("0", "1", "2", "3", "4")
 
                         scheduler.advanceTimeBy(1, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.assertValues("0", "1", "2", "3", "4", "done")
+                        observer.values() shouldBe listOf("0", "1", "2", "3", "4", "done")
                     } finally {
                         observer.dispose()
                     }
