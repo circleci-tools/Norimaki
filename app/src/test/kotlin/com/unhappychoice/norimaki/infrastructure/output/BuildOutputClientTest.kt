@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.infrastructure.output
 
 import com.unhappychoice.norimaki.extension.polling
+import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.reactivex.Observable
@@ -48,7 +49,7 @@ class BuildOutputClientTest : DescribeSpec({
                 val pending = bodies.iterator()
                 val client = outputClient(5) { request ->
                     request.header("Range") shouldBe "bytes=3-"
-                    response(request, 206).newBuilder().body(pending.next()).build()
+                    response(request, 206, contentRange = "bytes 3-13/*").newBuilder().body(pending.next()).build()
                 }
 
                 listOf(client.fetchRawOutput(url, 3), client.fetchFinalRawOutput(url, 3, TestScheduler()))
@@ -64,6 +65,19 @@ class BuildOutputClientTest : DescribeSpec({
                 client.fetchRawOutput(url, 5).test()
                     .assertValue { it.bytes.isEmpty() && it.limitReached }
                     .assertComplete().assertNoErrors()
+            }
+
+            it("skips previously read bytes when a full response exceeds the remaining budget") {
+                val body = TrackedBody("猫log and more", declaredLength)
+                val client = outputClient(6) { request ->
+                    response(request, 200).newBuilder().body(body).build()
+                }
+
+                client.fetchRawOutput(url, 3).test()
+                    .assertValue { it.bytes.decodeToString() == "log" && it.limitReached }
+                    .assertComplete().assertNoErrors()
+                body.bytesRead shouldBe 6L
+                body.closed shouldBe true
             }
 
             it("returns normal completed and live logs without a limit status") {
@@ -100,7 +114,7 @@ class BuildOutputClientTest : DescribeSpec({
                 val client = outputClient { request ->
                     ranges.add(request.header("Range"))
                     when {
-                        ranges.size > 1 -> response(request, 206, "last lines")
+                        ranges.size > 1 -> response(request, 206, "last lines", "bytes 42-51/52")
                         failure == "HTTP 503" -> response(request, 503, "Unavailable")
                         else -> throw IOException("Connection lost")
                     }
@@ -153,6 +167,40 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchRawOutput()") {
+        it("should append only new bytes when the server returns full logs") {
+            val scheduler = TestScheduler()
+            val ranges = mutableListOf<String?>()
+            val client = outputClient { request ->
+                ranges.add(request.header("Range"))
+                val body = if (ranges.size == 1) "abc" else "abcdef"
+                response(request, 200, body)
+            }
+            val observer = pollActionOutputs(listOf(url), Observable.never(), client::fetchRawOutput, scheduler).test()
+
+            try {
+                scheduler.advanceTimeBy(2, SECONDS)
+
+                observer.assertValues("abc", "def").assertNoErrors()
+                ranges shouldBe listOf("bytes=0-", "bytes=3-", "bytes=6-")
+            } finally {
+                observer.dispose()
+            }
+        }
+
+        it("should interpret the full response offset as bytes") {
+            val client = outputClient { response(it, 200, "猫log") }
+
+            client.fetchRawOutput(url, 3L).map { it.bytes.decodeToString() }.test().assertResult("log")
+        }
+
+        listOf(null, "invalid", "bytes 41-43/44", "bytes 43-45/46").forEach { range ->
+            it("should reject a partial response with Content-Range ${range ?: "missing"}") {
+                val client = outputClient { response(it, 206, "log", range) }
+
+                client.fetchRawOutput(url, offset).test().assertFailure(IOException::class.java)
+            }
+        }
+
         it("should run every fetch on IO and keep the polling timer free during a request") {
             verifyRawOutputPolling()
         }
@@ -179,17 +227,13 @@ private fun verifyRawOutputPolling() {
     val httpClient = OkHttpClient.Builder().addInterceptor { chain ->
         val request = chain.request()
         requests.add(Thread.currentThread().name to request.header("Range"))
-        if (requestCount.incrementAndGet() == 2) {
+        val requestNumber = requestCount.incrementAndGet()
+        if (requestNumber == 2) {
             repeatedRequestStarted.countDown()
             check(releaseRepeatedRequest.await(10, SECONDS))
         }
-        Response.Builder()
-            .request(request)
-            .protocol(Protocol.HTTP_1_1)
-            .code(206)
-            .message("Partial Content")
-            .body("log".toResponseBody())
-            .build()
+        val start = (requestNumber - 1) * 3
+        response(request, 206, "log", "bytes $start-${start + 2}/*")
     }.build()
     val client = BuildOutputClient("token", httpClient, ioScheduler)
     val finished = PublishSubject.create<Unit>()
@@ -245,13 +289,14 @@ private fun outputClient(limit: Int = 1024 * 1024, respond: (Request) -> Respons
         limit
     )
 
-private fun response(request: Request, status: Int, body: String = ""): Response =
+private fun response(request: Request, status: Int, body: String = "", contentRange: String? = null): Response =
     Response.Builder()
         .request(request)
         .protocol(Protocol.HTTP_1_1)
         .code(status)
         .message("Test response")
         .body(body.toResponseBody())
+        .apply { contentRange?.let { header("Content-Range", it) } }
         .build()
 
 

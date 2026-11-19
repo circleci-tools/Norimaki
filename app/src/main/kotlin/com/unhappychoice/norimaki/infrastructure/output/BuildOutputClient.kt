@@ -11,6 +11,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
+import java.io.EOFException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -60,13 +61,23 @@ class BuildOutputClient(
             .header("Range", "bytes=$offset-")
             .build()
 
-    private fun rawOutputChunk(response: Response, offset: Long, remaining: Long): RawOutputChunk = when {
-        response.isSuccessful -> {
-            val bytes = response.body.readPrefix(remaining)
-            RawOutputChunk(bytes, limitReached = bytes.size.toLong() == remaining)
+    private fun rawOutputChunk(response: Response, offset: Long, remaining: Long): RawOutputChunk {
+        val bytes = when {
+            response.code == 206 -> {
+                validatePartialOutput(response, offset)
+                response.body.readPrefix(remaining)
+            }
+            response.isSuccessful -> response.body.readPrefix(remaining, offset)
+            response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> ByteArray(0)
+            else -> throw RawOutputHttpException(response.code)
         }
-        response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> RawOutputChunk(ByteArray(0))
-        else -> throw RawOutputHttpException(response.code)
+        return RawOutputChunk(bytes, limitReached = bytes.size.toLong() == remaining)
+    }
+
+    private fun validatePartialOutput(response: Response, offset: Long) {
+        val range = response.header("Content-Range").orEmpty()
+        val start = CONTENT_RANGE.matchEntire(range)?.groupValues?.get(1)?.toLongOrNull()
+        if (start != offset) throw IOException("Invalid Content-Range for raw log offset $offset: $range")
     }
 
     private fun isRetryable(error: Throwable): Boolean = when (error) {
@@ -94,6 +105,7 @@ class BuildOutputClient(
 
     private companion object {
         const val FINAL_RETRIES = 2
+        val CONTENT_RANGE = Regex("""bytes ([0-9]+)-[0-9]+/(?:[0-9]+|\*)""", RegexOption.IGNORE_CASE)
     }
 }
 
@@ -103,8 +115,13 @@ data class RawOutputChunk(val bytes: ByteArray, val limitReached: Boolean = fals
 
 internal const val OUTPUT_LIMIT_MESSAGE = "\n[Action output limit reached.]\n"
 
-private fun ResponseBody.readPrefix(limit: Long): ByteArray {
+private fun ResponseBody.readPrefix(limit: Long, offset: Long = 0): ByteArray {
     val source = source()
+    try {
+        source.skip(offset)
+    } catch (_: EOFException) {
+        return ByteArray(0)
+    }
     val prefix = Buffer()
     while (prefix.size < limit) {
         if (source.read(prefix, limit - prefix.size) == -1L) break

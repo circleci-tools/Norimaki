@@ -102,5 +102,32 @@ class BuildStepOutputTest : DescribeSpec({
             requestedOffsets shouldBe listOf("first" to 0L, "second" to 0L)
             finalOffsets shouldBe listOf("first" to 6L, "second" to 7L)
         }
+
+        it("starts the final read as soon as a slow batch settles") {
+            val scheduler = TestScheduler()
+            val finished = PublishSubject.create<Build>()
+            val log = "abcdefghijklmnopqrstuvwxyz0123456789"
+            val requestedOffsets = mutableListOf<Long>()
+            val finalOffsets = mutableListOf<Long>()
+            val observer = pollActionOutputs(listOf("action"), finished, { _, offset ->
+                requestedOffsets += offset
+                Observable.timer(2_500, TimeUnit.MILLISECONDS, scheduler)
+                    .map { RawOutputChunk(log.substring(offset.toInt(), offset.toInt() + 1).toByteArray()) }
+            }, scheduler, fetchFinalOutput = { _, offset ->
+                finalOffsets += offset
+                Observable.just(RawOutputChunk(log.substring(offset.toInt()).toByteArray()))
+            }).test()
+
+            scheduler.advanceTimeTo(61, TimeUnit.SECONDS)
+            finished.onNext(mockk<Build>())
+            observer.assertNotComplete()
+            finalOffsets shouldBe emptyList()
+
+            scheduler.advanceTimeTo(62_500, TimeUnit.MILLISECONDS)
+            observer.assertComplete().assertNoErrors()
+            requestedOffsets shouldBe (0L..20L).toList()
+            finalOffsets shouldBe listOf(21L)
+            observer.values().joinToString("") shouldBe log
+        }
     }
 })
