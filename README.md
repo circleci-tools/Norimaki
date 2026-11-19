@@ -26,8 +26,11 @@ With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 insta
 ./gradlew testDebugUnitTest
 ```
 
+Run `python3 scripts/test-gradle-wrapper.py` to verify that the Wrapper rejects a ZIP with a mismatched checksum. This test uses a local ZIP and requires a JDK and Python 3.
+
 ## Release checklist
 
+- When upgrading the Gradle Wrapper, update `distributionSha256Sum` in `gradle/wrapper/gradle-wrapper.properties` with the [official SHA-256 checksum](https://gradle.org/release-checksums/) for the exact distribution in `distributionUrl`.
 - When updating `versionName` in `app/build.gradle`, review and update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before publishing to Google Play.
 
 ## Author
