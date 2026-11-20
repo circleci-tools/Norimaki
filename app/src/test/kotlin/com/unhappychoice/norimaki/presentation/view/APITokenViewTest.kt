@@ -3,7 +3,10 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Looper
+import android.os.Parcelable
 import android.text.InputType
+import android.util.SparseArray
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import com.unhappychoice.norimaki.MainActivity
@@ -41,7 +44,7 @@ class APITokenViewTest {
     }
 
     @Test
-    fun masksSavedAndPastedTokensWhileWaitingForVerification() {
+    fun masksTokensAndExcludesThemFromSavedViewState() {
         val preference = APITokenPreference(RuntimeEnvironment.getApplication())
         val savedToken = "saved-dummy-token"
         val replacement = "replacement_Dummy-Token.123"
@@ -55,6 +58,7 @@ class APITokenViewTest {
 
             assertEquals(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD, field.inputType)
             assertMasked(field, savedToken)
+            assertTokenStateAbsent(activity.window.decorView, field)
 
             val clipboard = requireNotNull(activity.getSystemService(ClipboardManager::class.java))
             clipboard.setPrimaryClip(ClipData.newPlainText("Dummy API token", replacement))
@@ -62,6 +66,7 @@ class APITokenViewTest {
             field.selectAll()
             assertTrue(field.onTextContextMenuItem(android.R.id.paste))
             assertMasked(field, replacement)
+            assertTokenStateAbsent(activity.window.decorView, field)
 
             val submit = activity.findViewById<Button>(R.id.submitButton)
             submit.performClick()
@@ -70,6 +75,12 @@ class APITokenViewTest {
             assertFalse(field.isEnabled)
             assertEquals(savedToken, preference.token)
         }
+    }
+
+    private fun assertTokenStateAbsent(root: View, field: EditText) {
+        val state = SparseArray<Parcelable>()
+        root.saveHierarchyState(state)
+        assertFalse("The token field contributed saved view state", state.indexOfKey(field.id) >= 0)
     }
 
     private fun assertMasked(field: EditText, token: String) {

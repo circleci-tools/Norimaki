@@ -17,9 +17,18 @@ Norimaki is a [CircleCI](https://circleci.com) client for Android.
 - Inspect build steps, read their logs, and see other jobs in the same workflow.
 - Rebuild from the build details screen, with an option to clear the cache first.
 
+## Installation
+
+- **Google Play:** Install [Norimaki](https://play.google.com/store/apps/details?id=com.unhappychoice.norimaki).
+- **From source:** Install JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0. Start an Android emulator or connect an Android device with USB debugging enabled. The device or emulator must run Android 6.0 (API 23) or later. From the repository root, build and install the debug app:
+
+  ```sh
+  ./gradlew installDebug
+  ```
+
 ## Quick start
 
-1. Install Norimaki from [Google Play](https://play.google.com/store/apps/details?id=com.unhappychoice.norimaki).
+1. [Install Norimaki](#installation).
 2. Create a [personal API token](https://circleci.com/docs/guides/toolkit/managing-api-tokens/#create-a-personal-api-token) for your CircleCI account.
 3. Open Norimaki, paste the token into the token field, and tap **Apply**.
 4. Tap a build in **Recent Builds** to see its details.
@@ -37,7 +46,9 @@ Run `python3 scripts/test-gradle-wrapper.py` to verify that the Wrapper rejects 
 ## Release checklist
 
 - When upgrading the Gradle Wrapper, update `distributionSha256Sum` in `gradle/wrapper/gradle-wrapper.properties` with the [official SHA-256 checksum](https://gradle.org/release-checksums/) for the exact distribution in `distributionUrl`.
-- When updating `versionName` in `app/build.gradle`, review and update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before publishing to Google Play.
+- When updating `versionName` in `app/build.gradle`, update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before tagging it.
+- Before pushing the matching `v<versionName>` tag, update `app/src/main/play/release-notes/en-US/internal.txt` for internal testers and run `bash scripts/ci/test-play-deploy.sh`. The tagged CircleCI job publishes the APK to the `internal` track with those notes. The check runs without Play credentials or an APK upload.
+- After internal testing passes, promote the tested APK in [Play Console](https://support.google.com/googleplay/android-developer/answer/9859348). Create a Production release and use **Add from library** to select the same APK by version code. Paste the tagged version's `production.txt` into the English (United States) release notes before reviewing and rolling out the production release.
 
 ## Author
 
