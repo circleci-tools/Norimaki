@@ -65,6 +65,10 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
 
+        presenter.rebuildFailed.asObservable()
+            .subscribeNext { failed -> binding.rebuildError.visibility = if (failed) View.VISIBLE else View.GONE }
+            .addTo(bag)
+
         presenter.steps.asObservable()
             .subscribeOnIoObserveOnUI()
             .subscribeNext(adapter::submitSteps)

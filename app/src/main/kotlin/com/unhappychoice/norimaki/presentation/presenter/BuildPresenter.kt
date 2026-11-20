@@ -29,6 +29,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         get() = with(buildId) { "$vcsType/$owner/$repository" }
     val steps = Variable<List<BuildStep>>(listOf())
     val buildLoadFailed = Variable(false)
+    val rebuildFailed = Variable(false)
     private val rebuildInFlight = AtomicBoolean()
 
     override fun onAuthenticated() = pollBuild()
@@ -79,11 +80,18 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         val client = account?.client ?: return
         val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
+        rebuildFailed.value = false
 
         Observable.defer { retryBuild(client) }
             .subscribeOnIoObserveOnUI()
             .doFinally { rebuildInFlight.set(false) }
-            .subscribeNext { origin?.let(::goBackFrom) }
+            .subscribeBy(
+                onError = {
+                    it.printStackTrace()
+                    rebuildFailed.value = true
+                },
+                onNext = { origin?.let(::goBackFrom) }
+            )
             .addTo(bag)
     }
 
@@ -91,6 +99,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         val verified = account ?: return
         val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
+        rebuildFailed.value = false
 
         verified.client.rebuildWithoutCache(
             buildId,
@@ -98,7 +107,10 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
             onFinished = { rebuildInFlight.set(false) }
         )
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
+            .subscribeBy(
+                onError = { rebuildFailed.value = true },
+                onNext = { origin?.let(::goBackFrom) }
+            )
             .addTo(bag)
     }
 

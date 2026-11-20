@@ -33,6 +33,15 @@
             android:text="@string/build_load_retry" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/rebuildError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:padding="@dimen/horizontal_margin"
+        android:text="@string/build_rebuild_error"
+        android:visibility="gone" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/stepsView"
         android:layout_width="match_parent"
