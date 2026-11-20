@@ -67,7 +67,8 @@ class BuildStepPresenterTest : DescribeSpec({
     }
 
     describe("BuildStepPresenter running output") {
-        listOf("selected step", "build", "final download failure", "failure without output").forEach { scenario ->
+        val scenarios = listOf("selected step", "build", "final download failure", "failure without output", "split hyperlink")
+        scenarios.forEach { scenario ->
             it("updates log search when polling ends with $scenario") {
                 val scheduler = TestScheduler()
                 val runningStep = BuildStep("Run tests", listOf(action(5, null)))
@@ -81,7 +82,19 @@ class BuildStepPresenterTest : DescribeSpec({
                 }
                 val finalDownloadFails = scenario.contains("failure")
                 val hasOutput = scenario != "failure without output"
-                val finalOffset = if (hasOutput) 5L else 0L
+                val liveChunks = when (scenario) {
+                    "split hyperlink" -> listOf("before \u001B", "]8;id=hidden", ";https://", "example.test", "\u001B")
+                    "failure without output" -> emptyList()
+                    else -> listOf("0", "1", "2", "3", "4")
+                }.map { it.toByteArray() }
+                val chunksByOffset = liveChunks.runningFold(0L) { offset, chunk -> offset + chunk.size }
+                    .zip(liveChunks).toMap()
+                val finalOffset = liveChunks.sumOf { it.size.toLong() }
+                val finalChunk = if (scenario == "split hyperlink") {
+                    "\\Report\u001B]8;;\u0007"
+                } else {
+                    "done"
+                }
                 val api = mockk<CircleCIAPIClientV1_1> {
                     every { getBuild("github", "owner", "repo", 42) } returnsMany
                         listOf(Observable.just(running), Observable.just(running), Observable.just(finished))
@@ -89,12 +102,12 @@ class BuildStepPresenterTest : DescribeSpec({
                 val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                 val output = mockk<BuildOutputClient> {
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(if (hasOutput) secondArg<Long>().toString().toByteArray() else byteArrayOf())
+                        Observable.just(chunksByOffset[secondArg<Long>()] ?: byteArrayOf())
                     }
                     every { fetchFinalRawOutput(url, finalOffset, any()) } returns if (finalDownloadFails) {
                         Observable.error(IOException("HTTP 503"))
                     } else {
-                        Observable.just("done".toByteArray())
+                        Observable.just(finalChunk.toByteArray())
                     }
                 }
                 val presenter = BuildStepPresenter { output }.apply {
@@ -117,7 +130,11 @@ class BuildStepPresenterTest : DescribeSpec({
 
                     scheduler.advanceTimeBy(4, SECONDS)
                     verify(exactly = 1) { view.showStep(runningStep) }
-                    val retainedLog = if (hasOutput) "01234" else ""
+                    val retainedLog = when (scenario) {
+                        "split hyperlink" -> "before "
+                        "failure without output" -> ""
+                        else -> "01234"
+                    }
                     presenter.logString.value shouldBe retainedLog
                     presenter.logSearchAvailable.value shouldBe false
                     presenter.logLoadFailed.value shouldBe false
@@ -125,7 +142,12 @@ class BuildStepPresenterTest : DescribeSpec({
                     scheduler.advanceTimeBy(1, SECONDS)
                     verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
                     presenter.logLoadFailed.value shouldBe finalDownloadFails
-                    presenter.logString.value shouldBe (retainedLog + if (finalDownloadFails) "" else "done")
+                    val expectedFinalLog = when {
+                        finalDownloadFails -> retainedLog
+                        scenario == "split hyperlink" -> "before Report"
+                        else -> retainedLog + "done"
+                    }
+                    presenter.logString.value shouldBe expectedFinalLog
                     presenter.logSearchAvailable.value shouldBe hasOutput
                 } finally {
                     scope?.destroy()

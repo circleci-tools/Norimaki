@@ -8,6 +8,23 @@ class StringAnsiEscapeTest : DescribeSpec({
         it(".removeAnsiEscapeCode() should remove the code") {
             "[3ASome string".removeAnsiEscapeCode() shouldBe "Some string"
         }
+        it("should strip split hyperlink controls and preserve split color codes") {
+            val controls = listOf(
+                "\u001B]" to "\u0007",
+                "\u001B]" to "\u001B\\",
+                "\u009D" to "\u009C"
+            )
+            controls.forEach { (osc, terminator) ->
+                val log = "before ${osc}8;id=hidden;https://example.test/report${terminator}" +
+                    "\u001B[3A\u001B[31mReport\u001B[0m${osc}8;;${terminator} after"
+                (0..log.length).forEach { split ->
+                    val stream = AnsiEscapeStream()
+                    val visible = stream.strip(log.take(split)) + stream.strip(log.drop(split))
+                    visible shouldBe "before \u001B[31mReport\u001B[0m after"
+                }
+            }
+        }
+
         it(".replaceAnsiColorCodeToHtml() should escape literal tags and entities") {
             "expected <b>literal</b> &amp;".replaceAnsiColorCodeToHtml() shouldBe
                 "expected &lt;b&gt;literal&lt;/b&gt; &amp;amp;"

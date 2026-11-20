@@ -60,7 +60,7 @@ class BuildStepPresenter internal constructor(
         completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
             .doOnComplete(::allowLogSearch)
-            .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
+            .subscribeBy(onNext = { appendLog(it.removeAnsiEscapeCode()) }, onError = { logLoadFailed.value = true })
             .addTo(bag)
     }
 
@@ -109,7 +109,7 @@ class BuildStepPresenter internal constructor(
     }
 
     private fun appendLog(log: String) {
-        logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
+        logString.value = logString.value + log.replaceAnsiColorCodeToHtml()
     }
 
     companion object {
@@ -155,6 +155,7 @@ internal fun pollActionOutputs(
 ): Observable<String> = Observable.defer {
     val urls = outputUrls.distinct()
     val decoders = urls.associateWith { Utf8StreamDecoder() }
+    val ansiStreams = urls.associateWith { AnsiEscapeStream() }
     val offsets = mutableMapOf<String, Long>()
     val reading = AtomicBoolean()
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
@@ -171,7 +172,12 @@ internal fun pollActionOutputs(
                         .filter { it.isNotEmpty() }
                         .doOnNext { offsets[url] = offsets.getOrDefault(url, 0L) + it.size }
                         .map { decoder.decode(it) }
-                    if (finishing) chunks.concatWith(Observable.fromCallable { decoder.finish() }) else chunks
+                    val decoded = if (finishing) {
+                        chunks.concatWith(Observable.fromCallable { decoder.finish() })
+                    } else {
+                        chunks
+                    }
+                    decoded.map(ansiStreams.getValue(url)::strip)
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }
