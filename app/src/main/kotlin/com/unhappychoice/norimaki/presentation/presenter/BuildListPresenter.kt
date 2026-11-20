@@ -31,6 +31,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     override val isLoading get() = buildList.isLoading
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
+    val canRetryPage get() = buildList.canRetryPage
 
     override fun onAuthenticated() {
         buildList.poll(BUILD_LIST_POLLING_SECONDS).addTo(bag)
@@ -45,7 +46,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     }
 
     fun getBuildsIfUnderfilled(canScroll: Boolean) {
-        if (isWorkflow && !canScroll) getBuilds()
+        if (isWorkflow && !canScroll && !canRetryPage.value) getBuilds()
     }
 
     fun goToBuildView(build: Build) {

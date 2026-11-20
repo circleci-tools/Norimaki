@@ -29,6 +29,7 @@ internal class BuildListRequests(
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
+    val canRetryPage = Variable(false)
     private val history = Variable(BuildHistory())
     val builds = history.asObservable().map { it.builds }
 
@@ -44,11 +45,12 @@ internal class BuildListRequests(
     )
 
     fun loadNextPage(): Disposable? {
-        if (page.value == 0 || isLoading.value || !hasMore.value) return null
+        if (isLoading.value || !hasMore.value || (page.value == 0 && !canRetryPage.value)) return null
         return requestPage(page.value * BUILD_LIST_PAGE_SIZE).subscribeNext {}
     }
 
     fun reset() {
+        canRetryPage.value = false
         lastPollIds = emptySet()
         latestRequestByBuild.clear()
         page.value = 0
@@ -58,7 +60,7 @@ internal class BuildListRequests(
     }
 
     private fun pollLatest(): Observable<Unit> {
-        if (page.value == 0) return requestPage(0)
+        if (page.value == 0) return if (isLoading.value) Observable.empty() else requestPage(0)
 
         val refreshed = fetchLatestBuilds(lastPollIds, fetch)
             .observeOn(ui)
@@ -87,8 +89,12 @@ internal class BuildListRequests(
         if (!paginated) return response
 
         isLoading.value = true
+        canRetryPage.value = false
         return response
-            .doOnError { isLoading.value = false }
+            .doOnError {
+                canRetryPage.value = !workflowId.isNullOrBlank()
+                isLoading.value = false
+            }
             .doOnDispose { isLoading.value = false }
     }
 
