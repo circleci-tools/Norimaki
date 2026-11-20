@@ -7,7 +7,11 @@ import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import okhttp3.Call
 import okhttp3.EventListener
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
@@ -20,14 +24,18 @@ class BuildOutputCancellationTest : DescribeSpec({
         }
     }
 
-    it("cancels a live log download during a response body read") {
-        verifyDownloadCancellation("live log") { client, url ->
+    it("cancels a live log download during a response body read after a same-origin redirect") {
+        verifyDownloadCancellation("live log", redirect = true) { client, url ->
             client.fetchRawOutput(url, 0)
         }
     }
 })
 
-private fun verifyDownloadCancellation(body: String, fetch: (BuildOutputClient, String) -> Observable<*>) {
+private fun verifyDownloadCancellation(
+    body: String,
+    redirect: Boolean = false,
+    fetch: (BuildOutputClient, String) -> Observable<*>
+) {
     val firstByteSent = CountDownLatch(1)
     val releaseRemainingBody = CountDownLatch(1)
     val bodyReadStarted = CountDownLatch(1)
@@ -45,7 +53,23 @@ private fun verifyDownloadCancellation(body: String, fetch: (BuildOutputClient, 
             output.write(bytes, 1, bytes.size - 1)
         }
     }
-    val httpClient = OkHttpClient.Builder().readTimeout(30, SECONDS).eventListener(object : EventListener() {
+    server.start()
+    val localUrl = "http://127.0.0.1:${server.address.port}/log".toHttpUrl()
+    val httpClient = OkHttpClient.Builder().readTimeout(30, SECONDS).addInterceptor { chain ->
+        val request = chain.request()
+        if (request.url.encodedPath == "/redirect") {
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(302)
+                .message("Found")
+                .header("Location", "/log")
+                .body("".toResponseBody())
+                .build()
+        } else {
+            chain.proceed(request.newBuilder().url(localUrl).build())
+        }
+    }.eventListener(object : EventListener() {
         override fun responseBodyStart(call: Call) {
             bodyReadStarted.countDown()
         }
@@ -58,8 +82,7 @@ private fun verifyDownloadCancellation(body: String, fetch: (BuildOutputClient, 
             if (call.isCanceled()) canceledCallFailed.countDown()
         }
     }).build()
-    server.start()
-    val url = "http://127.0.0.1:${server.address.port}/log"
+    val url = if (redirect) "https://circleci.com/redirect" else localUrl.toString()
     val observer = fetch(BuildOutputClient("token", httpClient), url).test()
 
     try {

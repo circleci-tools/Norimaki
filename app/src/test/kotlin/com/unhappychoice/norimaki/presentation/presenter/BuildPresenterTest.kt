@@ -7,6 +7,7 @@ import androidx.drawerlayout.widget.DrawerLayout
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
+import com.github.unhappychoice.circleci.v1.response.Workflow
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
@@ -17,6 +18,7 @@ import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import com.unhappychoice.norimaki.presentation.view.NavigationView
 import flow.Flow
@@ -150,6 +152,11 @@ class BuildPresenterTest : DescribeSpec({
             verify { activity wasNot Called }
         }
 
+        it("identifies the cache project before build details load") {
+            presenter.projectName shouldBe "github/owner/repo"
+            verify(exactly = 0) { view.showBuild(any()) }
+        }
+
         it("cancels cache deletion and blocks rebuilds when the session changes") {
             initialBuild.hasObservers() shouldBe true
             presenter.rebuildWithoutCache()
@@ -228,6 +235,88 @@ private fun bindingWithContainer(container: FrameLayout): ActivityMainBinding {
     }
     return ActivityMainBinding.bind(drawer)
 }
+
+class BuildPresenterWorkflowTest : DescribeSpec({
+    lateinit var activity: MainActivity
+    lateinit var flow: Flow
+    lateinit var presenter: BuildPresenter
+    lateinit var builds: PublishSubject<Build>
+    lateinit var scope: MortarScope
+
+    fun loadBuild(id: String?) {
+        val workflow = mockk<Workflow> {
+            every { workflowId } returns id
+            every { workflowName } returns "Build and test"
+        }
+        val build = pollResult(step("https://example.com/output"), "finished")
+        every { build.workflows } returns workflow
+        every { build.vcsUrl } returns "https://github.com/owner/repo"
+        every { build.username } returns "owner"
+        every { build.reponame } returns "repo"
+        builds.onNext(build)
+    }
+
+    beforeEach {
+        RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+
+        activity = mockk(relaxUnitFun = true)
+        flow = mockk(relaxed = true)
+        mockkStatic(Flow::class)
+        every { Flow.get(activity) } returns flow
+
+        builds = PublishSubject.create()
+        val api = mockk<CircleCIAPIClientV1_1>()
+        every { api.getBuild("github", "owner", "repo", 123) } returns builds
+        presenter = BuildPresenter().apply {
+            di = DI {
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
+                bind<MainActivity>() with singleton { activity }
+                bind<SessionService>() with singleton { testSession(api) }
+            }
+        }
+        scope = presenter.attachToTestScope(mockk(relaxUnitFun = true))
+    }
+
+    afterEach {
+        scope.destroy()
+        unmockkStatic(Flow::class)
+        RxAndroidPlugins.reset()
+        RxJavaPlugins.reset()
+    }
+
+    it("hides workflow navigation before a build loads") {
+        presenter.hasWorkflow() shouldBe false
+        presenter.goToWorkflowScreen()
+
+        verify(exactly = 0) { flow.set(any()) }
+    }
+
+    mapOf("null" to null, "empty" to "", "whitespace-only" to " \t\n").forEach { (label, id) ->
+        it("hides workflow navigation and ignores selection for a $label ID") {
+            loadBuild(id)
+
+            presenter.hasWorkflow() shouldBe false
+            presenter.goToWorkflowScreen()
+
+            verify(exactly = 0) { flow.set(any()) }
+            verify(exactly = 0) { activity.invalidateOptionsMenu() }
+        }
+    }
+
+    it("opens the workflow screen with the original ID when it is nonblank") {
+        loadBuild(" target ")
+        val screen = slot<WorkflowScreen>()
+
+        presenter.hasWorkflow() shouldBe true
+        presenter.goToWorkflowScreen()
+
+        verify(exactly = 1) { flow.set(capture(screen)) }
+        verify(exactly = 1) { activity.invalidateOptionsMenu() }
+        screen.captured.workflowId shouldBe " target "
+    }
+})
 
 class BuildPresenterPollingTest : DescribeSpec({
     it("should only publish changed snapshots and open the latest step") {

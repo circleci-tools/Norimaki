@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.presentation.adapter
 
 import android.app.Activity
+import android.os.Looper
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -15,16 +16,18 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.LooperMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@LooperMode(LooperMode.Mode.PAUSED)
 class BuildStepAdapterTest {
     @Test
     fun opensTheCurrentStepAfterRowsMove() {
         Robolectric.buildActivity(Activity::class.java).use { controller ->
             val activity = controller.setup().get()
             activity.setTheme(R.style.AppTheme)
-            val adapter = BuildStepAdapter(activity)
+            val adapter = BuildStepAdapter(activity, Runnable::run)
             val rows = RecyclerView(activity).apply {
                 layoutManager = LinearLayoutManager(activity)
                 this.adapter = adapter
@@ -57,6 +60,7 @@ class BuildStepAdapterTest {
         Gson().fromJson("""{"name":"Run tests","actions":$actions}""", BuildStep::class.java)
 
     private fun layoutRows(rows: RecyclerView) {
+        shadowOf(Looper.getMainLooper()).idle()
         val size = View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY)
         rows.measure(size, size)
         rows.layout(0, 0, 600, 600)
