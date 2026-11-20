@@ -10,6 +10,7 @@ import okhttp3.Response
 import org.json.JSONArray
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildOutputClient(
     private val token: String,
@@ -17,17 +18,14 @@ class BuildOutputClient(
     private val ioScheduler: Scheduler = Schedulers.io()
 ) {
     fun fetchOutput(outputUrl: String): Observable<String> =
-        Observable.fromCallable {
-            execute(Request.Builder().url(outputUrl).build()).use { response ->
-                if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
-                joinMessages(response.body.string())
-            }
+        execute({ Request.Builder().url(outputUrl).build() }) { response ->
+            if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
+            joinMessages(response.body.string())
         }
 
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<ByteArray> =
-        Observable.fromCallable {
-            execute(rawOutputRequest(rawOutputUrl, offset)).use { rawOutputBytes(it, offset) }
-        }.subscribeOn(ioScheduler)
+        execute({ rawOutputRequest(rawOutputUrl, offset) }) { rawOutputBytes(it, offset) }
+            .subscribeOn(ioScheduler)
 
     fun fetchFinalRawOutput(
         rawOutputUrl: String,
@@ -45,7 +43,24 @@ class BuildOutputClient(
                 }
         }
 
-    private fun execute(request: Request): Response = client.newCall(request).execute()
+    private fun <T : Any> execute(request: () -> Request, readBody: (Response) -> T): Observable<T> =
+        Observable.create { emitter ->
+            val call = client.newCall(request())
+            val active = AtomicBoolean(true)
+            emitter.setCancellable { if (active.getAndSet(false)) call.cancel() }
+            if (emitter.isDisposed) return@create
+
+            val output = try {
+                call.execute().use(readBody)
+            } catch (error: Exception) {
+                active.set(false)
+                emitter.tryOnError(error)
+                return@create
+            }
+            active.set(false)
+            emitter.onNext(output)
+            emitter.onComplete()
+        }
 
     private fun rawOutputRequest(url: String, offset: Long): Request =
         Request.Builder()
@@ -55,9 +70,23 @@ class BuildOutputClient(
             .build()
 
     private fun rawOutputBytes(response: Response, offset: Long): ByteArray = when {
-        response.isSuccessful -> response.body.bytes()
+        response.code == 206 -> partialOutputBytes(response, offset)
+        response.isSuccessful -> response.body.bytes().let { bytes ->
+            when {
+                offset == 0L -> bytes
+                offset >= bytes.size -> ByteArray(0)
+                else -> bytes.copyOfRange(offset.toInt(), bytes.size)
+            }
+        }
         response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> ByteArray(0)
         else -> throw RawOutputHttpException(response.code)
+    }
+
+    private fun partialOutputBytes(response: Response, offset: Long): ByteArray {
+        val range = response.header("Content-Range").orEmpty()
+        val start = CONTENT_RANGE.matchEntire(range)?.groupValues?.get(1)?.toLongOrNull()
+        if (start != offset) throw IOException("Invalid Content-Range for raw log offset $offset: $range")
+        return response.body.bytes()
     }
 
     private fun isRetryable(error: Throwable): Boolean = when (error) {
@@ -72,6 +101,7 @@ class BuildOutputClient(
 
     private companion object {
         const val FINAL_RETRIES = 2
+        val CONTENT_RANGE = Regex("""bytes ([0-9]+)-[0-9]+/(?:[0-9]+|\*)""", RegexOption.IGNORE_CASE)
     }
 }
 
