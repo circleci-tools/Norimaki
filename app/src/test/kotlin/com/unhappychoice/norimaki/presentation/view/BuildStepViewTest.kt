@@ -241,7 +241,7 @@ class BuildStepViewTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun bringsAMatchBelowAndToTheRightOfTheViewportIntoView() {
         withView { _, view ->
-            log.value = "needle<br>" + "line<br>".repeat(80) + "X".repeat(200) + "needle"
+            log.value = "needle<br>" + "line<br>".repeat(80) + "X".repeat(200) + "needle" + "X".repeat(100)
             searchAvailable.value = true
             renderUpdates()
 
@@ -260,8 +260,11 @@ class BuildStepViewTest {
             renderUpdates()
 
             val match = checkNotNull(highlightedRange(output))
-            assertTrue(output.layout.getPrimaryHorizontal(match.first) > horizontal.width)
-            assertTrue(horizontal.scrollX > 0)
+            val matchLeft = output.left + output.totalPaddingLeft + output.layout.getPrimaryHorizontal(match.first)
+            val matchRight = output.left + output.totalPaddingLeft + output.layout.getPrimaryHorizontal(match.last + 1)
+            assertTrue(matchLeft > horizontal.width)
+            assertTrue(matchLeft >= horizontal.scrollX + horizontal.paddingLeft)
+            assertTrue(matchRight <= horizontal.scrollX + horizontal.width - horizontal.paddingRight)
             assertTrue(vertical.scrollY > 0)
         }
     }

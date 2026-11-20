@@ -1,7 +1,9 @@
 package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
+import android.graphics.Path
 import android.graphics.Rect
+import android.graphics.RectF
 import android.text.Spannable
 import android.text.style.BackgroundColorSpan
 import android.view.View
@@ -18,7 +20,6 @@ import io.reactivex.disposables.SerialDisposable
 import io.reactivex.schedulers.Schedulers
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
-import kotlin.math.ceil
 
 internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
     private val search = SerialDisposable()
@@ -106,16 +107,20 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
         logMatchCount.text = root.context.getString(R.string.build_log_match_count, selected + 1, matches.size)
         text.setSpan(highlight, match.first, match.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         logText.post {
-            if (text.getSpanStart(highlight) == match.first && logText.text === text) scrollTo(match.first)
+            if (text.getSpanStart(highlight) == match.first && logText.text === text) scrollTo(match)
         }
     }
 
-    private fun scrollTo(offset: Int) = with(binding.logText) {
+    private fun scrollTo(match: IntRange) = with(binding.logText) {
         val layout = layout ?: return@with
-        val line = layout.getLineForOffset(offset)
-        val x = ceil(layout.getPrimaryHorizontal(offset)).toInt() + totalPaddingLeft
-        val top = layout.getLineTop(line) + totalPaddingTop
-        requestRectangleOnScreen(Rect(x - 1, top, x + 1, layout.getLineBottom(line) + totalPaddingTop), true)
+        val selection = Path()
+        layout.getSelectionPath(match.first, match.last + 1, selection)
+        val bounds = RectF()
+        selection.computeBounds(bounds, true)
+        bounds.offset(totalPaddingLeft.toFloat(), totalPaddingTop.toFloat())
+        val rectangle = Rect()
+        bounds.roundOut(rectangle)
+        requestRectangleOnScreen(rectangle, true)
     }
 
     private fun keyboard(): InputMethodManager =
