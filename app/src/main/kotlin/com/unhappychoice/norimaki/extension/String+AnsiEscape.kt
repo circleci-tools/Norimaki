@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.extension
 
-fun String.removeAnsiEscapeCode(): String = replace("\\033\\[(?!\\d+m)[0-?]*[ -/]*[@-~]".toRegex(), "")
+fun String.removeAnsiEscapeCode(): String =
+    replace(osc8Hyperlink, "").replace("\\033\\[(?!\\d+m)[0-?]*[ -/]*[@-~]".toRegex(), "")
 
 fun String.replaceAnsiColorCodeToHtml(): String =
     replace("&", "&amp;")
@@ -10,6 +11,8 @@ fun String.replaceAnsiColorCodeToHtml(): String =
         .map { it.convertAnsiColorCodeToHtmlTag() }
         .joinToString("")
         .replace("\n", "<br>")
+
+private val osc8Hyperlink = Regex("""(?:\x1B\]|\x9D)8;[^;\p{Cc}]*;[^\p{Cc}]*(?:\x07|\x1B\\|\x9C)""")
 
 private fun String.convertAnsiColorCodeToHtmlTag(): String =
     when ("\\033\\[(\\d+?)m".toRegex().find(this)?.groupValues?.lastOrNull()) {

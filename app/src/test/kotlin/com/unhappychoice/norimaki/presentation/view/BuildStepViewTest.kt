@@ -134,6 +134,36 @@ class BuildStepViewTest {
     }
 
     @Test
+    fun findsHyperlinkLabelsAndIgnoresOsc8TargetsAndParameters() {
+        withView { activity, view ->
+            val query = view.findViewById<EditText>(R.id.logQuery)
+            val output = view.findViewById<TextView>(R.id.logText)
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            val links = listOf("\u001B]" to "\u0007", "\u001B]" to "\u001B\\", "\u009D" to "\u009C")
+            log.value = links.joinToString("\n") { (osc, terminator) ->
+                "${osc}8;id=hidden-id;https://example.test/hidden-target${terminator}" +
+                    "\u001B[31mReport & details\u001B[0m${osc}8;;${terminator}"
+            }.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
+            searchAvailable.value = true
+            renderUpdates()
+
+            assertEquals(List(links.size) { "Report & details" }.joinToString("\n"), output.text.toString())
+            view.findViewById<View>(R.id.logFind).performClick()
+            query.setText("report & details")
+            finishSearch()
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, links.size), count.text.toString())
+            assertEquals(0 until "Report & details".length, highlightedRange(output))
+
+            listOf("hidden-target", "hidden-id").forEach {
+                query.setText(it)
+                finishSearch()
+                assertEquals(activity.getString(R.string.build_log_no_matches), count.text.toString())
+                assertEquals(null, highlightedRange(output))
+            }
+        }
+    }
+
+    @Test
     fun refreshesAnOpenSearchAndClearsItWhenSearchBecomesUnavailable() {
         withView { activity, view ->
             val find = view.findViewById<View>(R.id.logFind)
