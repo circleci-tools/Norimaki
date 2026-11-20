@@ -13,6 +13,7 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import com.unhappychoice.norimaki.presentation.view.NavigationView
@@ -107,6 +108,21 @@ class BuildPresenterTest : DescribeSpec({
                     unmockkStatic(Flow::class)
                 }
             }
+        }
+
+        it("completes a regular rebuild without navigating when no view is registered") {
+            presenter.dropView(view)
+            // Restore the session without attaching a replacement view.
+            PresenterNeedsToken::class.java.getDeclaredMethod("onEnterScope", MortarScope::class.java)
+                .apply { isAccessible = true }
+                .invoke(presenter, scope)
+
+            presenter.rebuild()
+            retry.hasObservers() shouldBe true
+            retry.onNext(mockk())
+            retry.onComplete()
+
+            verify { activity wasNot Called }
         }
 
         it("cancels cache deletion and blocks rebuilds when the session changes") {
