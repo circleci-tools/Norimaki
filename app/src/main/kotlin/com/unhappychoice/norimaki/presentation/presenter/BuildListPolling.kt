@@ -9,17 +9,17 @@ internal const val BUILD_LIST_PAGE_SIZE = 20
 internal class BuildListPolling(private val fetchPage: (Int) -> Observable<List<Build>>) {
     private var backfillBoundary: Set<String>? = null
 
-    fun fetchLatestBuilds(knownBuilds: List<Build>): Observable<List<Build>> = Observable.defer {
-        val knownIds = backfillBoundary ?: knownBuilds.mapTo(hashSetOf()) { it.uniqueId() }
+    fun fetchLatestBuilds(knownIds: Set<String>): Observable<List<Build>> = Observable.defer {
+        val boundary = backfillBoundary ?: knownIds
         var offset = 0
         var shouldStop = false
 
         Observable.defer {
             shouldStop = true
             fetchPage(offset).doOnNext { page ->
-                shouldStop = page.size < BUILD_LIST_PAGE_SIZE || page.any { it.uniqueId() in knownIds }
+                shouldStop = page.size < BUILD_LIST_PAGE_SIZE || page.any { it.uniqueId() in boundary }
                 // Retry from the head using the original boundary, since newer builds can shift offsets.
-                if (!shouldStop) backfillBoundary = knownIds
+                if (!shouldStop) backfillBoundary = boundary
                 offset += BUILD_LIST_PAGE_SIZE
             }
         }.repeatUntil { shouldStop }

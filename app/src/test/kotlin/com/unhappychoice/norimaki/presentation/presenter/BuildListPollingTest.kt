@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
@@ -44,8 +45,9 @@ class BuildListPollingTest : DescribeSpec({
             val scheduler = TestScheduler()
             val latest = BuildListPolling(fetchPage)
             var buildHistory = BuildHistory().merge(builds)!!
-            val polls = polling(10, scheduler = scheduler) { latest.fetchLatestBuilds(buildHistory.builds) }
-                .subscribe { buildHistory = buildHistory.merge(it) ?: buildHistory }
+            val polls = polling(10, scheduler = scheduler) {
+                latest.fetchLatestBuilds(buildHistory.builds.mapTo(hashSetOf()) { it.uniqueId() })
+            }.subscribe { buildHistory = buildHistory.merge(it) ?: buildHistory }
             offsets shouldBe listOf(0, 20, 0)
             apiBuilds = allBuilds
 
@@ -71,8 +73,9 @@ class BuildListPollingTest : DescribeSpec({
             }
 
             val scheduler = TestScheduler()
-            val polls = polling(10, scheduler = scheduler) { latest.fetchLatestBuilds(history.builds) }
-                .subscribe { history = history.merge(it) ?: history }
+            val polls = polling(10, scheduler = scheduler) {
+                latest.fetchLatestBuilds(history.builds.mapTo(hashSetOf()) { it.uniqueId() })
+            }.subscribe { history = history.merge(it) ?: history }
             try {
                 val partial = (41 downTo 22).toList() + (20 downTo 1).toList()
                 history.builds.map { it.buildNum } shouldBe partial
@@ -90,6 +93,29 @@ class BuildListPollingTest : DescribeSpec({
             }
         }
 
+        it("emits nothing when the first request fails and retries on the next poll") {
+            val known = build(1)
+            val newest = build(2)
+            val requests = listOf(
+                Observable.error<List<Build>>(IllegalStateException("First page request failed")),
+                Observable.just(listOf(newest, known))
+            ).iterator()
+            val latest = BuildListPolling { offset ->
+                offset shouldBe 0
+                requests.next()
+            }
+
+            val scheduler = TestScheduler()
+            val polls = polling(10, scheduler = scheduler) { latest.fetchLatestBuilds(setOf(known.uniqueId())) }.test()
+            try {
+                polls.assertNoValues().assertNoErrors()
+                scheduler.advanceTimeBy(10, TimeUnit.SECONDS)
+                polls.assertValue(listOf(newest, known)).assertNoErrors()
+            } finally {
+                polls.dispose()
+            }
+        }
+
         it("should stop at an empty page when no build overlaps history") {
             val offsets = mutableListOf<Int>()
             val latest = (40 downTo 1).map(::build)
@@ -98,7 +124,7 @@ class BuildListPollingTest : DescribeSpec({
                 Observable.just(latest.drop(offset).take(20))
             }
 
-            polling.fetchLatestBuilds(listOf(build(100))).test().assertResult(latest)
+            polling.fetchLatestBuilds(setOf(build(100).uniqueId())).test().assertResult(latest)
             offsets shouldBe listOf(0, 20, 40)
         }
     }

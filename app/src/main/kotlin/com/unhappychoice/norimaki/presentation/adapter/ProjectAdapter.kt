@@ -15,12 +15,6 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
     val projects = Variable<List<Project>>(emptyList())
     val onClickItem = PublishSubject.create<Project>()
 
-    init {
-        setHasStableIds(true)
-    }
-
-    override fun getItemId(position: Int): Long = projects.value[position].vcsUrl.hashCode().toLong()
-
     override fun getItemCount(): Int = projects.value.size
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -33,11 +27,13 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
     }
 
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
-        private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)
-
         fun bind(project: Project) {
             projectNameView.text = "${project.username}/${project.reponame}"
+        }
 
+        private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)
+
+        init {
             view.setOnClickListener {
                 projects.value.getOrNull(bindingAdapterPosition)?.let(onClickItem::onNext)
             }

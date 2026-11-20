@@ -6,5 +6,7 @@
     <string name="drawer_close">Close</string>
     <string name="api_token_required">Enter an API token.</string>
     <string name="api_token_verification_failed">Could not verify this API token. Check the token and try again.</string>
-    <string name="build_log_load_error">Could not load the rest of the build log.</string>
+    <string name="build_load_error">Could not load the build details.</string>
+    <string name="build_load_retry">Retry</string>
+    <string name="build_log_load_error">Could not load the build log.</string>
 </resources>
