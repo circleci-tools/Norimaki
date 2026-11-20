@@ -59,11 +59,8 @@ class BuildStepPresenter internal constructor(
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
         completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
-            .subscribeBy(
-                onNext = { appendLog(it) },
-                onComplete = ::allowLogSearch,
-                onError = { logLoadFailed.value = true }
-            )
+            .doOnComplete(::allowLogSearch)
+            .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
             .addTo(bag)
     }
 

@@ -134,6 +134,40 @@ class BuildStepViewTest {
     }
 
     @Test
+    fun ignoresHiddenQueriesAndDropsResultsQueuedBeforeTheQueryIsCleared() {
+        withView { activity, view ->
+            val query = view.findViewById<EditText>(R.id.logQuery)
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            val output = view.findViewById<TextView>(R.id.logText)
+            log.value = "Échec"
+            searchAvailable.value = true
+            renderUpdates()
+
+            query.setText("échec")
+            finishSearch()
+            assertEquals("", count.text.toString())
+            assertEquals(null, highlightedRange(output))
+
+            view.findViewById<View>(R.id.logFind).performClick()
+            finishSearch()
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, 1), count.text.toString())
+            assertEquals(0 until 5, highlightedRange(output))
+
+            searchAvailable.value = true
+            renderUpdates()
+            assertEquals(View.GONE, view.findViewById<View>(R.id.logFind).visibility)
+            assertEquals(0 until 5, highlightedRange(output))
+
+            query.setText("chec")
+            scheduler.advanceTimeBy(150, MILLISECONDS)
+            query.text.clear()
+            renderUpdates()
+            assertEquals("", count.text.toString())
+            assertEquals(null, highlightedRange(output))
+        }
+    }
+
+    @Test
     fun findsHyperlinkLabelsAndIgnoresOsc8TargetsAndParameters() {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)
@@ -170,7 +204,7 @@ class BuildStepViewTest {
             val query = view.findViewById<EditText>(R.id.logQuery)
             val output = view.findViewById<TextView>(R.id.logText)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
-            log.value = "needle"
+            log.value = "needle needle"
             searchAvailable.value = true
             renderUpdates()
 
@@ -180,6 +214,9 @@ class BuildStepViewTest {
             assertEquals(0 until 6, highlightedRange(output))
 
             log.value = "new needle"
+            scheduler.triggerActions()
+            view.findViewById<View>(R.id.logNext).performClick()
+            assertEquals(7 until 13, highlightedRange(output))
             renderUpdates()
             finishSearch()
             assertEquals(4 until 10, highlightedRange(output))

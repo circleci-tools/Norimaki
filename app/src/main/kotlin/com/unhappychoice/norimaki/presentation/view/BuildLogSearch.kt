@@ -6,6 +6,7 @@ import android.text.Spannable
 import android.text.style.BackgroundColorSpan
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.TextView
 import androidx.core.widget.doAfterTextChanged
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
@@ -44,7 +45,7 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
     }
 
     fun render(text: CharSequence) {
-        binding.logText.text = text
+        binding.logText.setText(text, TextView.BufferType.SPANNABLE)
         if (binding.logSearchPanel.visibility == View.VISIBLE) refresh()
     }
 
@@ -95,17 +96,17 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
     private fun updateMatch(match: IntRange?) = with(binding) {
         logPrevious.isEnabled = matches.size > 1
         logNext.isEnabled = matches.size > 1
-        val text = logText.text as? Spannable
-        text?.removeSpan(highlight)
+        val text = logText.text as Spannable
+        text.removeSpan(highlight)
         if (match == null) {
             logMatchCount.text = ""
             return@with
         }
 
         logMatchCount.text = root.context.getString(R.string.build_log_match_count, selected + 1, matches.size)
-        text?.setSpan(highlight, match.first, match.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.setSpan(highlight, match.first, match.last + 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         logText.post {
-            if (text?.getSpanStart(highlight) == match.first && logText.text === text) scrollTo(match.first)
+            if (text.getSpanStart(highlight) == match.first && logText.text === text) scrollTo(match.first)
         }
     }
 
@@ -121,18 +122,11 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
         binding.root.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
 }
 
-private fun findLogMatches(text: CharSequence, query: String): Observable<List<IntRange>> =
-    Observable.create { emitter ->
-        val matches = mutableListOf<IntRange>()
-        if (query.isNotEmpty()) {
-            val matcher = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
-                .matcher(text.toString())
-            while (!emitter.isDisposed && matcher.find()) {
-                matches.add(matcher.start() until matcher.end())
-            }
-        }
-        if (!emitter.isDisposed) {
-            emitter.onNext(matches)
-            emitter.onComplete()
-        }
-    }
+private fun findLogMatches(text: CharSequence, query: String): Observable<List<IntRange>> {
+    val matcher = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
+        .matcher(text.toString())
+    return Observable.generate<IntRange> { emitter ->
+        if (matcher.find()) emitter.onNext(matcher.start() until matcher.end())
+        else emitter.onComplete()
+    }.toList().toObservable()
+}
