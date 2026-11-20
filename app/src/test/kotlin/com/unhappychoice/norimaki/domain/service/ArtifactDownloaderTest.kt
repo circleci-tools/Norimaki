@@ -41,6 +41,7 @@ class ArtifactDownloaderTest {
     fun rejectsUntrustedArtifactSourcesBeforeMakingARequest() {
         val downloader = downloader { error("Unexpected request") }
         listOf(
+            "not a URL",
             "http://circleci.com/file",
             "https://circleci.com:8443/file",
             "https://circleci.com.example/file",
@@ -50,6 +51,23 @@ class ArtifactDownloaderTest {
             downloader.download(source, TOKEN) { error("Unexpected write") }
                 .test().assertError(IOException::class.java)
         }
+    }
+
+    @Test
+    fun reportsCancellationBeforeOpeningTheDestination() {
+        val observer = TestObserver<Unit>()
+        var cleanedUp = false
+        val downloader = downloader {
+            observer.dispose()
+            response(it, 200, bytes = byteArrayOf(1))
+        }
+
+        downloader.download("https://dl.circleci.com/file", TOKEN, { cleanedUp = true }) {
+            error("Unexpected write")
+        }.subscribe(observer)
+
+        observer.assertNoValues().assertNoErrors().assertNotComplete()
+        assertEquals(true, cleanedUp)
     }
 
     @Test

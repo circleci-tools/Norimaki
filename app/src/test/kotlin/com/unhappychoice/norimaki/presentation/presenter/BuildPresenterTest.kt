@@ -67,6 +67,19 @@ class BuildPresenterTest : DescribeSpec({
         RxJavaPlugins.reset()
     }
 
+    it("ignores artifact navigation after the verified session ends") {
+        val activity = mockk<MainActivity>()
+        presenter.di = DI {
+            extend(presenter.di)
+            bind<MainActivity>() with singleton { activity }
+        }
+        session.replace("replacement-token").test().assertComplete()
+
+        presenter.goToArtifactsScreen()
+
+        verify { activity wasNot Called }
+    }
+
     describe("loading build details") {
         it("should expose the initial failure and reload the same build on retry") {
             val scheduler = TestScheduler()

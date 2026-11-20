@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.view
 import android.app.Activity
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.PopupMenu
 import androidx.appcompat.app.ActionBar
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
@@ -26,6 +27,28 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class BuildViewTest {
+    @Test
+    fun routesOnlyTheArtifactsMenuItemToArtifactNavigation() {
+        val presenter = mockk<BuildPresenter>(relaxed = true)
+        Robolectric.buildActivity(Activity::class.java).use { controller ->
+            val activity = controller.setup().get().apply { setTheme(R.style.AppTheme) }
+            val view = LayoutInflater.from(activity).inflate(R.layout.build_view, null) as BuildView
+            view.di = DI { bind<BuildPresenter>() with singleton { presenter } }
+
+            view.onCreateOptionsMenu(null)
+            view.onOptionsItemSelected(null)
+            val menu = PopupMenu(activity, view).menu
+            view.onCreateOptionsMenu(menu)
+            val items = (0 until menu.size()).map(menu::getItem)
+            val artifacts = items.single { it.title == activity.getString(R.string.artifacts) }
+            items.filter { it != artifacts }.forEach(view::onOptionsItemSelected)
+            verify(exactly = 0) { presenter.goToArtifactsScreen() }
+
+            view.onOptionsItemSelected(artifacts)
+            verify(exactly = 1) { presenter.goToArtifactsScreen() }
+        }
+    }
+
     @Test
     fun retriesLoadingTheBuildAfterFailure() {
         val failed = Variable(false)

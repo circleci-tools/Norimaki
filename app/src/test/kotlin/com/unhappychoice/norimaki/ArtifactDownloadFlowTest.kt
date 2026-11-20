@@ -88,6 +88,33 @@ class ArtifactDownloadFlowTest {
     }
 
     @Test
+    fun treatsASuccessfulPickerResultWithoutAUriAsCancellation() = withArtifacts { activity, app ->
+        val list = activity.findViewById<ListView>(R.id.artifact_list)
+        val picker = activity.selectArtifact(list)
+        assertTrue(activity.activityResultRegistry.dispatchResult(picker, Activity.RESULT_OK, Intent()))
+        flushIo()
+
+        assertTrue(app.requests.isEmpty())
+        assertTrue(list.isEnabled)
+        activity.selectArtifact(list)
+    }
+
+    @Test
+    fun ignoresThePickerResultAfterReturningToTheBuild() = withArtifacts { activity, app ->
+        val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
+        activity.onBackPressedDispatcher.onBackPressed()
+        finishTransition()
+        assertEquals(BuildScreen(buildId), Flow.get(activity).history.top<Any>())
+
+        val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
+        activity.deliverDestination(picker, destination)
+        flushIo()
+
+        assertTrue(app.requests.isEmpty())
+        assertEquals(0L, destination.length())
+    }
+
+    @Test
     fun letsTheUserRetryWhenNoDocumentPickerIsAvailable() = withArtifacts { activity, app ->
         val list = activity.findViewById<ListView>(R.id.artifact_list)
         val application = shadowOf(app)
@@ -113,6 +140,22 @@ class ArtifactDownloadFlowTest {
 
         assertTrue(app.requests.isEmpty())
         assertEquals(0L, destination.length())
+    }
+
+    @Test
+    fun cancelsAQueuedDownloadWhenTheSessionChanges() = withArtifacts { activity, app ->
+        val list = activity.findViewById<ListView>(R.id.artifact_list)
+        val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
+        activity.deliverDestination(activity.selectArtifact(list), destination)
+        assertFalse(list.isEnabled)
+
+        app.module.direct.instance<SessionService>().replace("replacement-token").test().assertComplete()
+        flushIo()
+
+        assertTrue(app.requests.isEmpty())
+        assertEquals(0L, destination.length())
+        assertTrue(list.isEnabled)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.artifact_downloading).visibility)
     }
 
     @Test
