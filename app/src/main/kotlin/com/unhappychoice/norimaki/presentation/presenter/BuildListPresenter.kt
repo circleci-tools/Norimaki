@@ -2,10 +2,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.refreshBuildList
 import com.unhappychoice.norimaki.domain.model.uniqueId
-import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -87,7 +87,8 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun goToBuildView(build: Build) {
         if (account == null) return
-        goTo(activity, BuildScreen(build))
+        val buildId = BuildId.from(build) ?: return
+        goTo(activity, BuildScreen(buildId))
     }
 
     fun changeAPIToken() {
@@ -95,12 +96,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     internal fun getBuildDetails(build: Build): Observable<Build> {
-        val username = build.username ?: return Observable.empty()
-        val repository = build.reponame ?: return Observable.empty()
-        val number = build.buildNum ?: return Observable.empty()
+        val buildId = BuildId.from(build) ?: return Observable.empty()
         return Observable.defer {
             val client = account?.client ?: return@defer Observable.empty<Build>()
-            client.getBuild(build.vcsType(), username, repository, number)
+            buildId.load(client)
         }.subscribeOnIoObserveOnUI()
     }
 

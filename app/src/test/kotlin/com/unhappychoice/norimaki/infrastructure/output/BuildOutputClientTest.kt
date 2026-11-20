@@ -168,6 +168,23 @@ class BuildOutputClientTest : DescribeSpec({
             requests.map { it.header("Range") } shouldBe listOf("bytes=42-", "bytes=42-")
         }
 
+        it("should stop following a same-origin redirect loop") {
+            var requests = 0
+            val client = outputClient { request ->
+                requests += 1
+                redirect(request, "/log")
+            }
+
+            client.fetchRawOutput(url, offset).test().assertFailure(RawOutputHttpException::class.java)
+            requests shouldBe 21
+        }
+
+        it("should reject a redirect with no Location header") {
+            val client = outputClient { response(it, 302) }
+
+            client.fetchRawOutput(url, offset).test().assertFailure(RawOutputHttpException::class.java)
+        }
+
         listOf("https://example.com/log", "http://circleci.com/log", "https://circleci.com:8443/log").forEach { target ->
             it("should reject a redirect to $target for live and final requests") {
                 val requests = mutableListOf<Request>()

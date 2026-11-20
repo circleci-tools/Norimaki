@@ -4,6 +4,7 @@ import com.unhappychoice.norimaki.extension.asSequence
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.schedulers.Schedulers
+import okhttp3.Call
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -12,6 +13,7 @@ import okhttp3.Response
 import org.json.JSONArray
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildOutputClient(
     private val token: String,
@@ -21,16 +23,16 @@ class BuildOutputClient(
     private val rawClient = client.newBuilder().followRedirects(false).build()
 
     fun fetchOutput(outputUrl: String): Observable<String> =
-        Observable.fromCallable {
-            execute(Request.Builder().url(outputUrl).build()).use { response ->
-                if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
-                joinMessages(response.body.string())
-            }
+        execute({ client.newCall(Request.Builder().url(outputUrl).build()) }) { response ->
+            if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
+            joinMessages(response.body.string())
         }
 
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<ByteArray> =
-        Observable.fromCallable {
-            fetchRawOutputBytes(rawOutputUrl.toHttpUrl(), offset)
+        Observable.defer {
+            val url = rawOutputUrl.toHttpUrl()
+            require(url.isCircleCiOrigin()) { "Raw log requests require the CircleCI HTTPS origin" }
+            fetchRawOutput(url, offset, 0)
         }.subscribeOn(ioScheduler)
 
     fun fetchFinalRawOutput(
@@ -49,23 +51,35 @@ class BuildOutputClient(
                 }
         }
 
-    private fun execute(request: Request): Response = client.newCall(request).execute()
+    private fun <T : Any> execute(newCall: () -> Call, readBody: (Response) -> T): Observable<T> =
+        Observable.create { emitter ->
+            val call = newCall()
+            val active = AtomicBoolean(true)
+            emitter.setCancellable { if (active.getAndSet(false)) call.cancel() }
+            if (emitter.isDisposed) return@create
 
-    private fun fetchRawOutputBytes(initialUrl: HttpUrl, offset: Long): ByteArray {
-        require(initialUrl.isCircleCiOrigin()) { "Raw log requests require the CircleCI HTTPS origin" }
-        var url = initialUrl
-        var redirects = 0
-        while (true) {
-            url = rawClient.newCall(rawOutputRequest(url, offset)).execute().use { response ->
-                val target = response.rawRedirectTarget() ?: return rawOutputBytes(response, offset)
-                if (!target.isCircleCiOrigin() || redirects == MAX_RAW_REDIRECTS) {
-                    throw RawOutputHttpException(response.code)
-                }
-                target
+            val output = try {
+                call.execute().use(readBody)
+            } catch (error: Exception) {
+                active.set(false)
+                emitter.tryOnError(error)
+                return@create
             }
-            redirects += 1
+            active.set(false)
+            emitter.onNext(output)
+            emitter.onComplete()
         }
-    }
+
+    private fun fetchRawOutput(url: HttpUrl, offset: Long, redirects: Int): Observable<ByteArray> =
+        execute({ rawClient.newCall(rawOutputRequest(url, offset)) }) { response ->
+            val target = response.rawRedirectTarget()
+            when {
+                target == null -> Observable.just(rawOutputBytes(response, offset))
+                !target.isCircleCiOrigin() || redirects == MAX_RAW_REDIRECTS ->
+                    throw RawOutputHttpException(response.code)
+                else -> fetchRawOutput(target, offset, redirects + 1)
+            }
+        }.flatMap { it }
 
     private fun Response.rawRedirectTarget(): HttpUrl? =
         if (code in RAW_REDIRECT_CODES) header("Location")?.let(request.url::resolve) else null
