@@ -121,9 +121,13 @@ class WorkflowPresenterTest : DescribeSpec({
             updates.values().last() shouldBe WorkflowState(listOf(resolved), message = R.string.workflow_approval_submitted)
         }
 
-        it("keeps a submitted approval disabled when the refresh fails") {
+        it("retries a failed refresh without resubmitting an accepted approval") {
             val client = mockk<WorkflowClient> {
-                every { jobs("run") } returnsMany listOf(Single.just(listOf(hold)), Single.error(IOException()))
+                every { jobs("run") } returnsMany listOf(
+                    Single.just(listOf(hold)),
+                    Single.error(IOException()),
+                    Single.just(listOf(resolved))
+                )
                 every { approve("run", "request") } returns Completable.complete()
             }
             val presenter = presenter(client)
@@ -134,6 +138,11 @@ class WorkflowPresenterTest : DescribeSpec({
 
             presenter.canApprove(hold) shouldBe false
             updates.values().last().refreshFailed shouldBe true
+
+            presenter.refresh()
+
+            updates.values().last() shouldBe WorkflowState(listOf(resolved))
+            verify(exactly = 3) { client.jobs("run") }
             verify(exactly = 1) { client.approve("run", "request") }
         }
 
