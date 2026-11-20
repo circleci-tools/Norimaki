@@ -72,6 +72,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
 
     fun rebuild() {
         val client = account?.client ?: return
+        val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
         rebuildFailed.value = false
 
@@ -83,7 +84,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
                     it.printStackTrace()
                     rebuildFailed.value = true
                 },
-                onNext = { goBack(activity) }
+                onNext = { origin?.let(::goBackFrom) }
             )
             .addTo(bag)
     }

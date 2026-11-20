@@ -49,6 +49,13 @@ jobs:
       - checkout
       - restore_gradle_cache
       - run:
+          name: Install Android SDK Build Tools
+          command: |
+            sdkmanager "build-tools;37.0.0"
+            test -x "$ANDROID_HOME/build-tools/37.0.0/aapt2"
+          max_auto_reruns: 2
+          auto_rerun_delay: 10s
+      - run:
           name: Run Tests
           command: ./gradlew jacoco
       - run:
