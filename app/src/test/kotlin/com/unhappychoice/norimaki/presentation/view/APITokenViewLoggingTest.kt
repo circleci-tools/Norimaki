@@ -2,12 +2,11 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
-import androidx.lifecycle.Observer
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
 import com.unhappychoice.norimaki.presentation.viewmodel.APITokenViewModel
-import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -32,29 +31,32 @@ class APITokenViewLoggingTest {
         val storedToken = "dummy-stored-token"
         val enteredToken = "dummy-entered-token"
         val editedToken = "dummy-edited-token"
-        val session = mockk<SessionService> {
-            every { savedToken } returns storedToken
-            every { replace(editedToken) } returns Single.just(mockk())
-        }
-        val model = APITokenViewModel(session)
+        var savedToken = storedToken
+        val model = APITokenViewModel(SessionService(
+            readToken = { savedToken },
+            writeToken = { savedToken = it },
+            createClient = { mockk() },
+            verify = { Single.just(mockk()) }
+        ))
         val presenter = mockk<APITokenPresenter>(relaxed = true) {
             every { this@mockk.model } returns model
-            every { observeVerification(any()) } answers {
-                model.verification.observeForever(firstArg<Observer<TokenVerification>>())
-            }
+            every { observeVerification(any()) } answers { model.verification.observeForever(firstArg()) }
         }
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
-            val activity = controller.get()
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
             val form = showForm(activity, presenter)
             val input = form.accessTokenTextView
             assertEquals(storedToken, input.text.toString())
 
             input.setText(enteredToken)
             assertEquals(enteredToken, input.text.toString())
+            assertEquals(storedToken, savedToken)
             input.setText(editedToken)
+            assertEquals(editedToken, input.text.toString())
+            assertEquals(storedToken, savedToken)
             form.submitButton.performClick()
-            verify(exactly = 1) { session.replace(editedToken) }
+            assertEquals(editedToken, savedToken)
             verify(exactly = 1) { presenter.goToBuildList() }
 
             val reopened = showForm(activity, presenter)

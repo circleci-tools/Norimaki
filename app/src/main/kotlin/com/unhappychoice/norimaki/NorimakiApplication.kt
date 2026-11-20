@@ -5,8 +5,8 @@ import com.unhappychoice.norimaki.di.applicationModule
 import mortar.MortarScope
 import org.kodein.di.DI
 
-class NorimakiApplication : Application() {
-    val module by lazy { DI { import(applicationModule(this@NorimakiApplication)) } }
+open class NorimakiApplication : Application() {
+    open val module by lazy { DI { import(applicationModule(this@NorimakiApplication)) } }
 
     private val scope by lazy {
         MortarScope.buildRootScope().build("root_scope")

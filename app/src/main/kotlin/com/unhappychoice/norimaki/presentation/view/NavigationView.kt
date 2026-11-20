@@ -10,7 +10,7 @@ import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.v1.response.Project
 import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
-import com.jakewharton.rxbinding2.view.clicks
+import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.NavigationViewBinding
