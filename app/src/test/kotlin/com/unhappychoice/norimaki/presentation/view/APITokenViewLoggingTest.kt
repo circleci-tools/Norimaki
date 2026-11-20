@@ -51,6 +51,7 @@ class APITokenViewLoggingTest {
 
             input.setText(enteredToken)
             assertEquals(enteredToken, input.text.toString())
+            assertEquals(storedToken, savedToken)
             input.setText(editedToken)
             assertEquals(editedToken, input.text.toString())
             assertEquals(storedToken, savedToken)

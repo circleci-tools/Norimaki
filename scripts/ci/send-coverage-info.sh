@@ -2,7 +2,10 @@
 set +x
 set -eu
 
-: "${CODECOV_TOKEN:?Set CODECOV_TOKEN in CircleCI project environment variables}"
+if [[ -z "${CODECOV_TOKEN:-}" ]]; then
+    echo 'Skipping coverage upload. Set CODECOV_TOKEN in CircleCI project environment variables to enable it.' >&2
+    exit 0
+fi
 
 uploader=$(curl -fsSL https://codecov.io/bash)
 bash -s -- -Z <<< "$uploader"

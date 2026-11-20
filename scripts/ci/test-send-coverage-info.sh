@@ -10,6 +10,7 @@ cat > "$stub_dir/curl" <<'STUB'
 echo 'Downloading mock uploader' >&2
 cat <<'UPLOADER'
 [[ "$CODECOV_TOKEN" == 'mock-coverage-secret' && "$#" == 1 && "$1" == '-Z' ]] || exit 1
+[[ "${MOCK_UPLOAD_FAIL:-}" != 1 ]] || exit 1
 echo 'Mock upload succeeded'
 UPLOADER
 STUB
@@ -21,12 +22,14 @@ for token_state in unset empty; do
     if [[ "$token_state" == empty ]]; then
         export CODECOV_TOKEN=
     fi
-    if output=$(bash "$uploader" 2>&1); then
-        echo "Expected the upload to fail with a $token_state token." >&2
-        exit 1
-    fi
-    [[ "$output" == *'Set CODECOV_TOKEN'* && "$output" != *'Downloading mock uploader'* ]]
+    output=$(bash "$uploader" 2>&1)
+    [[ "$output" == *'Skipping coverage upload'* && "$output" != *'Downloading mock uploader'* ]]
 done
 
 output=$(CODECOV_TOKEN=mock-coverage-secret bash -x "$uploader" 2>&1)
 [[ "$output" == *'Mock upload succeeded'* && "$output" != *'mock-coverage-secret'* ]]
+
+if MOCK_UPLOAD_FAIL=1 CODECOV_TOKEN=mock-coverage-secret bash "$uploader" >/dev/null 2>&1; then
+    echo 'Expected a failed upload to return a nonzero status.' >&2
+    exit 1
+fi

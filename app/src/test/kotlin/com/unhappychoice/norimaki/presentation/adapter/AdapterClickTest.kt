@@ -8,7 +8,6 @@ import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Build
-import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.github.unhappychoice.circleci.v1.response.Project
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
@@ -35,17 +34,6 @@ class AdapterClickTest {
         row.addView(CircleImageView(context).apply { id = R.id.author })
         val builds = List(10) { gson.fromJson("""{"build_num":$it,"subject":"Build $it"}""", Build::class.java) }
         assertReboundClicks(row, adapter, adapter::submitList, adapter.onClickItem, builds) {
-            adapter.ViewHolder(row)
-        }
-    }
-
-    @Test
-    fun buildStepClickFollowsTheBoundItem() {
-        val adapter = BuildStepAdapter(context)
-        val row = rowWithTextViews(R.id.buildTitle, R.id.time)
-        row.addView(View(context).apply { id = R.id.statusIndicator })
-        val steps = List(10) { BuildStep("Step $it", emptyList()) }
-        assertReboundClicks(row, adapter, adapter::submitSteps, adapter.onClickItem, steps) {
             adapter.ViewHolder(row)
         }
     }

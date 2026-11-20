@@ -61,6 +61,9 @@ jobs:
           name: Test coverage upload script
           command: bash scripts/ci/test-send-coverage-info.sh
       - run:
+          name: Test tagged Play deployment
+          command: bash scripts/ci/test-play-deploy.sh
+      - run:
           name: Send coverage
           command: ./scripts/ci/send-coverage-info.sh
   deploy:
@@ -79,7 +82,7 @@ jobs:
           command: ./gradlew :app:validateReleaseTag
       - run:
           name: Publish APK
-          command: ./gradlew publishReleaseApk
+          command: ./gradlew publishReleaseApk --track internal
 
 workflows:
   test-and-deploy:
