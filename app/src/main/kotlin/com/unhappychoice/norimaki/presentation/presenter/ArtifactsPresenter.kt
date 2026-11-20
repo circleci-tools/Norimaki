@@ -21,7 +21,7 @@ import java.io.IOException
 
 class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
     private val buildId: BuildId by instance()
-    private val downloader = ArtifactDownloader()
+    private val downloader: ArtifactDownloader by instance()
     private var state: ArtifactListState = ArtifactListState.Loading
     private var downloading = false
 
