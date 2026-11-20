@@ -7,10 +7,9 @@ import io.reactivex.Observable
 internal const val BUILD_LIST_PAGE_SIZE = 20
 
 internal fun fetchLatestBuilds(
-    knownBuilds: List<Build>,
+    knownIds: Set<String>,
     fetchPage: (Int) -> Observable<List<Build>>
 ): Observable<List<Build>> = Observable.defer {
-    val knownIds = knownBuilds.mapTo(hashSetOf()) { it.uniqueId() }
     var offset = 0
     var shouldStop = false
 
