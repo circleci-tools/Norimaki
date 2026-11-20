@@ -49,6 +49,7 @@ class BuildViewTest {
         view.onOptionsItemSelected(null)
         val menu = PopupMenu(activity, view).menu
         view.onCreateOptionsMenu(menu)
+        menu.add(0, 100, 0, "Unrelated item")
         val items = (0 until menu.size()).map(menu::getItem)
         val artifacts = items.single { it.title == activity.getString(R.string.artifacts) }
         items.filter { it != artifacts }.forEach(view::onOptionsItemSelected)

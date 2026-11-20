@@ -5,13 +5,17 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Looper
 import android.view.View
+import android.widget.Button
 import android.widget.ListView
 import android.widget.PopupMenu
+import android.widget.TextView
+import com.github.unhappychoice.circleci.v1.response.Artifact
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
 import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
+import com.unhappychoice.norimaki.presentation.view.ArtifactsView
 import flow.Flow
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
@@ -132,10 +136,14 @@ class ArtifactDownloadFlowTest {
     fun ignoresThePickerResultAfterTheSessionChanges() = withArtifacts { activity, app ->
         val list = activity.findViewById<ListView>(R.id.artifact_list)
         val picker = activity.selectArtifact(list)
+        val artifact = Artifact(0, "reports/check.txt", "check.txt", "https://dl.circleci.com/file")
+        val presenter = (list.parent as ArtifactsView).presenter
         val session = app.module.direct.instance<SessionService>()
         session.replace("replacement-token").test().assertComplete()
         val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
         activity.deliverDestination(picker, destination)
+        presenter.chooseDestination(artifact)
+        assertNull(shadowOf(activity).nextStartedActivityForResult)
         flushIo()
 
         assertTrue(app.requests.isEmpty())
@@ -155,7 +163,17 @@ class ArtifactDownloadFlowTest {
         assertTrue(app.requests.isEmpty())
         assertEquals(0L, destination.length())
         assertTrue(list.isEnabled)
+        assertEquals(View.GONE, list.visibility)
         assertEquals(View.GONE, activity.findViewById<View>(R.id.artifact_downloading).visibility)
+        val status = activity.findViewById<TextView>(R.id.artifact_status)
+        val retry = activity.findViewById<Button>(R.id.retry_artifacts)
+        assertEquals(View.VISIBLE, status.visibility)
+        assertEquals(activity.getString(R.string.artifacts_load_failed), status.text.toString())
+        assertEquals(View.VISIBLE, retry.visibility)
+        assertTrue(retry.performClick())
+        flushIo()
+        assertEquals(View.VISIBLE, status.visibility)
+        assertEquals(View.GONE, activity.findViewById<View>(R.id.artifact_loading).visibility)
     }
 
     @Test

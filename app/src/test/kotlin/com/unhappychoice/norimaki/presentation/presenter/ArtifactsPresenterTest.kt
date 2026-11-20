@@ -39,6 +39,7 @@ class ArtifactsPresenterTest : DescribeSpec({
             }
         }
         val view = mockk<ArtifactsView>(relaxUnitFun = true)
+        presenter.render()
         val scope = presenter.attachToTestScope(view)
         try {
             presenter.render()
