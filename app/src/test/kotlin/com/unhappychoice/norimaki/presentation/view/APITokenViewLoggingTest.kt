@@ -1,8 +1,10 @@
 package com.unhappychoice.norimaki.presentation.view
 
+import android.app.Activity
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Observer
+import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
@@ -33,11 +35,14 @@ class APITokenViewLoggingTest {
         val enteredToken = "dummy-entered-token"
         val editedToken = "dummy-edited-token"
         var savedToken = storedToken
-        val session = SessionService({ savedToken }, { savedToken = it }, { mockk() }, { Single.just(mockk()) })
-        val model = APITokenViewModel(session)
-
+        val model = APITokenViewModel(SessionService(
+            readToken = { savedToken },
+            writeToken = { savedToken = it },
+            createClient = { mockk() },
+            verify = { Single.just(mockk()) }
+        ))
         Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
-            val activity = controller.get()
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
             val presenter = mockk<APITokenPresenter>(relaxed = true) {
                 every { this@mockk.model } returns model
                 every { observeVerification(any()) } answers {
@@ -50,7 +55,10 @@ class APITokenViewLoggingTest {
             assertEquals(storedToken, input.text.toString())
 
             input.setText(enteredToken)
+            assertEquals(enteredToken, input.text.toString())
+            assertEquals(storedToken, savedToken)
             input.setText(editedToken)
+            assertEquals(editedToken, input.text.toString())
             assertEquals(storedToken, savedToken)
             form.submitButton.performClick()
             assertEquals(editedToken, savedToken)
@@ -65,7 +73,7 @@ class APITokenViewLoggingTest {
         }
     }
 
-    private fun showForm(activity: ComponentActivity, presenter: APITokenPresenter): ApiTokenViewBinding =
+    private fun showForm(activity: Activity, presenter: APITokenPresenter): ApiTokenViewBinding =
         ApiTokenViewBinding.inflate(activity.layoutInflater).apply {
             root.di = DI { bind<APITokenPresenter>() with singleton { presenter } }
             activity.setContentView(root)

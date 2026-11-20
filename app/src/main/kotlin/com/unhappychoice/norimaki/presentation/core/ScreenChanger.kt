@@ -63,15 +63,15 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
     private fun completeTraversal(screen: Screen, view: View, callback: TraversalCallback) {
         activity.setMenuOwner(view)
         callback.onTraversalCompleted()
-        updateActionBar(screen)
+        updateActionBar(screen, view)
     }
 
-    private fun updateActionBar(screen: Screen) {
+    private fun updateActionBar(screen: Screen, view: View) {
         activity.drawerToggle.isDrawerIndicatorEnabled = showsDrawerIndicator(screen)
         activity.supportActionBar?.setHomeButtonEnabled(true)
         activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
         activity.supportActionBar?.setDisplayShowHomeEnabled(false)
-        activity.supportActionBar?.title = screen.getTitle()
+        activity.supportActionBar?.title = (view as? BaseView<*>)?.screenTitle ?: screen.getTitle()
 
         if (showsDrawerIndicator(screen)) { activity.drawerToggle.syncState() }
     }
