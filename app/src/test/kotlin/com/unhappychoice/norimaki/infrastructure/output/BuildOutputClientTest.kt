@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit.SECONDS
 import java.util.concurrent.atomic.AtomicInteger
 
 class BuildOutputClientTest : DescribeSpec({
-    val url = "https://example.com/log"
+    val url = "https://circleci.com/log"
     val offset = 42L
 
     describe("fetchOutput()") {
@@ -95,6 +95,23 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchRawOutput()") {
+        it("should send a token and range to CircleCI and return the partial response") {
+            val client = outputClient { request ->
+                request.header("Circle-Token") shouldBe "token"
+                request.header("Range") shouldBe "bytes=42-"
+                response(request, 206, "log", "bytes 42-44/45")
+            }
+
+            client.fetchRawOutput(url, offset).map { it.decodeToString() }.test().assertResult("log")
+        }
+
+        it("should reject an untrusted initial URL before making a request") {
+            val client = outputClient { error("Unexpected raw log request") }
+
+            client.fetchRawOutput("https://example.com/log", offset).test()
+                .assertFailure(IllegalArgumentException::class.java)
+        }
+
         it("should append only new bytes when the server returns full logs") {
             val scheduler = TestScheduler()
             val ranges = mutableListOf<String?>()
@@ -133,6 +150,59 @@ class BuildOutputClientTest : DescribeSpec({
             verifyRawOutputPolling()
         }
     }
+
+    describe("raw output redirects") {
+        it("should preserve the token and range for a relative redirect within CircleCI") {
+            val requests = mutableListOf<Request>()
+            val client = outputClient { request ->
+                requests.add(request)
+                when (request.url.encodedPath) {
+                    "/log" -> redirect(request, "/next")
+                    else -> response(request, 206, "log", "bytes 42-44/45")
+                }
+            }
+
+            client.fetchRawOutput(url, offset).map { it.decodeToString() }.test().assertResult("log")
+            requests.map { it.url.toString() } shouldBe listOf(url, "https://circleci.com/next")
+            requests.map { it.header("Circle-Token") } shouldBe listOf("token", "token")
+            requests.map { it.header("Range") } shouldBe listOf("bytes=42-", "bytes=42-")
+        }
+
+        it("should stop following a same-origin redirect loop") {
+            var requests = 0
+            val client = outputClient { request ->
+                requests += 1
+                redirect(request, "/log")
+            }
+
+            client.fetchRawOutput(url, offset).test().assertFailure(RawOutputHttpException::class.java)
+            requests shouldBe 21
+        }
+
+        it("should reject a redirect with no Location header") {
+            val client = outputClient { response(it, 302) }
+
+            client.fetchRawOutput(url, offset).test().assertFailure(RawOutputHttpException::class.java)
+        }
+
+        listOf("https://example.com/log", "http://circleci.com/log", "https://circleci.com:8443/log").forEach { target ->
+            it("should reject a redirect to $target for live and final requests") {
+                val requests = mutableListOf<Request>()
+                val client = outputClient { request ->
+                    requests.add(request)
+                    redirect(request, target)
+                }
+                val scheduler = TestScheduler()
+
+                client.fetchRawOutput(url, offset).test().assertFailure(RawOutputHttpException::class.java)
+                client.fetchFinalRawOutput(url, offset, scheduler).test()
+                    .assertFailure(RawOutputHttpException::class.java)
+                scheduler.advanceTimeBy(5, SECONDS)
+
+                requests.map { it.url.toString() } shouldBe listOf(url, url)
+            }
+        }
+    }
 })
 
 private fun verifyRawOutputPolling() {
@@ -166,7 +236,7 @@ private fun verifyRawOutputPolling() {
     val client = BuildOutputClient("token", httpClient, ioScheduler)
     val finished = PublishSubject.create<Unit>()
     var offset = 0L
-    val url = "https://example.com/raw-output"
+    val url = "https://circleci.com/raw-output"
     val fetch = { client.fetchRawOutput(url, offset) }
     val observer = polling(5, SECONDS, timer, fetch)
         .takeUntil(finished)
@@ -215,6 +285,9 @@ private fun outputClient(respond: (Request) -> Response): BuildOutputClient =
         OkHttpClient.Builder().addInterceptor { respond(it.request()) }.build(),
         Schedulers.trampoline()
     )
+
+private fun redirect(request: Request, location: String): Response =
+    response(request, 302).newBuilder().header("Location", location).build()
 
 private fun response(request: Request, status: Int, body: String = "", contentRange: String? = null): Response =
     Response.Builder()
