@@ -41,6 +41,7 @@ class BuildViewTest {
         every { hasWorkflow() } returns false
         every { steps } returns Variable(emptyList())
         every { projectName } returns "github/owner/repo"
+        every { rebuildFailed } returns Variable(false)
         every { buildLoadFailed } returns Variable(false)
     }
 
