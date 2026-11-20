@@ -3,11 +3,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.findByStepNumber
+import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
-import com.unhappychoice.norimaki.domain.model.step
-import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
@@ -19,49 +18,70 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-class BuildStepPresenter(
-    private val createOutputClient: (String) -> BuildOutputClient = { BuildOutputClient(it) }
+class BuildStepPresenter internal constructor(
+    private val createOutputClient: (String) -> BuildOutputClient
 ) : PresenterNeedsToken<BuildStepView>() {
-    val build: Build by instance()
-    val buildStep: BuildStep by instance()
-    private lateinit var outputClient: BuildOutputClient
+    constructor() : this({ BuildOutputClient(it) })
+
+    private val buildId: BuildId by instance()
+    private val stepId: BuildStepId by instance()
 
     val logString: Variable<String> = Variable("")
 
     val logLoadFailed = Variable(false)
 
     override fun onAuthenticated() {
-        outputClient = createOutputClient(requireNotNull(account).token)
-        when (buildStep.isFinished()) {
-            true -> getActions()
-            false -> pollRunningActions()
-        }
-    }
-
-    fun getActions() {
-        if (account == null) return
-        val actions = buildStep.actions.mapNotNull { it.outputUrl }
-        completedActionLogs(actions, outputClient::fetchOutput)
+        val verified = account ?: return
+        val client = verified.client
+        val outputClient = createOutputClient(verified.token)
+        logString.value = ""
+        logLoadFailed.value = false
+        pollBuildStep(stepId) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { appendLog(it) }
+            .subscribeBy(
+                onNext = { (build, step) ->
+                    view?.showStep(step)
+                    if (step.isFinished()) getActions(step, outputClient)
+                    else pollRunningActions(build, step, client, outputClient)
+                },
+                onError = { logLoadFailed.value = true }
+            )
             .addTo(bag)
     }
 
-    internal fun runningOutput(client: CircleCIAPIClientV1_1, outputClient: BuildOutputClient): Observable<String> {
+    private fun getActions(buildStep: BuildStep, outputClient: BuildOutputClient) {
+        val actions = buildStep.actions.mapNotNull { it.outputUrl }
+        completedActionLogs(actions, outputClient::fetchOutput)
+            .subscribeOnIoObserveOnUI()
+            .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
+            .addTo(bag)
+    }
+
+    internal fun runningOutput(
+        build: Build,
+        buildStep: BuildStep,
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient
+    ): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
             outputUrls,
-            stepFinished(client, buildStep.step()),
+            stepFinished(client),
             outputClient::fetchRawOutput,
             fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
         )
     }
 
-    private fun pollRunningActions() {
-        val client = account?.client ?: return
-        runningOutput(client, outputClient)
+    private fun pollRunningActions(
+        build: Build,
+        buildStep: BuildStep,
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient
+    ) {
+        runningOutput(build, buildStep, client, outputClient)
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
@@ -71,10 +91,10 @@ class BuildStepPresenter(
             .addTo(bag)
     }
 
-    private fun stepFinished(client: CircleCIAPIClientV1_1, stepNumber: Int?): Observable<Build> =
+    private fun stepFinished(client: CircleCIAPIClientV1_1): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
-            client.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
-        }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
+            buildId.load(client)
+        }.filter { it.isFinished() || stepId.resolve(it.steps)?.isFinished() == true }
 
     private fun appendLog(log: String) {
         logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
@@ -84,6 +104,26 @@ class BuildStepPresenter(
         const val LOG_POLLING_SECONDS = 1L
     }
 }
+
+internal fun pollBuildStep(
+    stepId: BuildStepId,
+    scheduler: Scheduler = Schedulers.computation(),
+    fetchBuild: () -> Observable<Build>
+): Observable<Pair<Build, BuildStep>> =
+    Observable.defer(fetchBuild)
+        .concatWith(
+            Observable.timer(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS, scheduler)
+                .flatMap { polling(BuildPresenter.BUILD_POLLING_SECONDS, scheduler = scheduler, fetch = fetchBuild) }
+        )
+        .flatMap { build ->
+            val step = stepId.resolve(build.steps)
+            when {
+                step != null -> Observable.just(build to step)
+                build.isFinished() -> Observable.error(NoSuchElementException("Build step was not found"))
+                else -> Observable.empty()
+            }
+        }
+        .take(1)
 
 internal fun completedActionLogs(
     outputUrls: List<String>,

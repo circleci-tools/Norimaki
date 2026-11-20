@@ -15,8 +15,10 @@ import androidx.drawerlayout.widget.DrawerLayout
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.domain.service.EventBusService
+import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
+import com.unhappychoice.norimaki.presentation.core.goBackFromScreen
 import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
@@ -47,10 +49,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var projectNavigation: Disposable? = null
+    private val session by lazy {
+        val service: SessionService by module.instance()
+        service
+    }
 
     private val flowBackCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
-            if (!Flow.get(this@MainActivity).goBack()) finishWithDefaultBack()
+            if (!goBackFromCurrentScreen()) finishWithDefaultBack()
         }
     }
 
@@ -85,9 +91,7 @@ class MainActivity : AppCompatActivity() {
         super.onPostResume()
         if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
-        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus) {
-            binding.containerView.children.any { it is APITokenView }
-        }
+        projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus, ::isTokenScreenVisible)
     }
 
     override fun onPause() {
@@ -113,7 +117,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            android.R.id.home -> Flow.get(this).goBack()
+            android.R.id.home -> goBackFromCurrentScreen()
         }
         (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
         return true
@@ -134,6 +138,12 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.onBackPressed()
         flowBackCallback.isEnabled = true
     }
+
+    private fun goBackFromCurrentScreen(): Boolean =
+        Flow.get(this).goBackFromScreen(session, isTokenScreenVisible())
+
+    private fun isTokenScreenVisible(): Boolean =
+        binding.containerView.children.any { it is APITokenView }
 
     private fun lockDrawerOnTwoPane() {
         if (isTwoPane) binding.drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)

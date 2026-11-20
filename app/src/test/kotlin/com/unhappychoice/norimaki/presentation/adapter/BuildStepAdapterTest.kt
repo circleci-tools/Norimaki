@@ -1,81 +1,68 @@
 package com.unhappychoice.norimaki.presentation.adapter
 
-import android.app.Application
+import android.app.Activity
 import android.os.Looper
+import android.view.View
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import org.junit.Assert.assertEquals
+import com.google.gson.Gson
+import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.BuildStepId
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
-import java.util.concurrent.FutureTask
-import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, manifest = Config.NONE, sdk = [35])
+@Config(sdk = [34])
 @LooperMode(LooperMode.Mode.PAUSED)
 class BuildStepAdapterTest {
     @Test
-    fun calculatesDiffsInBackgroundAndDispatchesOnlyTheNewestSnapshotOnMain() {
-        val pendingDiffs = mutableListOf<Runnable>()
-        val adapter = BuildStepAdapter(RuntimeEnvironment.getApplication()) { pendingDiffs.add(it) }
-        val mainLooper = Looper.getMainLooper()
-        val diffThreads = mutableListOf<Thread>()
-        val updates = mutableListOf<Pair<Int, Thread>>()
-        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-                updates.add(itemCount to Thread.currentThread())
+    fun opensTheCurrentStepAfterRowsMove() {
+        Robolectric.buildActivity(Activity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            activity.setTheme(R.style.AppTheme)
+            val adapter = BuildStepAdapter(activity, Runnable::run)
+            val rows = RecyclerView(activity).apply {
+                layoutManager = LinearLayoutManager(activity)
+                this.adapter = adapter
+                itemAnimator = null
             }
+            activity.setContentView(rows)
+            val selection = adapter.onClickItem.test()
+            val numbered = step("""[{"step":5}]""")
+            val unnumbered = step("[{}]")
+            val empty = step("[]")
 
-            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
-                updates.add(-itemCount to Thread.currentThread())
-            }
-        })
+            adapter.submitSteps(listOf(numbered, unnumbered, empty))
+            layoutRows(rows)
+            val holder = rows.findViewHolderForAdapterPosition(0) as BuildStepAdapter.ViewHolder
+            val listener = shadowOf(holder.itemView).onClickListener
+            adapter.submitSteps(listOf(empty, numbered, unnumbered))
+            layoutRows(rows)
 
-        adapter.submitSteps(listOf(BuildStep("Initial", emptyList())))
-        runInBackground(pendingDiffs.removeAt(0))
-        shadowOf(mainLooper).idle()
-        updates.clear()
-
-        adapter.submitSteps(listOf(trackedStep("Older", diffThreads)))
-        adapter.submitSteps(listOf(trackedStep("Newest", diffThreads), BuildStep("Extra", emptyList())))
-        assertEquals(emptyList<Thread>(), diffThreads)
-
-        val newestWorker = runInBackground(pendingDiffs.removeAt(1))
-        assertEquals(1, adapter.itemCount)
-        assertEquals(emptyList<Pair<Int, Thread>>(), updates)
-
-        shadowOf(mainLooper).idle()
-        assertEquals(2, adapter.itemCount)
-        assertEquals(listOf(-1 to mainLooper.thread, 2 to mainLooper.thread), updates)
-
-        val olderWorker = runInBackground(pendingDiffs.removeAt(0))
-        shadowOf(mainLooper).idle()
-        assertEquals(listOf(newestWorker, olderWorker), diffThreads)
-        assertEquals(2, adapter.itemCount)
-        assertEquals(listOf(-1 to mainLooper.thread, 2 to mainLooper.thread), updates)
+            assertSame(listener, shadowOf(holder.itemView).onClickListener)
+            holder.itemView.performClick()
+            requireNotNull(rows.findViewHolderForAdapterPosition(2)).itemView.performClick()
+            requireNotNull(rows.findViewHolderForAdapterPosition(0)).itemView.performClick()
+            adapter.onViewRecycled(holder)
+            holder.itemView.performClick()
+            selection.assertValues(BuildStepId(5), BuildStepId(null, position = 2))
+        }
     }
 
-    private fun trackedStep(name: String, diffThreads: MutableList<Thread>) =
-        BuildStep(name, object : AbstractList<BuildAction>() {
-            override val size: Int
-                get() {
-                    diffThreads.add(Thread.currentThread())
-                    return 0
-                }
+    private fun step(actions: String): BuildStep =
+        Gson().fromJson("""{"name":"Run tests","actions":$actions}""", BuildStep::class.java)
 
-            override fun get(index: Int): BuildAction = throw IndexOutOfBoundsException(index)
-        })
-
-    private fun runInBackground(diff: Runnable): Thread {
-        val task = FutureTask(diff, Unit)
-        val thread = Thread(task).apply { start() }
-        task.get(5, TimeUnit.SECONDS)
-        return thread
+    private fun layoutRows(rows: RecyclerView) {
+        shadowOf(Looper.getMainLooper()).idle()
+        val size = View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY)
+        rows.measure(size, size)
+        rows.layout(0, 0, 600, 600)
     }
 }

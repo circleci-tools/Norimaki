@@ -4,6 +4,7 @@ import android.content.Context
 import android.text.Html
 import android.util.AttributeSet
 import android.view.View
+import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -32,6 +33,10 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
             .subscribeOnIoObserveOnUI()
             .subscribeNext { failed -> binding.logLoadError.visibility = if (failed) View.VISIBLE else View.GONE }
             .addTo(bag)
+    }
+
+    internal fun showStep(step: BuildStep) {
+        updateScreenTitle(presenter.activity, step.name)
     }
 
     override fun onDetachedFromWindow() {
