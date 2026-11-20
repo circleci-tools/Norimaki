@@ -48,9 +48,13 @@ internal class AnsiEscapeStream {
     }
 }
 
-private val escapeIntroducers = charArrayOf('\u001B', '\u009D')
+private val escapeIntroducers = charArrayOf('\u001B', *('\u0080'..'\u009F').toList().toCharArray())
+private const val controlStringEnd = """\x1B\\|[\x18\x1A\x9C]"""
 private val ansiEscape = Regex(
-    """(?:\x1B\]|\x9D)8;[^;\p{Cc}]*;[^\p{Cc}]*(?:\x07|\x1B\\|\x9C)|\x1B\[(?:(\d+m)|[0-?]*[ -/]*[@-~])"""
+    """(?:\x1B\]|\x9D)[^\x07\x18\x1A\x1B\x9C]*+(?:\x07|$controlStringEnd)""" +
+        """|(?:\x1B[PX^_]|[\x90\x98\x9E\x9F])[^\x18\x1A\x1B\x9C]*+(?:$controlStringEnd)""" +
+        """|\x1B\[(\d+m)|(?:\x1B\[|\x9B)[0-?]*[ -/]*[@-~]""" +
+        """|\x1B(?![PX\[\]^_])[ -/]*[0-~]|(?![\x90\x98\x9B\x9D-\x9F])[\x80-\x9F]"""
 )
 
 private fun String.convertAnsiColorCodeToHtmlTag(): String =

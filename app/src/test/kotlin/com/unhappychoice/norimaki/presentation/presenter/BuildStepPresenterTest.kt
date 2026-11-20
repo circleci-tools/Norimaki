@@ -93,7 +93,9 @@ class BuildStepPresenterTest : DescribeSpec({
                 val finalDownloadFails = scenario.contains("failure")
                 val hasOutput = scenario != "failure without output"
                 val liveChunks = when (scenario) {
-                    "split hyperlink" -> listOf("before \u001B", "]8;id=hidden", ";https://", "example.test", "\u001B")
+                    "split hyperlink" -> listOf(
+                        "before \u001B", "]0;hidden ", "title\u0007\u001B]8;id=hidden", ";https://example.test", "\u001B"
+                    )
                     "failure without output" -> emptyList()
                     else -> listOf("0", "1", "2", "3", "4")
                 }.map { it.toByteArray() }
