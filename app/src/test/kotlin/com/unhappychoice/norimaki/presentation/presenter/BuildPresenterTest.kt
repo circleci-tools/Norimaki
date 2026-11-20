@@ -1,14 +1,21 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import android.view.View
+import android.widget.FrameLayout
+import androidx.appcompat.widget.Toolbar
+import androidx.drawerlayout.widget.DrawerLayout
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
+import com.unhappychoice.norimaki.presentation.view.NavigationView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -29,6 +36,7 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var scope: MortarScope
     lateinit var presenter: BuildPresenter
     lateinit var view: BuildView
+    lateinit var activity: MainActivity
     lateinit var session: SessionService
     lateinit var api: CircleCIAPIClientV1_1
     lateinit var retry: PublishSubject<Build>
@@ -53,9 +61,11 @@ class BuildPresenterTest : DescribeSpec({
             every { buildNum } returns 123
         }
         session = testSession(api)
+        activity = mockk()
         presenter = BuildPresenter().apply {
             di = DI {
                 bind<Build>() with singleton { build }
+                bind<MainActivity>() with singleton { activity }
                 bind<SessionService>() with singleton { session }
             }
         }
@@ -70,6 +80,35 @@ class BuildPresenterTest : DescribeSpec({
     }
 
     describe("rebuild submissions") {
+        mapOf(
+            "returns to the previous screen while the originating build is active" to false,
+            "keeps the workflow screen open while the originating build is still attached" to true
+        ).forEach { (description, opensWorkflow) ->
+            it(description) {
+                val container = mockk<FrameLayout>()
+                every { container.childCount } returns 1
+                every { container.getChildAt(0) } returns view
+                every { activity.binding } returns bindingWithContainer(container)
+                every { view.isAttachedToWindow } returns true
+                val flow = mockk<Flow>(relaxed = true)
+
+                mockkStatic(Flow::class)
+                try {
+                    every { Flow.get(activity) } returns flow
+                    presenter.rebuild()
+                    retry.hasObservers() shouldBe true
+
+                    if (opensWorkflow) every { container.childCount } returns 2
+                    retry.onNext(mockk())
+                    retry.onComplete()
+
+                    verify(exactly = if (opensWorkflow) 0 else 1) { flow.goBack() }
+                } finally {
+                    unmockkStatic(Flow::class)
+                }
+            }
+        }
+
         it("cancels cache deletion and blocks rebuilds when the session changes") {
             presenter.rebuildWithoutCache()
             deleteCache.hasObservers() shouldBe true
@@ -133,6 +172,19 @@ class BuildPresenterTest : DescribeSpec({
         }
     }
 })
+
+private fun bindingWithContainer(container: FrameLayout): ActivityMainBinding {
+    val child = mockk<View> {
+        every { findViewById<View>(R.id.containerView) } returns container
+        every { findViewById<View>(R.id.navigationView) } returns mockk<NavigationView>()
+        every { findViewById<View>(R.id.toolbar) } returns mockk<Toolbar>()
+    }
+    val drawer = mockk<DrawerLayout> {
+        every { childCount } returns 1
+        every { getChildAt(0) } returns child
+    }
+    return ActivityMainBinding.bind(drawer)
+}
 
 class BuildPresenterPollingTest : DescribeSpec({
     it("should only publish changed snapshots and open the latest step") {
