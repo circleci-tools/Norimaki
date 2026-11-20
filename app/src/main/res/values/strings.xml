@@ -21,4 +21,7 @@
     <string name="workflow_approval_permission">CircleCI denied approval. Check your token and approval permissions.</string>
     <string name="workflow_approval_resolved">This job is no longer waiting for approval.</string>
     <string name="workflow_approval_error">Could not confirm approval. Refresh to check the job status.</string>
+    <string name="clear_project_cache_and_rebuild">Clear project cache and rebuild</string>
+    <string name="clear_project_cache_message">This clears the cache for the entire %1$s project before retrying the selected build. Other builds can be affected even if the retry fails.</string>
+    <string name="clear_cache_and_rebuild">Clear cache and rebuild</string>
 </resources>
