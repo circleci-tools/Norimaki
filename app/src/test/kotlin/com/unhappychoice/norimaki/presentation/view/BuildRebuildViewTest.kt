@@ -1,9 +1,11 @@
 package com.unhappychoice.norimaki.presentation.view
 
+import android.content.DialogInterface
 import android.os.Looper
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildId
@@ -36,6 +38,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -81,11 +84,11 @@ class BuildRebuildViewTest {
 
         withBuildScreen { activity, view ->
             val error = view.findViewById<TextView>(R.id.rebuildError)
-            view.selectAction("Rebuild without cache")
+            view.confirmCacheClearAndRebuild()
             failed.onError(IllegalStateException("Cache deletion failed"))
             assertRebuildError(activity, error)
 
-            view.selectAction("Rebuild without cache")
+            view.confirmCacheClearAndRebuild()
             assertEquals(View.GONE, error.visibility)
             retried.onNext(Unit)
             retried.onComplete()
@@ -113,6 +116,13 @@ class BuildRebuildViewTest {
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
             test(activity, activity.binding.containerView.getChildAt(0) as BuildView)
         }
+    }
+
+    private fun BuildView.confirmCacheClearAndRebuild() {
+        selectAction(context.getString(R.string.clear_project_cache_and_rebuild))
+        val dialog = ShadowDialog.getLatestDialog() as AlertDialog
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
     }
 
     private fun BuildView.selectAction(title: String) {

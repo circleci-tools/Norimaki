@@ -1,10 +1,13 @@
 package com.unhappychoice.norimaki.presentation.adapter
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.annotation.MainThread
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.BuildStep
@@ -13,15 +16,31 @@ import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.runTime
 import com.unhappychoice.norimaki.domain.model.statusColor
 import io.reactivex.subjects.PublishSubject
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 
-class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
+class BuildStepAdapter internal constructor(
+    val context: Context,
+    private val diffExecutor: Executor
+) : RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
+    constructor(context: Context) : this(context, sharedDiffExecutor)
+
     val onClickItem = PublishSubject.create<BuildStepId>()
 
+    @MainThread
     fun submitSteps(newSteps: List<BuildStep>) {
         val snapshot = newSteps.toList()
-        val diff = DiffUtil.calculateDiff(BuildStepDiff(steps, snapshot))
-        steps = snapshot
-        diff.dispatchUpdatesTo(this)
+        val previous = steps
+        val generation = ++latestGeneration
+        diffExecutor.execute {
+            val diff = DiffUtil.calculateDiff(BuildStepDiff(previous, snapshot))
+            mainHandler.post {
+                if (generation == latestGeneration) {
+                    steps = snapshot
+                    diff.dispatchUpdatesTo(this)
+                }
+            }
+        }
     }
 
     override fun getItemCount(): Int = steps.size
@@ -69,4 +88,10 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
     }
 
     private var steps = emptyList<BuildStep>()
+    private var latestGeneration = 0L
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private companion object {
+        val sharedDiffExecutor: Executor = Executors.newSingleThreadExecutor()
+    }
 }
