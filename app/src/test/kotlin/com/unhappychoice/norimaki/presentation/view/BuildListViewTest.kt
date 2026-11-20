@@ -66,6 +66,14 @@ class BuildListViewTest {
         val api = mockk<CircleCIAPIClientV1_1>()
         every { api.firstBuildPage() } returns Observable.just(emptyList())
         val scheduler = TestScheduler()
+        val mainLooper = shadowOf(Looper.getMainLooper())
+        fun drainRequests() {
+            scheduler.triggerActions()
+            mainLooper.idle()
+            scheduler.triggerActions()
+            mainLooper.idle()
+        }
+
         val scope = MortarScope.buildRootScope()
             .withService(BundleServiceRunner.SERVICE_NAME, BundleServiceRunner())
             .build("test")
@@ -78,8 +86,7 @@ class BuildListViewTest {
                 activity.setContentView(host)
                 val view = buildListForReattachment(activity, scope, api)
                 host.addView(view)
-                scheduler.triggerActions()
-                shadowOf(Looper.getMainLooper()).idle()
+                drainRequests()
 
                 assertTrue(view.isAttachedToWindow)
                 host.removeView(view)
@@ -90,17 +97,17 @@ class BuildListViewTest {
 
                 host.addView(view)
                 assertTrue(view.isAttachedToWindow)
-                scheduler.triggerActions()
-                shadowOf(Looper.getMainLooper()).idle()
+                drainRequests()
                 verify(exactly = 1) { api.firstBuildPage() }
                 scheduler.advanceTimeBy(9, SECONDS)
                 verify(exactly = 1) { api.firstBuildPage() }
                 scheduler.advanceTimeBy(1, SECONDS)
-                shadowOf(Looper.getMainLooper()).idle()
+                drainRequests()
                 verify(exactly = 2) { api.firstBuildPage() }
                 scheduler.advanceTimeBy(9, SECONDS)
                 verify(exactly = 2) { api.firstBuildPage() }
                 scheduler.advanceTimeBy(1, SECONDS)
+                drainRequests()
                 verify(exactly = 3) { api.firstBuildPage() }
             }
         } finally {

@@ -5,6 +5,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.github.unhappychoice.circleci.v1.response.User
 import com.github.unhappychoice.circleci.v1.response.Workflow
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.BuildId
@@ -26,6 +27,7 @@ import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
+import io.reactivex.subjects.SingleSubject
 import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
@@ -94,6 +96,9 @@ class BuildListPresenterTest : DescribeSpec({
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
+    fun advanceRefresh() =
+        scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+
     describe("polling lifecycle") {
         it("pauses while stopped and resumes immediately with a single loop") {
             val owner = PollingLifecycleOwner()
@@ -109,7 +114,7 @@ class BuildListPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.pageAt(0) }
 
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
-            scheduler.triggerActions()
+            advanceRefresh()
             verify(exactly = 2) { api.pageAt(0) }
 
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
@@ -141,11 +146,114 @@ class BuildListPresenterTest : DescribeSpec({
 
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
             presenter.observePolling(owner.lifecycle)
-            scheduler.triggerActions()
+            advanceRefresh()
             inFlight.hasObservers() shouldBe true
 
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
             inFlight.hasObservers() shouldBe false
+        }
+    }
+
+    describe("initial build load") {
+        it("starts polling after authentication finishes while the view is started") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val authentication = SingleSubject.create<User>()
+            val session = SessionService({ "test-token" }, {}, { api }, { authentication })
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            val presenter = presenter(api, session = session)
+            startPolling(presenter)
+            advanceRefresh()
+            verify(exactly = 0) { api.pageAt(0) }
+
+            authentication.onSuccess(mockk())
+            scheduler.triggerActions()
+            verify(exactly = 1) { api.pageAt(0) }
+            advanceRefresh()
+            verify(exactly = 2) { api.pageAt(0) }
+        }
+
+        it("cancels a poll retrying page zero and retries again on resume") {
+            val owner = PollingLifecycleOwner()
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val retry = PublishSubject.create<List<Build>>()
+            val build = build("target", 1)
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.error(IllegalStateException("Initial page unavailable")),
+                retry,
+                Observable.just(listOf(build))
+            )
+            val presenter = presenter(api)
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            presenter.observePolling(owner.lifecycle)
+            advanceRefresh()
+            retry.hasObservers() shouldBe true
+
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+            retry.hasObservers() shouldBe false
+            presenter.isLoading.value shouldBe false
+            advanceRefresh()
+            verify(exactly = 2) { api.pageAt(0) }
+
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(build))
+            presenter.page.value shouldBe 1
+        }
+
+        it("shares a delayed full page with polling even when workflow filtering hides it") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val initialResponse = PublishSubject.create<List<Build>>()
+            val firstPage = (40 downTo 21).map { build("other", it) }
+            val olderPage = (20 downTo 1).map { build("other", it) }
+            every { api.pageAt(0) } returnsMany listOf(initialResponse, Observable.just(firstPage))
+            every { api.pageAt(20) } returns Observable.just(olderPage)
+            every { api.pageAt(40) } returns Observable.just(emptyList())
+            val presenter = presenter(api)
+            startPolling(presenter)
+            advanceRefresh()
+            verify(exactly = 1) { api.pageAt(0) }
+            initialResponse.onNext(firstPage)
+            initialResponse.onComplete()
+            scheduler.triggerActions()
+            presenter.page.value shouldBe 1
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS - 1, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.pageAt(0) }
+
+            scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
+            verify(exactly = 2) { api.pageAt(0) }
+            verify(exactly = 0) { api.pageAt(20) }
+            verify(exactly = 0) { api.pageAt(40) }
+
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            verify(exactly = 1) { api.pageAt(20) }
+            presenter.page.value shouldBe 2
+        }
+
+        it("retries page zero after an initial failure and resumes refreshing") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build("target", 1)
+            val latest = build("target", 2)
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.error(IllegalStateException("Initial page unavailable")),
+                Observable.just(listOf(known)),
+                Observable.just(listOf(latest, known))
+            )
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            presenter.isLoading.value shouldBe false
+            presenter.page.value shouldBe 0
+            verify(exactly = 1) { api.pageAt(0) }
+
+            startPolling(presenter)
+            advanceRefresh()
+            presenter.page.value shouldBe 1
+            builds.assertValues(emptyList(), listOf(known))
+            advanceRefresh()
+            builds.assertValues(emptyList(), listOf(known), listOf(latest, known))
+            verify(exactly = 3) { api.pageAt(0) }
+            verify(exactly = 0) { api.pageAt(20) }
+            builds.dispose()
         }
     }
 
@@ -213,8 +321,9 @@ class BuildListPresenterTest : DescribeSpec({
             builds.assertValueAt(2, listOf(running, newest))
 
             startPolling(presenter)
+            advanceRefresh()
             builds.assertValueAt(3, listOf(finished, newest))
-            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            advanceRefresh()
 
             builds.assertValueCount(4)
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
@@ -227,9 +336,10 @@ class BuildListPresenterTest : DescribeSpec({
     describe("workflow polling") {
         it("stops at the first unchanged project page and displays a new workflow job once") {
             val api = mockk<CircleCIAPIClientV1_1>()
-            val known = build("target", 1)
-            val added = build("target", 200)
-            var projectBuilds = (199 downTo 2).map { build("other", it) } + known
+            val known = build("target", 21)
+            val added = build("target", 41)
+            var projectBuilds = (40 downTo 22).map { build("other", it) } + known +
+                (20 downTo 1).map { build("other", it) }
             val offsets = mutableListOf<Int>()
             every { api.pageAt(any()) } answers {
                 val offset = arg<Int>(3)
@@ -240,7 +350,7 @@ class BuildListPresenterTest : DescribeSpec({
             val builds = presenter.builds.test()
             scheduler.triggerActions()
             startPolling(presenter)
-            offsets shouldBe listOf(0) + (0 until 200 step BUILD_LIST_PAGE_SIZE).toList()
+            offsets shouldBe listOf(0)
             builds.assertValues(emptyList(), listOf(known))
 
             offsets.clear()
@@ -263,6 +373,7 @@ class BuildListPresenterTest : DescribeSpec({
             val firstPage = (22 downTo 3).map { build("other", it) }
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.just(listOf(known)),
+                Observable.just(listOf(known)),
                 Observable.just(firstPage)
             )
             every { api.pageAt(20) } returnsMany listOf(
@@ -271,7 +382,6 @@ class BuildListPresenterTest : DescribeSpec({
             )
             val presenter = presenter(api)
             val builds = presenter.builds.test()
-            presenter.getBuilds()
             presenter.isLoading.value shouldBe true
             presenter.getBuilds()
             scheduler.triggerActions()
@@ -282,6 +392,9 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.hasMore.value shouldBe false
 
             startPolling(presenter)
+            advanceRefresh()
+            advanceRefresh()
+            advanceRefresh()
 
             builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
             verify(exactly = 2) { api.pageAt(20) }
@@ -336,12 +449,15 @@ class BuildListPresenterTest : DescribeSpec({
             every { api.pageAt(20) } returns Observable.just(listOf(build("target", 1)))
             val presenter = presenter(api, session = session)
             val builds = presenter.builds.test()
-            scheduler.triggerActions()
+            startPolling(presenter)
             builds.assertValues(emptyList(), listOf(first))
 
             presenter.getBuilds()
             session.replace("replacement-token").test().assertComplete()
             scheduler.triggerActions()
+            advanceRefresh()
+
+            verify(exactly = 1) { api.pageAt(0) }
 
             builds.assertValues(emptyList(), listOf(first), emptyList())
             presenter.page.value shouldBe 0
