@@ -15,8 +15,10 @@ import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.removeAnsiEscapeCode
 import com.unhappychoice.norimaki.extension.replaceAnsiColorCodeToHtml
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
+import com.unhappychoice.norimaki.presentation.presenter.completedActionLogs
 import io.mockk.every
 import io.mockk.mockk
+import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import org.junit.After
@@ -168,16 +170,21 @@ class BuildStepViewTest {
     }
 
     @Test
-    fun findsHyperlinkLabelsAndIgnoresOsc8TargetsAndParameters() {
+    fun findsHyperlinkLabelsAndIgnoresSplitOsc8TargetsAndParameters() {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)
             val output = view.findViewById<TextView>(R.id.logText)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
             val links = listOf("\u001B]" to "\u0007", "\u001B]" to "\u001B\\", "\u009D" to "\u009C")
-            log.value = links.joinToString("\n") { (osc, terminator) ->
-                "${osc}8;id=hidden-id;https://example.test/hidden-target${terminator}" +
-                    "\u001B[31mReport & details\u001B[0m${osc}8;;${terminator}"
-            }.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
+            val chunks = links.flatMapIndexed { index, (osc, terminator) ->
+                listOf(
+                    (if (index == 0) "" else "\n") + "${osc}8;id=",
+                    "hidden-id;https://example.test/hidden-target${terminator.dropLast(1)}",
+                    "${terminator.last()}\u001B[31mReport & details\u001B[0m${osc}8;;${terminator}"
+                )
+            }
+            log.value = completedActionLogs(listOf("action")) { Observable.fromIterable(chunks) }
+                .toList().blockingGet().joinToString("") { it.replaceAnsiColorCodeToHtml() }
             searchAvailable.value = true
             renderUpdates()
 

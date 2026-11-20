@@ -57,6 +57,31 @@ class BuildStepOutputTest : DescribeSpec({
             finalOffsets shouldBe listOf("first" to 1L, "second" to 2L)
         }
 
+        it("keeps split hyperlink controls local to an action through the final drain") {
+            val scheduler = TestScheduler()
+            val finished = PublishSubject.create<Build>()
+            val chunks = mapOf(
+                "first" to listOf("before \u001B]8;id=", "hidden;https://example.test\u001B", "\\Report\u001B]8;;\u0007"),
+                "second" to listOf("other output\n", "still running\n", "done\n")
+            ).mapValues { (_, parts) -> parts.map { it.toByteArray() } }
+            var poll = 0
+            val observer = pollActionOutputs(chunks.keys.toList(), finished, { url, _ ->
+                Observable.just(chunks.getValue(url)[poll])
+            }, scheduler, fetchFinalOutput = { url, offset ->
+                val parts = chunks.getValue(url)
+                offset shouldBe parts.take(2).sumOf { it.size.toLong() }
+                Observable.just(parts.last())
+            }).test()
+
+            observer.assertValues("before ", "other output\n").assertNotComplete()
+            poll++
+            scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
+            observer.assertValues("before ", "other output\n", "still running\n").assertNotComplete()
+
+            finished.onNext(mockk<Build>())
+            observer.assertResult("before ", "other output\n", "still running\n", "Report", "done\n")
+        }
+
         it("drains from the latest offset when completion arrives during a read") {
             val finished = PublishSubject.create<Build>()
             val requestedOffsets = mutableListOf<Pair<String, Long>>()

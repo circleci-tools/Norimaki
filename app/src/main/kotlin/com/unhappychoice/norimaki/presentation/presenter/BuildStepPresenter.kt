@@ -60,7 +60,7 @@ class BuildStepPresenter internal constructor(
         completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
             .doOnComplete(::allowLogSearch)
-            .subscribeBy(onNext = { appendLog(it.removeAnsiEscapeCode()) }, onError = { logLoadFailed.value = true })
+            .subscribeBy(onNext = ::appendLog, onError = { logLoadFailed.value = true })
             .addTo(bag)
     }
 
@@ -142,7 +142,10 @@ internal fun completedActionLogs(
     fetchOutput: (String) -> Observable<String>
 ): Observable<String> =
     Observable.fromIterable(outputUrls).concatMap { url ->
+        val ansiStream = AnsiEscapeStream()
         Observable.defer { fetchOutput(url) }
+            .map(ansiStream::strip)
+            .filter { it.isNotEmpty() }
             .onErrorReturnItem("\n[Some output could not be loaded.]\n")
     }
 

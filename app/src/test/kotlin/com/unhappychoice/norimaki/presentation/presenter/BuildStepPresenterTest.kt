@@ -58,6 +58,16 @@ class BuildStepPresenterTest : DescribeSpec({
                 .test().assertResult("first", "second")
         }
 
+        it("should strip split hyperlink controls independently for each action") {
+            completedActionLogs(listOf("first", "second")) { url ->
+                if (url == "first") {
+                    Observable.just("before \u001B", "]8;id=hidden;https://example.test\u001B", "\\Report\u001B]8;;")
+                } else {
+                    Observable.just("other output")
+                }
+            }.test().assertResult("before ", "Report", "other output")
+        }
+
         it("should continue when creating a download throws") {
             completedActionLogs(listOf("invalid", "valid")) { url ->
                 if (url == "invalid") throw IllegalArgumentException("Invalid URL")
