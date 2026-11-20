@@ -110,6 +110,13 @@ class BuildOutputClientTest : DescribeSpec({
             client.fetchOutput(url).test().assertFailure(IOException::class.java)
         }
 
+        it("reads messages when action records contain extra metadata") {
+            val body = """[{"type":"out","message":"line","metadata":{"source":1}}]"""
+            val client = outputClient { response(it, 200, body) }
+
+            client.fetchOutput(url).test().assertResult("line")
+        }
+
         it("should report the HTTP status before parsing an error body") {
             val client = outputClient { response(it, 503, "Service Unavailable") }
 
@@ -120,15 +127,15 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchFinalRawOutput()") {
-        listOf("HTTP 503", "I/O error").forEach { failure ->
-            it("should emit the remaining bytes once at the same offset after an initial $failure") {
+        listOf(429, 503, null).forEach { status ->
+            it("should emit the remaining bytes once at the same offset after an initial failure with status $status") {
                 val scheduler = TestScheduler()
                 val ranges = mutableListOf<String?>()
                 val client = outputClient { request ->
                     ranges.add(request.header("Range"))
                     when {
                         ranges.size > 1 -> response(request, 206, "last lines", "bytes 42-51/52")
-                        failure == "HTTP 503" -> response(request, 503, "Unavailable")
+                        status != null -> response(request, status)
                         else -> throw IOException("Connection lost")
                     }
                 }

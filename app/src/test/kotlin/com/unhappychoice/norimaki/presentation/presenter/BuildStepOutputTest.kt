@@ -61,6 +61,29 @@ class BuildStepOutputTest : DescribeSpec({
             requests shouldBe listOf("capped" to 0L, "other" to 0L, "other" to 5L, "other" to 5L)
         }
 
+        it("flushes a capped final read once and still drains the next action") {
+            val finished = PublishSubject.create<Build>()
+            val bytes = "é".toByteArray()
+            val observer = pollActionOutputs(
+                listOf("capped", "other"),
+                finished,
+                { _, _ -> Observable.just(RawOutputChunk(byteArrayOf())) },
+                TestScheduler(),
+                fetchFinalOutput = { url, _ ->
+                    val chunk = if (url == "capped") {
+                        RawOutputChunk(bytes.copyOf(1), limitReached = true)
+                    } else {
+                        RawOutputChunk("last line".toByteArray())
+                    }
+                    Observable.just(chunk)
+                }
+            ).test()
+
+            finished.onNext(mockk<Build>())
+
+            observer.assertResult("\uFFFD" + OUTPUT_LIMIT_MESSAGE, "last line")
+        }
+
         it("keeps split UTF-8 sequences separate and completes them during the final drain") {
             val finished = PublishSubject.create<Build>()
             val first = "é".toByteArray()
