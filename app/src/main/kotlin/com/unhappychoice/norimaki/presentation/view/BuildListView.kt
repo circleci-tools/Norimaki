@@ -7,6 +7,7 @@ import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
 import androidx.core.view.doOnPreDraw
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.unhappychoice.norimaki.R
 import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
@@ -64,6 +65,11 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
                     checkUnderfill()
                 }
             }
+            .addTo(bag)
+
+        binding.retryPage.setOnClickListener { presenter.getBuilds() }
+        presenter.canRetryPage.asObservable()
+            .subscribeNext { binding.retryPage.isVisible = it }
             .addTo(bag)
 
         if (presenter.isWorkflow) {
