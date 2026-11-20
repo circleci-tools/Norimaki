@@ -25,6 +25,7 @@ import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.CompletableSubject
+import io.reactivex.subjects.SingleSubject
 import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
@@ -71,6 +72,34 @@ class WorkflowPresenterTest : DescribeSpec({
         }
 
     describe("workflow approvals") {
+        it("reports a failed initial load and retries on refresh") {
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returnsMany listOf(Single.error(IOException()), Single.just(listOf(hold)))
+            }
+            val presenter = presenter(client)
+            val updates = presenter.updates.test()
+
+            updates.values().last() shouldBe WorkflowState(message = R.string.workflow_load_error)
+            presenter.refresh()
+            updates.values().last() shouldBe WorkflowState(listOf(hold))
+        }
+
+        it("ignores refresh while loading and rejects approvals missing from the loaded jobs") {
+            val jobs = SingleSubject.create<List<WorkflowJob>>()
+            var loads = 0
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returns jobs.doOnSubscribe { loads++ }
+            }
+            val presenter = presenter(client)
+
+            presenter.refresh()
+            jobs.onSuccess(emptyList())
+            presenter.approve(hold)
+
+            loads shouldBe 1
+            verify(exactly = 0) { client.approve(any(), any()) }
+        }
+
         it("serializes approval and refreshes the workflow after acceptance") {
             val pending = CompletableSubject.create()
             val client = mockk<WorkflowClient> {

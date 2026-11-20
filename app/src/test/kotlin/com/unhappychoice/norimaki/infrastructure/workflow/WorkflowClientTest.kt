@@ -38,6 +38,20 @@ class WorkflowClientTest : DescribeSpec({
             requests.map { it.url.queryParameter("page-token") } shouldBe listOf(null, "a+/=")
         }
 
+        it("stops at a blank page token and ignores blank approval IDs") {
+            val requests = mutableListOf<Request>()
+            val client = workflowClient { request ->
+                requests.add(request)
+                response(request, 200, """
+                    {"items":[{"id":"hold","name":"deploy","status":"on_hold","type":"approval",
+                               "approval_request_id":" "}],"next_page_token":" "}
+                """.trimIndent())
+            }
+
+            client.jobs("run").blockingGet().single().pendingApprovalId shouldBe null
+            requests.size shouldBe 1
+        }
+
         it("fails when CircleCI repeats a pagination token") {
             val client = workflowClient { response(it, 200, """{"items":[],"next_page_token":"same"}""") }
 
