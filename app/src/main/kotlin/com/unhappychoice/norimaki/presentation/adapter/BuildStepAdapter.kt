@@ -8,17 +8,14 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.jakewharton.rxbinding2.view.clicks
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.runTime
 import com.unhappychoice.norimaki.domain.model.statusColor
-import com.unhappychoice.norimaki.extension.subscribeNext
-import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.rxkotlin.addTo
 import io.reactivex.subjects.PublishSubject
 
 class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
-    val onClickItem = PublishSubject.create<BuildStep>()
+    val onClickItem = PublishSubject.create<BuildStepId>()
 
     fun submitSteps(newSteps: List<BuildStep>) {
         val snapshot = newSteps.toList()
@@ -38,24 +35,38 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
         holder.bind(steps[position])
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        holder.clearBoundItem()
+        super.onViewRecycled(holder)
+    }
+
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(step: BuildStep) {
+            boundItem = step
             buildTitle.text = step.name
             time.text = step.runTime()
             indicator.setBackgroundColor(step.statusColor())
-
-            view.clicks()
-                .subscribeNext { onClickItem.onNext(step) }
-                .addTo(bag)
         }
+
+        fun clearBoundItem() {
+            boundItem = null
+        }
+
+        private var boundItem: BuildStep? = null
 
         private val indicator = view.findViewById<View>(R.id.statusIndicator)
         private val buildTitle = view.findViewById<TextView>(R.id.buildTitle)
         private val time = view.findViewById<TextView>(R.id.time)
+
+        init {
+            view.setOnClickListener {
+                if (boundItem == null) return@setOnClickListener
+                val position = bindingAdapterPosition
+                val step = steps.getOrNull(position) ?: return@setOnClickListener
+                if (step.actions.isNotEmpty()) onClickItem.onNext(BuildStepId.from(step, position))
+            }
+        }
     }
 
-    fun finalize() = bag.dispose()
-
     private var steps = emptyList<BuildStep>()
-    private val bag = CompositeDisposable()
 }

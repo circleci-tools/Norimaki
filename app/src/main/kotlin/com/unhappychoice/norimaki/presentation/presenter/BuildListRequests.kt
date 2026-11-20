@@ -33,6 +33,7 @@ internal class BuildListRequests(
     val builds = history.asObservable().map { it.builds }
 
     private var requestNumber = 0L
+    private var lastPollIds: Set<String>? = null
     private val latestRequestByBuild = mutableMapOf<String, Long>()
     private val incoming = PublishSubject.create<Response>().toSerialized()
 
@@ -48,6 +49,7 @@ internal class BuildListRequests(
     }
 
     fun reset() {
+        lastPollIds = null
         latestRequestByBuild.clear()
         page.value = 0
         hasMore.value = true
@@ -58,9 +60,10 @@ internal class BuildListRequests(
     private fun pollLatest(): Observable<Unit> {
         if (page.value == 0) return requestPage(0)
 
-        val knownBuilds = history.value.builds
-        val refreshed = fetchLatestBuilds(knownBuilds, fetch)
+        val knownIds = lastPollIds ?: history.value.builds.mapTo(hashSetOf()) { it.uniqueId() }
+        val refreshed = fetchLatestBuilds(knownIds, fetch)
             .observeOn(ui)
+            .doOnNext { latest -> lastPollIds = latest.mapTo(hashSetOf()) { it.uniqueId() } }
             .concatMap { latest ->
                 refreshBuildList(history.value.builds, latest, workflowId) { build ->
                     Observable.defer { fetchDetails(build) }.subscribeOn(io)
