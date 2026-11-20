@@ -70,7 +70,7 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         activity.supportActionBar?.setHomeButtonEnabled(true)
         activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
         activity.supportActionBar?.setDisplayShowHomeEnabled(false)
-        activity.supportActionBar?.title = screen.getTitle()
+        activity.supportActionBar?.title = (contentView as? BaseView<*>)?.screenTitle ?: screen.getTitle()
         activity.invalidateOptionsMenu()
 
         if (showsDrawerIndicator(screen)) { activity.drawerToggle.syncState() }

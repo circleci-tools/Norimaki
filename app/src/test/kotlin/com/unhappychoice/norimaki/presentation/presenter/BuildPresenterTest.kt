@@ -7,6 +7,8 @@ import com.github.unhappychoice.circleci.v1.response.Workflow
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
@@ -33,6 +35,7 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var view: BuildView
     lateinit var session: SessionService
     lateinit var api: CircleCIAPIClientV1_1
+    lateinit var initialBuild: PublishSubject<Build>
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
 
@@ -41,27 +44,22 @@ class BuildPresenterTest : DescribeSpec({
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
+        initialBuild = PublishSubject.create()
         retry = PublishSubject.create()
         deleteCache = PublishSubject.create()
         api = mockk {
-            every { getBuild("github", "owner", "repo", 123) } returns Observable.never()
+            every { getBuild("github", "owner", "repo", 123) } returns initialBuild
             every { retryBuild("github", "owner", "repo", 123) } answers { retry }
             every { deleteCache("github", "owner", "repo") } answers { deleteCache }
-        }
-        val build = mockk<Build> {
-            every { vcsUrl } returns "https://github.com/owner/repo"
-            every { username } returns "owner"
-            every { reponame } returns "repo"
-            every { buildNum } returns 123
         }
         session = testSession(api)
         presenter = BuildPresenter().apply {
             di = DI {
-                bind<Build>() with singleton { build }
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
                 bind<SessionService>() with singleton { session }
             }
         }
-        view = mockk()
+        view = mockk(relaxUnitFun = true)
         scope = presenter.attachToTestScope(view)
     }
 
@@ -71,12 +69,41 @@ class BuildPresenterTest : DescribeSpec({
         RxJavaPlugins.reset()
     }
 
+    describe("loading build details") {
+        it("should expose the initial failure and reload the same build on retry") {
+            val scheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val response = PublishSubject.create<Build>()
+            val loadedStep = step("https://example.com/output")
+            val build = pollResult(loadedStep, "finished")
+            every { api.getBuild("github", "owner", "repo", 123) } returns response
+
+            val failures = presenter.buildLoadFailed.asObservable().distinctUntilChanged().test()
+            initialBuild.onError(IllegalStateException("Build load failed"))
+
+            failures.assertValues(false, true)
+            verify(exactly = 0) { view.showBuild(any()) }
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            presenter.pollBuild()
+            failures.assertValues(false, true, false)
+            response.onNext(build)
+
+            verify(exactly = 1) { view.showBuild(build) }
+            presenter.steps.value shouldBe listOf(loadedStep)
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+        }
+    }
+
     describe("rebuild submissions") {
         it("cancels cache deletion and blocks rebuilds when the session changes") {
+            initialBuild.hasObservers() shouldBe true
             presenter.rebuildWithoutCache()
             deleteCache.hasObservers() shouldBe true
 
             session.replace("replacement-token").test().assertComplete()
+            initialBuild.hasObservers() shouldBe false
             deleteCache.hasObservers() shouldBe false
             presenter.rebuild()
 
@@ -137,57 +164,84 @@ class BuildPresenterTest : DescribeSpec({
 })
 
 class BuildPresenterWorkflowTest : DescribeSpec({
-    fun presenter(id: String?, activity: MainActivity): BuildPresenter {
+    lateinit var activity: MainActivity
+    lateinit var flow: Flow
+    lateinit var presenter: BuildPresenter
+    lateinit var builds: PublishSubject<Build>
+    lateinit var scope: MortarScope
+
+    fun loadBuild(id: String?) {
         val workflow = mockk<Workflow> {
             every { workflowId } returns id
             every { workflowName } returns "Build and test"
         }
-        val build = mockk<Build> {
-            every { workflows } returns workflow
-            every { vcsUrl } returns "https://github.com/owner/repo"
-            every { username } returns "owner"
-            every { reponame } returns "repo"
-        }
-        return BuildPresenter().apply {
-            di = DI {
-                bind<Build>() with singleton { build }
-                bind<MainActivity>() with singleton { activity }
-            }
-        }
+        val build = pollResult(step("https://example.com/output"), "finished")
+        every { build.workflows } returns workflow
+        every { build.vcsUrl } returns "https://github.com/owner/repo"
+        every { build.username } returns "owner"
+        every { build.reponame } returns "repo"
+        builds.onNext(build)
     }
 
-    lateinit var activity: MainActivity
-    lateinit var flow: Flow
-
     beforeEach {
-        activity = mockk()
+        RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+
+        activity = mockk(relaxUnitFun = true)
         flow = mockk(relaxed = true)
         mockkStatic(Flow::class)
         every { Flow.get(activity) } returns flow
+
+        builds = PublishSubject.create()
+        val api = mockk<CircleCIAPIClientV1_1>()
+        every { api.getBuild("github", "owner", "repo", 123) } returns builds
+        presenter = BuildPresenter().apply {
+            di = DI {
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
+                bind<MainActivity>() with singleton { activity }
+                bind<SessionService>() with singleton { testSession(api) }
+            }
+        }
+        scope = presenter.attachToTestScope(mockk(relaxUnitFun = true))
     }
 
-    afterEach { unmockkStatic(Flow::class) }
+    afterEach {
+        scope.destroy()
+        unmockkStatic(Flow::class)
+        RxAndroidPlugins.reset()
+        RxJavaPlugins.reset()
+    }
+
+    it("hides workflow navigation before a build loads") {
+        presenter.hasWorkflow() shouldBe false
+        presenter.goToWorkflowScreen()
+
+        verify(exactly = 0) { flow.set(any()) }
+    }
 
     mapOf("null" to null, "empty" to "", "whitespace-only" to " \t\n").forEach { (label, id) ->
         it("hides workflow navigation and ignores selection for a $label ID") {
-            val presenter = presenter(id, activity)
+            loadBuild(id)
 
             presenter.hasWorkflow() shouldBe false
             presenter.goToWorkflowScreen()
 
             verify(exactly = 0) { flow.set(any()) }
+            verify(exactly = 0) { activity.invalidateOptionsMenu() }
         }
     }
 
     it("opens the workflow screen with the original ID when it is nonblank") {
-        val presenter = presenter("target", activity)
+        loadBuild(" target ")
         val screen = slot<WorkflowScreen>()
 
         presenter.hasWorkflow() shouldBe true
         presenter.goToWorkflowScreen()
 
         verify(exactly = 1) { flow.set(capture(screen)) }
-        screen.captured.workflowId shouldBe "target"
+        verify(exactly = 1) { activity.invalidateOptionsMenu() }
+        screen.captured.workflowId shouldBe " target "
     }
 })
 
@@ -199,15 +253,20 @@ class BuildPresenterPollingTest : DescribeSpec({
         val changed = step("https://example.com/latest")
         (first == duplicate && first !== duplicate) shouldBe true
 
-        val build = pollResult(first)
+        val buildId = BuildId("github", "owner", "repo", 42)
+        val builds = listOf(pollResult(first), pollResult(duplicate), pollResult(changed, "finished"))
         val api = mockk<CircleCIAPIClientV1_1>()
-        every { api.getBuild("github", "owner", "repo", 42) } returnsMany
-            listOf(build, pollResult(duplicate), pollResult(changed, "finished")).map { Observable.just(it) }
+        every { api.getBuild("github", "owner", "repo", 42) } returnsMany listOf(
+            Observable.just(builds[0]),
+            Observable.error(IllegalStateException("Refresh failed")),
+            Observable.just(builds[1]),
+            Observable.just(builds[2])
+        )
 
         val activity = mockk<MainActivity>()
         val presenter = BuildPresenter().apply {
             di = DI {
-                bind<Build>() with singleton { build }
+                bind<BuildId>() with singleton { buildId }
                 bind<MainActivity>() with singleton { activity }
                 bind<SessionService>() with singleton { testSession(api) }
             }
@@ -221,23 +280,34 @@ class BuildPresenterPollingTest : DescribeSpec({
             RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
-            scope = presenter.attachToTestScope(mockk<BuildView>())
+            val loadedBuilds = mutableListOf<Build>()
+            val view = mockk<BuildView>()
+            every { view.showBuild(any()) } answers { loadedBuilds.add(firstArg()); Unit }
+            scope = presenter.attachToTestScope(view)
             snapshots.assertValues(emptyList(), listOf(first))
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
             verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+            presenter.buildLoadFailed.value shouldBe false
+            snapshots.assertValues(emptyList(), listOf(first))
+
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
             snapshots.assertValues(emptyList(), listOf(first))
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
             snapshots.assertValues(emptyList(), listOf(first), listOf(changed))
+            loadedBuilds shouldBe builds
 
             val flow = mockk<Flow>(relaxed = true)
             val screen = slot<BuildStepScreen>()
             mockkStatic(Flow::class)
             every { Flow.get(activity) } returns flow
-            presenter.goToBuildStepScreen(snapshots.values().last().single())
+            val latestSteps = snapshots.values().last()
+            presenter.goToBuildStepScreen(BuildStepId.from(latestSteps.single(), position = 0))
             verify(exactly = 1) { flow.set(capture(screen)) }
-            (screen.captured.buildStep === changed) shouldBe true
+            screen.captured.buildId shouldBe buildId
+            (screen.captured.stepId.resolve(loadedBuilds.last().steps) === changed) shouldBe true
         } finally {
             scope?.destroy()
             snapshots.dispose()
@@ -259,8 +329,5 @@ private fun step(outputUrl: String): BuildStep = GsonBuilder()
 private fun pollResult(step: BuildStep, state: String = "running"): Build = mockk {
     every { lifecycle } returns state
     every { steps } returns listOf(step)
-    every { vcsUrl } returns "https://github.com/owner/repo"
-    every { username } returns "owner"
-    every { reponame } returns "repo"
-    every { buildNum } returns 42
+    every { workflows } returns null
 }
