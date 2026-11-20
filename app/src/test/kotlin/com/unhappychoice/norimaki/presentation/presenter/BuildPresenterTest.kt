@@ -12,6 +12,8 @@ import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
+import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
@@ -40,6 +42,7 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var activity: MainActivity
     lateinit var session: SessionService
     lateinit var api: CircleCIAPIClientV1_1
+    lateinit var initialBuild: PublishSubject<Build>
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
 
@@ -48,29 +51,24 @@ class BuildPresenterTest : DescribeSpec({
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
+        initialBuild = PublishSubject.create()
         retry = PublishSubject.create()
         deleteCache = PublishSubject.create()
         api = mockk {
-            every { getBuild("github", "owner", "repo", 123) } returns Observable.never()
+            every { getBuild("github", "owner", "repo", 123) } returns initialBuild
             every { retryBuild("github", "owner", "repo", 123) } answers { retry }
             every { deleteCache("github", "owner", "repo") } answers { deleteCache }
-        }
-        val build = mockk<Build> {
-            every { vcsUrl } returns "https://github.com/owner/repo"
-            every { username } returns "owner"
-            every { reponame } returns "repo"
-            every { buildNum } returns 123
         }
         session = testSession(api)
         activity = mockk()
         presenter = BuildPresenter().apply {
             di = DI {
-                bind<Build>() with singleton { build }
                 bind<MainActivity>() with singleton { activity }
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
                 bind<SessionService>() with singleton { session }
             }
         }
-        view = mockk()
+        view = mockk(relaxUnitFun = true)
         scope = presenter.attachToTestScope(view)
     }
 
@@ -78,6 +76,33 @@ class BuildPresenterTest : DescribeSpec({
         scope.destroy()
         RxAndroidPlugins.reset()
         RxJavaPlugins.reset()
+    }
+
+    describe("loading build details") {
+        it("should expose the initial failure and reload the same build on retry") {
+            val scheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val response = PublishSubject.create<Build>()
+            val loadedStep = step("https://example.com/output")
+            val build = pollResult(loadedStep, "finished")
+            every { api.getBuild("github", "owner", "repo", 123) } returns response
+
+            val failures = presenter.buildLoadFailed.asObservable().distinctUntilChanged().test()
+            initialBuild.onError(IllegalStateException("Build load failed"))
+
+            failures.assertValues(false, true)
+            verify(exactly = 0) { view.showBuild(any()) }
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            presenter.pollBuild()
+            failures.assertValues(false, true, false)
+            response.onNext(build)
+
+            verify(exactly = 1) { view.showBuild(build) }
+            presenter.steps.value shouldBe listOf(loadedStep)
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+        }
     }
 
     describe("rebuild submissions") {
@@ -126,10 +151,12 @@ class BuildPresenterTest : DescribeSpec({
         }
 
         it("cancels cache deletion and blocks rebuilds when the session changes") {
+            initialBuild.hasObservers() shouldBe true
             presenter.rebuildWithoutCache()
             deleteCache.hasObservers() shouldBe true
 
             session.replace("replacement-token").test().assertComplete()
+            initialBuild.hasObservers() shouldBe false
             deleteCache.hasObservers() shouldBe false
             presenter.rebuild()
 
@@ -210,15 +237,20 @@ class BuildPresenterPollingTest : DescribeSpec({
         val changed = step("https://example.com/latest")
         (first == duplicate && first !== duplicate) shouldBe true
 
-        val build = pollResult(first)
+        val buildId = BuildId("github", "owner", "repo", 42)
+        val builds = listOf(pollResult(first), pollResult(duplicate), pollResult(changed, "finished"))
         val api = mockk<CircleCIAPIClientV1_1>()
-        every { api.getBuild("github", "owner", "repo", 42) } returnsMany
-            listOf(build, pollResult(duplicate), pollResult(changed, "finished")).map { Observable.just(it) }
+        every { api.getBuild("github", "owner", "repo", 42) } returnsMany listOf(
+            Observable.just(builds[0]),
+            Observable.error(IllegalStateException("Refresh failed")),
+            Observable.just(builds[1]),
+            Observable.just(builds[2])
+        )
 
         val activity = mockk<MainActivity>()
         val presenter = BuildPresenter().apply {
             di = DI {
-                bind<Build>() with singleton { build }
+                bind<BuildId>() with singleton { buildId }
                 bind<MainActivity>() with singleton { activity }
                 bind<SessionService>() with singleton { testSession(api) }
             }
@@ -232,23 +264,34 @@ class BuildPresenterPollingTest : DescribeSpec({
             RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
-            scope = presenter.attachToTestScope(mockk<BuildView>())
+            val loadedBuilds = mutableListOf<Build>()
+            val view = mockk<BuildView>()
+            every { view.showBuild(any()) } answers { loadedBuilds.add(firstArg()); Unit }
+            scope = presenter.attachToTestScope(view)
             snapshots.assertValues(emptyList(), listOf(first))
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
             verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+            presenter.buildLoadFailed.value shouldBe false
+            snapshots.assertValues(emptyList(), listOf(first))
+
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
             snapshots.assertValues(emptyList(), listOf(first))
 
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
             snapshots.assertValues(emptyList(), listOf(first), listOf(changed))
+            loadedBuilds shouldBe builds
 
             val flow = mockk<Flow>(relaxed = true)
             val screen = slot<BuildStepScreen>()
             mockkStatic(Flow::class)
             every { Flow.get(activity) } returns flow
-            presenter.goToBuildStepScreen(snapshots.values().last().single())
+            val latestSteps = snapshots.values().last()
+            presenter.goToBuildStepScreen(BuildStepId.from(latestSteps.single(), position = 0))
             verify(exactly = 1) { flow.set(capture(screen)) }
-            (screen.captured.buildStep === changed) shouldBe true
+            screen.captured.buildId shouldBe buildId
+            (screen.captured.stepId.resolve(loadedBuilds.last().steps) === changed) shouldBe true
         } finally {
             scope?.destroy()
             snapshots.dispose()
@@ -270,8 +313,5 @@ private fun step(outputUrl: String): BuildStep = GsonBuilder()
 private fun pollResult(step: BuildStep, state: String = "running"): Build = mockk {
     every { lifecycle } returns state
     every { steps } returns listOf(step)
-    every { vcsUrl } returns "https://github.com/owner/repo"
-    every { username } returns "owner"
-    every { reponame } returns "repo"
-    every { buildNum } returns 42
+    every { workflows } returns null
 }
