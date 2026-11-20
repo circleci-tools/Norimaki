@@ -71,12 +71,13 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
 
     fun rebuild() {
         val client = account?.client ?: return
+        val origin = view
         if (!rebuildInFlight.compareAndSet(false, true)) return
 
         Observable.defer { retryBuild(client) }
             .subscribeOnIoObserveOnUI()
             .doFinally { rebuildInFlight.set(false) }
-            .subscribeNext { goBack(activity) }
+            .subscribeNext { origin?.let(::goBackFrom) }
             .addTo(bag)
     }
 
