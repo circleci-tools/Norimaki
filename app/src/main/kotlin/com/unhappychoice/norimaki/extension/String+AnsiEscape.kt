@@ -1,6 +1,6 @@
 package com.unhappychoice.norimaki.extension
 
-fun String.removeAnsiEscapeCode(): String = replace("\\033\\[\\d+?[A-T]".toRegex(), "")
+fun String.removeAnsiEscapeCode(): String = replace("\\033\\[(?!\\d+m)[0-?]*[ -/]*[@-~]".toRegex(), "")
 
 fun String.replaceAnsiColorCodeToHtml(): String =
     replace("&", "&amp;")

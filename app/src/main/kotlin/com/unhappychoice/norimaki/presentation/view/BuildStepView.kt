@@ -20,13 +20,21 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         BuildStepViewBinding.bind(this)
     }
 
+    private val logSearch by lazy { BuildLogSearch(binding) }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
+        logSearch.bind(bag)
+
+        presenter.logSearchAvailable.asObservable()
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext(logSearch::setAvailable)
+            .addTo(bag)
 
         presenter.logString.asObservable()
             .subscribeOnIoObserveOnUI()
-            .subscribeNext { binding.logText.text = Html.fromHtml(it) }
+            .subscribeNext { logSearch.render(Html.fromHtml(it)) }
             .addTo(bag)
 
         presenter.logLoadFailed.asObservable()

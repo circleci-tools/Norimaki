@@ -156,6 +156,8 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 verify(exactly = 1) { view.showStep(finishedStep) }
                 presenter.logLoadFailed.value shouldBe false
+                presenter.logSearchAvailable.value shouldBe true
+                verify(exactly = 1) { output.fetchOutput(expectedUrl) }
                 presenter.logString.value shouldBe (if (outputFails) "<br>[Some output could not be loaded.]<br>" else "done")
             } finally {
                 scope?.destroy()

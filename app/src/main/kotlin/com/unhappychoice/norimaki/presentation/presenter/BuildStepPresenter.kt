@@ -33,10 +33,13 @@ class BuildStepPresenter internal constructor(
 
     val logLoadFailed = Variable(false)
 
+    val logSearchAvailable = Variable(false)
+
     override fun onAuthenticated() {
         val verified = account ?: return
         val client = verified.client
         val outputClient = createOutputClient(verified.token)
+        logSearchAvailable.value = false
         logString.value = ""
         logLoadFailed.value = false
         pollBuildStep(stepId) { buildId.load(client) }
@@ -56,7 +59,11 @@ class BuildStepPresenter internal constructor(
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
         completedActionLogs(actions, outputClient::fetchOutput)
             .subscribeOnIoObserveOnUI()
-            .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
+            .subscribeBy(
+                onNext = { appendLog(it) },
+                onComplete = ::allowLogSearch,
+                onError = { logLoadFailed.value = true }
+            )
             .addTo(bag)
     }
 
@@ -86,6 +93,7 @@ class BuildStepPresenter internal constructor(
             .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
                 onNext = { appendLog(it) },
+                onComplete = ::allowLogSearch,
                 onError = { logLoadFailed.value = true }
             )
             .addTo(bag)
@@ -95,6 +103,10 @@ class BuildStepPresenter internal constructor(
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             buildId.load(client)
         }.filter { it.isFinished() || stepId.resolve(it.steps)?.isFinished() == true }
+
+    private fun allowLogSearch() {
+        logSearchAvailable.value = logString.value.isNotEmpty()
+    }
 
     private fun appendLog(log: String) {
         logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
