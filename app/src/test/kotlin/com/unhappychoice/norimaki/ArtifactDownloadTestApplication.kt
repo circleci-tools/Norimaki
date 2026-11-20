@@ -34,8 +34,8 @@ class ArtifactDownloadTestApplication : NorimakiApplication() {
         }
     }
 
-    fun resetSession(): SingleSubject<User> = SingleSubject.create<User>().also { verification ->
-        session = SessionService({ "test-token" }, {}, { api }, { verification })
+    fun resetSession(token: String): SingleSubject<User> = SingleSubject.create<User>().also { verification ->
+        session = SessionService({ token }, {}, { api }, { verification })
     }
 
     private val api = mockk<CircleCIAPIClientV1_1> {

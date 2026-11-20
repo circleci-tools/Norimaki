@@ -83,29 +83,40 @@ class ArtifactDownloadFlowTest {
 
     @Test
     fun savesTheSelectedArtifactAfterProcessRecreationAndSessionRestoration() {
-        val savedState = Bundle()
-        val original = Robolectric.buildActivity(MainActivity::class.java).setup()
-        val activity = original.get()
-        val app = activity.application as ArtifactDownloadTestApplication
-        activity.openArtifacts()
-        val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
-        val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
-        original.pause().stop().saveInstanceState(savedState).destroy()
-        val verification = app.resetSession()
-
-        Robolectric.buildActivity(MainActivity::class.java).setup(savedState).use { recreated ->
-            val restored = recreated.get()
-            assertEquals(ArtifactsScreen(buildId), Flow.get(restored).history.top<Any>())
-            restored.deliverDestination(picker, destination)
-            flushIo()
-            assertTrue(app.requests.isEmpty())
-
-            verification.onSuccess(mockk())
-            flushIo()
-
+        withRestoredPicker("test-token") { app, destination ->
             assertArrayEquals(app.bytes, destination.readBytes())
             assertEquals("https://dl.circleci.com/file", app.requests.single().url.toString())
             assertEquals("test-token", app.requests.single().header("Circle-Token"))
+        }
+    }
+
+    @Test
+    fun discardsARestoredPickerResultWhenADifferentTokenIsVerified() {
+        withRestoredPicker("replacement-token") { app, destination ->
+            assertTrue(app.requests.isEmpty())
+            assertEquals(0L, destination.length())
+        }
+    }
+
+    @Test
+    fun defersSavingThePickerResultUntilTheActivityResumes() {
+        Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
+            val activity = controller.get()
+            val app = activity.application as ArtifactDownloadTestApplication
+            activity.openArtifacts()
+            val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
+            val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
+            controller.pause()
+            activity.deliverDestination(picker, destination)
+            flushIo()
+            assertTrue(app.requests.isEmpty())
+            assertEquals(0L, destination.length())
+
+            controller.resume().postResume()
+            flushIo()
+
+            assertArrayEquals(app.bytes, destination.readBytes())
+            assertEquals(1, app.requests.size)
         }
     }
 
@@ -217,6 +228,34 @@ class ArtifactDownloadFlowTest {
 
         assertTrue(app.requests.isEmpty())
         assertEquals(0L, destination.length())
+    }
+
+    private fun withRestoredPicker(
+        token: String,
+        assertResult: (ArtifactDownloadTestApplication, File) -> Unit
+    ) {
+        val savedState = Bundle()
+        val original = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = original.get()
+        val app = activity.application as ArtifactDownloadTestApplication
+        activity.openArtifacts()
+        val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
+        val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
+        original.pause().stop().saveInstanceState(savedState).destroy()
+        val verification = app.resetSession(token)
+
+        Robolectric.buildActivity(MainActivity::class.java).setup(savedState).use { recreated ->
+            val restored = recreated.get()
+            assertEquals(ArtifactsScreen(buildId), Flow.get(restored).history.top<Any>())
+            restored.deliverDestination(picker, destination)
+            flushIo()
+            assertTrue(app.requests.isEmpty())
+
+            verification.onSuccess(mockk())
+            flushIo()
+
+            assertResult(app, destination)
+        }
     }
 
     private fun withArtifacts(test: (MainActivity, ArtifactDownloadTestApplication) -> Unit) {
