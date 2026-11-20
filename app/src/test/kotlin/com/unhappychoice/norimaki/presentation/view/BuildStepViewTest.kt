@@ -10,17 +10,20 @@ import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ScrollView
 import android.widget.TextView
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.removeAnsiEscapeCode
 import com.unhappychoice.norimaki.extension.replaceAnsiColorCodeToHtml
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.presenter.completedActionLogs
+import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
+import io.reactivex.subjects.PublishSubject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -36,6 +39,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.TimeUnit.MILLISECONDS
+import java.util.concurrent.TimeUnit.SECONDS
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
@@ -171,36 +175,31 @@ class BuildStepViewTest {
 
     @Test
     fun findsHyperlinkLabelsAndIgnoresSplitOsc8TargetsAndParameters() {
-        withView { activity, view ->
-            val query = view.findViewById<EditText>(R.id.logQuery)
-            val output = view.findViewById<TextView>(R.id.logText)
-            val count = view.findViewById<TextView>(R.id.logMatchCount)
-            val links = listOf("\u001B]" to "\u0007", "\u001B]" to "\u001B\\", "\u009D" to "\u009C")
-            val chunks = links.flatMapIndexed { index, (osc, terminator) ->
-                listOf(
-                    (if (index == 0) "" else "\n") + "${osc}8;id=",
-                    "hidden-id;https://example.test/hidden-target${terminator.dropLast(1)}",
-                    "${terminator.last()}\u001B[31mReport & details\u001B[0m${osc}8;;${terminator}"
-                )
-            }
-            log.value = completedActionLogs(listOf("action")) { Observable.fromIterable(chunks) }
-                .toList().blockingGet().joinToString("") { it.replaceAnsiColorCodeToHtml() }
-            searchAvailable.value = true
-            renderUpdates()
+        assertSearchOmitsHyperlinkControls { chunks ->
+            completedActionLogs(listOf("action")) { Observable.fromIterable(chunks) }
+                .toList().blockingGet()
+        }
+    }
 
-            assertEquals(List(links.size) { "Report & details" }.joinToString("\n"), output.text.toString())
-            view.findViewById<View>(R.id.logFind).performClick()
-            query.setText("report & details")
-            finishSearch()
-            assertEquals(activity.getString(R.string.build_log_match_count, 1, links.size), count.text.toString())
-            assertEquals(0 until "Report & details".length, highlightedRange(output))
+    @Test
+    fun searchesLiveLogAfterTheFinalReadCompletesASplitHyperlink() {
+        assertSearchOmitsHyperlinkControls { chunks ->
+            val finished = PublishSubject.create<Build>()
+            val parts = chunks.map { it.toByteArray() }
+            val partsByOffset = parts.runningFold(0L) { offset, part -> offset + part.size }
+                .zip(parts).toMap()
+            val output = pollActionOutputs(listOf("action"), finished, { _, offset ->
+                Observable.just(partsByOffset.getValue(offset))
+            }, scheduler, fetchFinalOutput = { _, offset ->
+                assertEquals(parts.dropLast(1).sumOf { it.size.toLong() }, offset)
+                Observable.just(parts.last())
+            }).test()
 
-            listOf("hidden-target", "hidden-id").forEach {
-                query.setText(it)
-                finishSearch()
-                assertEquals(activity.getString(R.string.build_log_no_matches), count.text.toString())
-                assertEquals(null, highlightedRange(output))
-            }
+            scheduler.advanceTimeBy((parts.size - 2) * BuildStepPresenter.LOG_POLLING_SECONDS, SECONDS)
+            output.assertNotComplete()
+            finished.onNext(mockk<Build>())
+            output.assertComplete().assertNoErrors()
+            output.values()
         }
     }
 
@@ -264,6 +263,39 @@ class BuildStepViewTest {
             assertTrue(output.layout.getPrimaryHorizontal(match.first) > horizontal.width)
             assertTrue(horizontal.scrollX > 0)
             assertTrue(vertical.scrollY > 0)
+        }
+    }
+
+    private fun assertSearchOmitsHyperlinkControls(readLog: (List<String>) -> List<String>) {
+        withView { activity, view ->
+            val query = view.findViewById<EditText>(R.id.logQuery)
+            val output = view.findViewById<TextView>(R.id.logText)
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            val links = listOf("\u001B]" to "\u0007", "\u001B]" to "\u001B\\", "\u009D" to "\u009C")
+            val chunks = links.flatMapIndexed { index, (osc, terminator) ->
+                listOf(
+                    (if (index == 0) "" else "\n") + "${osc}8;id=",
+                    "hidden-id;https://example.test/hidden-target${terminator.dropLast(1)}",
+                    "${terminator.last()}\u001B[31mReport & details\u001B[0m${osc}8;;${terminator}"
+                )
+            }
+            log.value = readLog(chunks).joinToString("") { it.replaceAnsiColorCodeToHtml() }
+            searchAvailable.value = true
+            renderUpdates()
+
+            assertEquals(List(links.size) { "Report & details" }.joinToString("\n"), output.text.toString())
+            view.findViewById<View>(R.id.logFind).performClick()
+            query.setText("report & details")
+            finishSearch()
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, links.size), count.text.toString())
+            assertEquals(0 until "Report & details".length, highlightedRange(output))
+
+            listOf("hidden-target", "hidden-id").forEach {
+                query.setText(it)
+                finishSearch()
+                assertEquals(activity.getString(R.string.build_log_no_matches), count.text.toString())
+                assertEquals(null, highlightedRange(output))
+            }
         }
     }
 
