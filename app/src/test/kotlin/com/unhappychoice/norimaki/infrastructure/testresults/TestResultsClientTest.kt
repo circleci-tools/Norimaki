@@ -53,9 +53,19 @@ class TestResultsClientTest : DescribeSpec({
             }
         }
 
-        it("reports unavailable metadata when the build is missing its job number") {
-            client { error("Unexpected request") }.fetch(build(job = null)).test().awaitDone(5, SECONDS)
-                .assertResult(TestResults.Unavailable)
+        it("reports unavailable metadata when the build identity is incomplete") {
+            val client = client { error("Unexpected request") }
+            listOf(build(owner = null), build(owner = " "), build(repository = null),
+                build(repository = " "), build(job = null)).forEach { incomplete ->
+                client.fetch(incomplete).test().awaitDone(5, SECONDS).assertResult(TestResults.Unavailable)
+            }
+        }
+
+        it("stops pagination at an empty page token") {
+            client { request ->
+                request.url.query shouldBe null
+                200 to """{"items":[{"result":"success"}],"next_page_token":""}"""
+            }.fetch(build()).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported(emptyList()))
         }
 
         it("propagates request errors, including an unavailable subsequent page") {
@@ -76,10 +86,15 @@ class TestResultsClientTest : DescribeSpec({
     }
 })
 
-private fun build(url: String = "https://github.com/org/repo", job: Int? = 123): Build = mockk {
+private fun build(
+    url: String = "https://github.com/org/repo",
+    job: Int? = 123,
+    owner: String? = "org",
+    repository: String? = "repo"
+): Build = mockk {
     every { vcsUrl } returns url
-    every { username } returns "org"
-    every { reponame } returns "repo"
+    every { username } returns owner
+    every { reponame } returns repository
     every { buildNum } returns job
 }
 

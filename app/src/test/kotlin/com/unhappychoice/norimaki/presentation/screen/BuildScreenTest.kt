@@ -1,36 +1,23 @@
 package com.unhappychoice.norimaki.presentation.screen
 
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.domain.model.revisionString
+import com.unhappychoice.norimaki.domain.model.BuildId
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.every
-import io.mockk.mockk
+import org.kodein.di.DI
+import org.kodein.di.direct
+import org.kodein.di.instance
 
 class BuildScreenTest : DescribeSpec({
-    lateinit var subject: BuildScreen
-    lateinit var build: Build
+    val screen = BuildScreen(BuildId("bitbucket", "team", "repo", 123))
 
-    beforeEach {
-        build = mockk {
-            every { branch } returns "main"
-            every { buildNum } returns 123
-            every { vcsRevision } returns "abc123def"
-        }
-        subject = BuildScreen(build)
+    it("uses the build identifier for the title while loading") {
+        screen.getTitle() shouldBe "repo #123"
+        screen.getLayoutResource() shouldBe R.layout.build_view
     }
 
-    describe("BuildScreen") {
-        describe(".getTitle()") {
-            it("should return title") {
-                subject.getTitle() shouldBe build.revisionString()
-            }
-        }
-        describe(".getLayoutResource()") {
-            it("should return view resource") {
-                subject.getLayoutResource() shouldBe R.layout.build_view
-            }
-        }
+    it("binds the restored identifiers for the presenter") {
+        val dependencies = screen.module(DI {}).direct
+        dependencies.instance<BuildId>() shouldBe screen.buildId
     }
 })

@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.addDistinctByNumber
 import com.unhappychoice.norimaki.domain.model.sortByQueuedAt
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
@@ -43,7 +44,7 @@ class BuildListPollingTest : DescribeSpec({
             history.hasMore.value shouldBe false
 
             val scheduler = TestScheduler()
-            val polls = polling(10, scheduler = scheduler) { fetchLatestBuilds(builds, fetchPage) }
+            val polls = polling(10, scheduler = scheduler) { fetchLatestBuilds(builds.mapTo(hashSetOf()) { it.uniqueId() }, fetchPage) }
                 .subscribe { builds = builds.addDistinctByNumber(it).sortByQueuedAt() }
             offsets shouldBe listOf(0, 20, 0)
             apiBuilds = allBuilds
@@ -58,7 +59,7 @@ class BuildListPollingTest : DescribeSpec({
         it("should stop at an empty page when no build overlaps history") {
             val offsets = mutableListOf<Int>()
             val latest = (40 downTo 1).map(::build)
-            val pages = fetchLatestBuilds(listOf(build(100))) { offset ->
+            val pages = fetchLatestBuilds(setOf(build(100).uniqueId())) { offset ->
                 offsets.add(offset)
                 Observable.just(latest.drop(offset).take(20))
             }

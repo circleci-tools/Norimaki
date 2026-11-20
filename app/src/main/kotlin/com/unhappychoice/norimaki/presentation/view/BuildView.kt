@@ -2,12 +2,14 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.databinding.BuildViewBinding
+import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
@@ -48,6 +50,14 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         super.onAttachedToWindow()
         presenter.takeView(this)
         binding.testResults.setOnClickListener { presenter.goToTestResultsScreen() }
+        presenter.buildLoadFailed.asObservable()
+            .subscribeNext { failed ->
+                binding.buildLoadError.visibility = if (failed) View.VISIBLE else View.GONE
+            }
+            .addTo(bag)
+        binding.retryBuildLoad.setOnClickListener {
+            if (presenter.buildLoadFailed.value) presenter.pollBuild()
+        }
 
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
@@ -60,6 +70,11 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         adapter.onClickItem
             .subscribeNext { presenter.goToBuildStepScreen(it) }
             .addTo(bag)
+    }
+
+    internal fun showBuild(build: Build) {
+        binding.testResults.isEnabled = true
+        updateScreenTitle(presenter.activity, build.revisionString())
     }
 
     override fun onDetachedFromWindow() {
