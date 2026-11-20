@@ -3,15 +3,21 @@ package com.unhappychoice.norimaki.presentation.view
 import android.app.Activity
 import android.content.DialogInterface
 import android.os.Looper
+import android.view.MenuItem
+import android.view.ViewGroup
 import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,6 +35,7 @@ import org.robolectric.shadows.ShadowDialog
 class BuildViewTest {
     private val presenter = mockk<BuildPresenter>(relaxUnitFun = true) {
         every { hasWorkflow() } returns false
+        every { steps } returns Variable(emptyList())
         every { build } returns mockk {
             every { vcsUrl } returns "https://github.com/owner/repo"
             every { username } returns "owner"
@@ -37,7 +44,7 @@ class BuildViewTest {
     }
 
     @Test
-    fun cancelLeavesTheBuildUntouched() = withCacheClearDialog { dialog ->
+    fun cancelLeavesTheBuildUntouched() = withCacheClearDialog { _, _, dialog ->
         val message = dialog.findViewById<TextView>(android.R.id.message)?.text.toString()
         assertTrue(message.contains("entire github/owner/repo project"))
         assertTrue(message.contains("Other builds can be affected even if the retry fails."))
@@ -50,18 +57,58 @@ class BuildViewTest {
     }
 
     @Test
-    fun confirmDispatchesTheCacheClearingRebuild() = withCacheClearDialog { dialog ->
+    fun confirmDispatchesTheCacheClearingRebuild() = withCacheClearDialog { _, _, dialog ->
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         shadowOf(Looper.getMainLooper()).idle()
 
         verify(exactly = 1) { presenter.rebuildWithoutCache() }
     }
 
-    private fun withCacheClearDialog(check: (AlertDialog) -> Unit) {
-        Robolectric.buildActivity(Activity::class.java).use { controller ->
-            val activity = controller.setup().get().apply { setTheme(R.style.AppTheme) }
-            val view = activity.layoutInflater.inflate(R.layout.build_view, null) as BuildView
-            view.di = DI { bind<BuildPresenter>() with singleton { presenter } }
+    @Test
+    fun selectingCacheClearAgainKeepsTheExistingDialog() = withCacheClearDialog { view, item, dialog ->
+        view.onOptionsItemSelected(item)
+
+        assertSame(dialog, ShadowDialog.getLatestDialog())
+        assertTrue(dialog.isShowing)
+        verify(exactly = 0) { presenter.rebuildWithoutCache() }
+    }
+
+    @Test
+    fun selectingCacheClearAfterCancellationOpensAnotherDialog() = withCacheClearDialog { view, item, dialog ->
+        dialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        view.onOptionsItemSelected(item)
+
+        val reopened = ShadowDialog.getLatestDialog()
+        assertNotSame(dialog, reopened)
+        assertTrue(reopened.isShowing)
+        verify(exactly = 0) { presenter.rebuildWithoutCache() }
+    }
+
+    @Test
+    fun detachingTheBuildViewDismissesTheDialog() = withCacheClearDialog { view, _, dialog ->
+        assertTrue(view.isAttachedToWindow)
+        assertTrue(dialog.isShowing)
+
+        (view.parent as ViewGroup).removeView(view)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertFalse(view.isAttachedToWindow)
+        assertFalse(dialog.isShowing)
+        verify(exactly = 0) { presenter.rebuildWithoutCache() }
+    }
+
+    @Test
+    fun creatingOptionsWithoutAMenuDoesNotDispatchARebuild() = withBuildView { _, view ->
+        view.onCreateOptionsMenu(null)
+
+        verify(exactly = 0) { presenter.rebuildWithoutCache() }
+        verify(exactly = 0) { presenter.rebuild() }
+    }
+
+    private fun withCacheClearDialog(check: (BuildView, MenuItem, AlertDialog) -> Unit) =
+        withBuildView { activity, view ->
             val menu = PopupMenu(activity, view).menu
             view.onCreateOptionsMenu(menu)
             val item = (0 until menu.size()).map(menu::getItem)
@@ -71,7 +118,16 @@ class BuildViewTest {
             val dialog = ShadowDialog.getLatestDialog() as AlertDialog
             assertEquals(item.title, dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)?.text)
             verify(exactly = 0) { presenter.rebuildWithoutCache() }
-            check(dialog)
+            check(view, item, dialog)
+        }
+
+    private fun withBuildView(check: (Activity, BuildView) -> Unit) {
+        Robolectric.buildActivity(Activity::class.java).use { controller ->
+            val activity = controller.setup().get().apply { setTheme(R.style.AppTheme) }
+            val view = activity.layoutInflater.inflate(R.layout.build_view, null) as BuildView
+            view.di = DI { bind<BuildPresenter>() with singleton { presenter } }
+            activity.setContentView(view)
+            check(activity, view)
         }
     }
 }
