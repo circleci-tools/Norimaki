@@ -67,53 +67,70 @@ class BuildStepPresenterTest : DescribeSpec({
     }
 
     describe("BuildStepPresenter running output") {
-        listOf("selected step", "build").forEach { completion ->
-            it("keeps fetching a same-named running step until the $completion finishes") {
+        listOf("selected step", "build", "final download failure", "failure without output").forEach { scenario ->
+            it("updates log search when polling ends with $scenario") {
                 val scheduler = TestScheduler()
-                val selected = action(5, null)
+                val runningStep = BuildStep("Run tests", listOf(action(5, null)))
                 val first = BuildStep("Run tests", listOf(action(2, Date())))
-                val second = BuildStep("Run tests", listOf(selected))
-                val running = build("running", listOf(first, second))
-                val finished = if (completion == "build") {
-                    build("finished", listOf(first, second))
+                val running = build("running", listOf(first, runningStep))
+                val finishedStep = BuildStep("Run tests", listOf(action(5, Date())))
+                val finished = if (scenario == "build") {
+                    build("finished", listOf(first, runningStep))
                 } else {
-                    build("running", listOf(first, BuildStep("Run tests", listOf(action(5, Date())))))
+                    build("running", listOf(first, finishedStep))
                 }
+                val finalDownloadFails = scenario.contains("failure")
+                val hasOutput = scenario != "failure without output"
+                val finalOffset = if (hasOutput) 5L else 0L
                 val api = mockk<CircleCIAPIClientV1_1> {
                     every { getBuild("github", "owner", "repo", 42) } returnsMany
-                        listOf(Observable.just(running), Observable.just(finished))
+                        listOf(Observable.just(running), Observable.just(running), Observable.just(finished))
                 }
+                val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                 val output = mockk<BuildOutputClient> {
-                    val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(byteArrayOf(secondArg<Long>().toByte()))
+                        Observable.just(if (hasOutput) secondArg<Long>().toString().toByteArray() else byteArrayOf())
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(byteArrayOf(100))
+                    every { fetchFinalRawOutput(url, finalOffset, any()) } returns if (finalDownloadFails) {
+                        Observable.error(IOException("HTTP 503"))
+                    } else {
+                        Observable.just("done".toByteArray())
+                    }
                 }
-                val presenter = BuildStepPresenter().apply {
+                val presenter = BuildStepPresenter { output }.apply {
                     di = DI {
                         bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                         bind<BuildStepId>() with singleton { BuildStepId(5) }
+                        bind<SessionService>() with singleton { testSession(api) }
                     }
                 }
+                val view = mockk<BuildStepView>(relaxUnitFun = true)
+                var scope: MortarScope? = null
 
-                val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
-                RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                 try {
-                    val observer = presenter.runningOutput(running, second, api, output).test()
-                    try {
-                        scheduler.advanceTimeBy(4, SECONDS)
-                        observer.assertNotComplete().assertNoErrors()
-                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4)
+                    RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+                    RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                    RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+                    RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
-                        scheduler.advanceTimeBy(1, SECONDS)
-                        observer.assertComplete().assertNoErrors()
-                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4, 100)
-                    } finally {
-                        observer.dispose()
-                    }
+                    scope = presenter.attachToTestScope(view)
+
+                    scheduler.advanceTimeBy(4, SECONDS)
+                    verify(exactly = 1) { view.showStep(runningStep) }
+                    val retainedLog = if (hasOutput) "01234" else ""
+                    presenter.logString.value shouldBe retainedLog
+                    presenter.logSearchAvailable.value shouldBe false
+                    presenter.logLoadFailed.value shouldBe false
+
+                    scheduler.advanceTimeBy(1, SECONDS)
+                    verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
+                    presenter.logLoadFailed.value shouldBe finalDownloadFails
+                    presenter.logString.value shouldBe (retainedLog + if (finalDownloadFails) "" else "done")
+                    presenter.logSearchAvailable.value shouldBe hasOutput
                 } finally {
-                    RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+                    scope?.destroy()
+                    RxAndroidPlugins.reset()
+                    RxJavaPlugins.reset()
                 }
             }
         }

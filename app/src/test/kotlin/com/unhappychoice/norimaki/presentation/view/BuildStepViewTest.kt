@@ -55,7 +55,7 @@ class BuildStepViewTest {
     }
 
     @Test
-    fun rendersBuildStepOutputAndShowsTheErrorWithoutClearingExistingLogs() {
+    fun searchesRetainedOutputWhileShowingTheLoadError() {
         withView { activity, view ->
             val output = view.findViewById<TextView>(R.id.logText)
             val error = view.findViewById<TextView>(R.id.logLoadError)
@@ -67,11 +67,21 @@ class BuildStepViewTest {
             assertEquals(View.GONE, error.visibility)
 
             loadFailed.value = true
+            searchAvailable.value = true
             renderUpdates()
 
             assertEquals(View.VISIBLE, error.visibility)
             assertEquals(activity.getString(R.string.build_log_load_error), error.text.toString())
             assertEquals("Build output", output.text.toString())
+
+            val find = view.findViewById<View>(R.id.logFind)
+            assertEquals(View.VISIBLE, find.visibility)
+            find.performClick()
+            view.findViewById<EditText>(R.id.logQuery).setText("output")
+            finishSearch()
+
+            assertEquals(6 until 12, highlightedRange(output))
+            assertEquals(View.VISIBLE, error.visibility)
         }
     }
 
@@ -118,6 +128,37 @@ class BuildStepViewTest {
             view.findViewById<View>(R.id.logCloseSearch).performClick()
             finishSearch()
             assertEquals(View.VISIBLE, find.visibility)
+            assertEquals("", query.text.toString())
+            assertEquals(null, highlightedRange(output))
+        }
+    }
+
+    @Test
+    fun refreshesAnOpenSearchAndClearsItWhenSearchBecomesUnavailable() {
+        withView { activity, view ->
+            val find = view.findViewById<View>(R.id.logFind)
+            val query = view.findViewById<EditText>(R.id.logQuery)
+            val output = view.findViewById<TextView>(R.id.logText)
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            log.value = "needle"
+            searchAvailable.value = true
+            renderUpdates()
+
+            find.performClick()
+            query.setText("needle")
+            finishSearch()
+            assertEquals(0 until 6, highlightedRange(output))
+
+            log.value = "new needle"
+            renderUpdates()
+            finishSearch()
+            assertEquals(4 until 10, highlightedRange(output))
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, 1), count.text.toString())
+
+            searchAvailable.value = false
+            renderUpdates()
+            assertEquals(View.GONE, view.findViewById<View>(R.id.logSearchPanel).visibility)
+            assertEquals(View.GONE, find.visibility)
             assertEquals("", query.text.toString())
             assertEquals(null, highlightedRange(output))
         }

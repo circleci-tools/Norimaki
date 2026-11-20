@@ -94,7 +94,10 @@ class BuildStepPresenter internal constructor(
             .subscribeBy(
                 onNext = { appendLog(it) },
                 onComplete = ::allowLogSearch,
-                onError = { logLoadFailed.value = true }
+                onError = {
+                    logLoadFailed.value = true
+                    allowLogSearch()
+                }
             )
             .addTo(bag)
     }
