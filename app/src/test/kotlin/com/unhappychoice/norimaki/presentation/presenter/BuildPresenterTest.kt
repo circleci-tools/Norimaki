@@ -45,7 +45,6 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var activity: MainActivity
     lateinit var session: SessionService
     lateinit var api: CircleCIAPIClientV1_1
-    lateinit var activity: MainActivity
     lateinit var initialBuild: PublishSubject<Build>
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
@@ -70,7 +69,6 @@ class BuildPresenterTest : DescribeSpec({
                 bind<MainActivity>() with singleton { activity }
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
                 bind<SessionService>() with singleton { session }
-                bind<MainActivity>() with singleton { activity }
             }
         }
         view = mockk(relaxUnitFun = true)
