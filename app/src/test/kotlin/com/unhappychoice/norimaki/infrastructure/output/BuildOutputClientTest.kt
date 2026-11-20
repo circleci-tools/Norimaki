@@ -97,6 +97,19 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchOutput()") {
+        it("returns the whole completed log when its declared length matches the byte limit") {
+            val body = """[{"message":"complete"}]"""
+            val client = outputClient(body.toByteArray().size) { response(it, 200, body) }
+
+            client.fetchOutput(url).test().assertResult("complete")
+        }
+
+        it("reports an incomplete JSON response that ended below the byte limit") {
+            val client = outputClient { response(it, 200, """[{"message":"complete"}""") }
+
+            client.fetchOutput(url).test().assertFailure(IOException::class.java)
+        }
+
         it("should report the HTTP status before parsing an error body") {
             val client = outputClient { response(it, 503, "Service Unavailable") }
 
@@ -167,6 +180,14 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchRawOutput()") {
+        it("returns no new bytes when a full response ends before the requested offset") {
+            val client = outputClient { response(it, 200, "short") }
+
+            client.fetchRawOutput(url, offset).test()
+                .assertValue { it.bytes.isEmpty() && !it.limitReached }
+                .assertComplete().assertNoErrors()
+        }
+
         it("should append only new bytes when the server returns full logs") {
             val scheduler = TestScheduler()
             val ranges = mutableListOf<String?>()

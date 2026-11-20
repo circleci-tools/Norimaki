@@ -14,6 +14,7 @@ import okio.Buffer
 import java.io.EOFException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildOutputClient(
     private val token: String,
@@ -22,19 +23,17 @@ class BuildOutputClient(
     private val outputByteLimit: Int = 1024 * 1024
 ) {
     fun fetchOutput(outputUrl: String): Observable<String> =
-        Observable.fromCallable {
-            execute(Request.Builder().url(outputUrl).build()).use { response ->
-                if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
-                completedOutput(response.body)
-            }
+        execute({ Request.Builder().url(outputUrl).build() }) { response ->
+            if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
+            completedOutput(response.body)
         }
 
-    fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<RawOutputChunk> =
-        Observable.fromCallable {
-            val remaining = (outputByteLimit - offset).coerceAtLeast(0)
-            if (remaining == 0L) RawOutputChunk(ByteArray(0), limitReached = true)
-            else execute(rawOutputRequest(rawOutputUrl, offset)).use { rawOutputChunk(it, offset, remaining) }
-        }.subscribeOn(ioScheduler)
+    fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<RawOutputChunk> {
+        val remaining = (outputByteLimit - offset).coerceAtLeast(0)
+        if (remaining == 0L) return Observable.just(RawOutputChunk(ByteArray(0), limitReached = true))
+        return execute({ rawOutputRequest(rawOutputUrl, offset) }) { rawOutputChunk(it, offset, remaining) }
+            .subscribeOn(ioScheduler)
+    }
 
     fun fetchFinalRawOutput(
         rawOutputUrl: String,
@@ -52,7 +51,24 @@ class BuildOutputClient(
                 }
         }
 
-    private fun execute(request: Request): Response = client.newCall(request).execute()
+    private fun <T : Any> execute(request: () -> Request, readBody: (Response) -> T): Observable<T> =
+        Observable.create { emitter ->
+            val call = client.newCall(request())
+            val active = AtomicBoolean(true)
+            emitter.setCancellable { if (active.getAndSet(false)) call.cancel() }
+            if (emitter.isDisposed) return@create
+
+            val output = try {
+                call.execute().use(readBody)
+            } catch (error: Exception) {
+                active.set(false)
+                emitter.tryOnError(error)
+                return@create
+            }
+            active.set(false)
+            emitter.onNext(output)
+            emitter.onComplete()
+        }
 
     private fun rawOutputRequest(url: String, offset: Long): Request =
         Request.Builder()

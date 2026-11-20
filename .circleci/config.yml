@@ -52,8 +52,14 @@ jobs:
           name: Run Tests
           command: ./gradlew jacoco
       - run:
+          name: Verify Kotest and Vintage execution
+          command: python3 scripts/ci/check-unit-test-results.py
+      - run:
           name: Test release tag validation
           command: bash scripts/ci/test-release-tag.sh
+      - run:
+          name: Test tagged Play deployment
+          command: bash scripts/ci/test-play-deploy.sh
       - run:
           name: Send coverage
           command: ./scripts/ci/send-coverage-info.sh
@@ -73,7 +79,7 @@ jobs:
           command: ./gradlew :app:validateReleaseTag
       - run:
           name: Publish APK
-          command: ./gradlew publishReleaseApk
+          command: ./gradlew publishReleaseApk --track internal
 
 workflows:
   test-and-deploy:
