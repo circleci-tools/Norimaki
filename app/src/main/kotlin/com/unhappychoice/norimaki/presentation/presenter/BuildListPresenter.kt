@@ -24,6 +24,7 @@ import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.Disposable
 import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
@@ -41,6 +42,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
+    private var pollingRegistration: Disposable? = null
     val builds = history.asObservable().map { it.builds }
 
     override fun onAuthenticated() {
@@ -72,7 +74,13 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         if (isWorkflow && !canScroll) getBuilds()
     }
 
+    override fun onViewDropped() {
+        pollingRegistration?.let(bag::remove)
+        pollingRegistration = null
+    }
+
     internal fun observePolling(lifecycle: Lifecycle = activity.lifecycle) {
+        pollingRegistration?.let(bag::remove)
         val pollingSubscription = SerialDisposable()
         val observer = object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
@@ -87,7 +95,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             lifecycle.removeObserver(observer)
             pollingSubscription.dispose()
         }
-        if (bag.add(registration)) lifecycle.addObserver(observer)
+        if (bag.add(registration)) {
+            pollingRegistration = registration
+            lifecycle.addObserver(observer)
+        }
     }
 
     fun goToBuildView(build: Build) {
