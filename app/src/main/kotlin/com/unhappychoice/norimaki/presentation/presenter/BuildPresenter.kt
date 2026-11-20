@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private val buildId: BuildId by instance()
     private var build: Build? = null
+    val projectName: String
+        get() = with(buildId) { "$vcsType/$owner/$repository" }
     val steps = Variable<List<BuildStep>>(listOf())
     val buildLoadFailed = Variable(false)
     private val rebuildInFlight = AtomicBoolean()

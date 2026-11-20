@@ -95,6 +95,11 @@ class BuildPresenterTest : DescribeSpec({
     }
 
     describe("rebuild submissions") {
+        it("identifies the cache project before build details load") {
+            presenter.projectName shouldBe "github/owner/repo"
+            verify(exactly = 0) { view.showBuild(any()) }
+        }
+
         it("cancels cache deletion and blocks rebuilds when the session changes") {
             initialBuild.hasObservers() shouldBe true
             presenter.rebuildWithoutCache()
