@@ -44,10 +44,10 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         goTo(activity, BuildStepScreen(build, buildStep))
     }
 
-    fun hasWorkflow(): Boolean = build.workflows?.workflowId != null
+    fun hasWorkflow(): Boolean = nonBlankWorkflowId != null
 
     fun goToWorkflowScreen() {
-        val workflowId = build.workflows?.workflowId ?: return
+        val workflowId = nonBlankWorkflowId ?: return
         goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
@@ -76,6 +76,9 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
             .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
             .addTo(bag)
     }
+
+    private val nonBlankWorkflowId: String?
+        get() = build.workflows?.workflowId?.takeUnless { it.isBlank() }
 
     private fun retryBuild(client: CircleCIAPIClientV1_1): Observable<Build> =
         client.retryBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)

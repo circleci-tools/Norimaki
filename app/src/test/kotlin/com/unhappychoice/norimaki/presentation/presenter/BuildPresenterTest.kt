@@ -3,11 +3,13 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
+import com.github.unhappychoice.circleci.v1.response.Workflow
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
@@ -131,6 +133,61 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.deleteCache(any(), any(), any()) }
             verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
         }
+    }
+})
+
+class BuildPresenterWorkflowTest : DescribeSpec({
+    fun presenter(id: String?, activity: MainActivity): BuildPresenter {
+        val workflow = mockk<Workflow> {
+            every { workflowId } returns id
+            every { workflowName } returns "Build and test"
+        }
+        val build = mockk<Build> {
+            every { workflows } returns workflow
+            every { vcsUrl } returns "https://github.com/owner/repo"
+            every { username } returns "owner"
+            every { reponame } returns "repo"
+        }
+        return BuildPresenter().apply {
+            di = DI {
+                bind<Build>() with singleton { build }
+                bind<MainActivity>() with singleton { activity }
+            }
+        }
+    }
+
+    lateinit var activity: MainActivity
+    lateinit var flow: Flow
+
+    beforeEach {
+        activity = mockk()
+        flow = mockk(relaxed = true)
+        mockkStatic(Flow::class)
+        every { Flow.get(activity) } returns flow
+    }
+
+    afterEach { unmockkStatic(Flow::class) }
+
+    mapOf("null" to null, "empty" to "", "whitespace-only" to " \t\n").forEach { (label, id) ->
+        it("hides workflow navigation and ignores selection for a $label ID") {
+            val presenter = presenter(id, activity)
+
+            presenter.hasWorkflow() shouldBe false
+            presenter.goToWorkflowScreen()
+
+            verify(exactly = 0) { flow.set(any()) }
+        }
+    }
+
+    it("opens the workflow screen with the original ID when it is nonblank") {
+        val presenter = presenter("target", activity)
+        val screen = slot<WorkflowScreen>()
+
+        presenter.hasWorkflow() shouldBe true
+        presenter.goToWorkflowScreen()
+
+        verify(exactly = 1) { flow.set(capture(screen)) }
+        screen.captured.workflowId shouldBe "target"
     }
 })
 
