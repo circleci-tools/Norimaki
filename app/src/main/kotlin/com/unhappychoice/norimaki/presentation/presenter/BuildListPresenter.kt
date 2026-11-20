@@ -39,6 +39,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
+    val canRetryPage = Variable(false)
     val projectName: String by instance()
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
@@ -59,6 +60,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         initialLoadSettled = CompletableSubject.create()
         lastPollIds = emptySet()
         hasStartedPolling = false
+        canRetryPage.value = false
         isLoading.value = false
         history.value = BuildHistory()
         hasMore.value = true
@@ -72,7 +74,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     fun getBuildsIfUnderfilled(canScroll: Boolean) {
-        if (isWorkflow && !canScroll) getBuilds()
+        if (isWorkflow && !canScroll && !canRetryPage.value) getBuilds()
     }
 
     override fun onViewDropped() {
@@ -117,12 +119,14 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private fun loadPage(): Observable<IncomingPage> {
         if (account == null || isLoading.value || !hasMore.value) return Observable.empty()
         isLoading.value = true
+        canRetryPage.value = false
         return getBuildsAPI(offset = page.value * BUILD_LIST_PAGE_SIZE)
             .singleOrError()
             .toObservable()
             .subscribeOnIoObserveOnUI()
             .doOnError {
                 isLoading.value = false
+                canRetryPage.value = isWorkflow
                 initialLoadSettled.onComplete()
             }
             .doOnDispose { isLoading.value = false }

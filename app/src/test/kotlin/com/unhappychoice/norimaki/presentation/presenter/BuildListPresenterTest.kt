@@ -216,6 +216,7 @@ class BuildListPresenterTest : DescribeSpec({
                 Observable.just(listOf(build))
             )
             val presenter = presenter(api)
+            presenter.canRetryPage.value shouldBe true
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
             presenter.observePolling(owner.lifecycle)
             advanceRefresh()
@@ -231,6 +232,7 @@ class BuildListPresenterTest : DescribeSpec({
             scheduler.triggerActions()
             presenter.builds.take(1).test().assertResult(listOf(build))
             presenter.page.value shouldBe 1
+            presenter.canRetryPage.value shouldBe false
         }
 
         it("shares a delayed full page with polling even when workflow filtering hides it") {
@@ -276,11 +278,13 @@ class BuildListPresenterTest : DescribeSpec({
             val builds = presenter.builds.test()
             presenter.isLoading.value shouldBe false
             presenter.page.value shouldBe 0
+            presenter.canRetryPage.value shouldBe true
             verify(exactly = 1) { api.pageAt(0) }
 
             startPolling(presenter)
             advanceRefresh()
             presenter.page.value shouldBe 1
+            presenter.canRetryPage.value shouldBe false
             builds.assertValues(emptyList(), listOf(known))
             advanceRefresh()
             builds.assertValues(emptyList(), listOf(known), listOf(latest, known))
@@ -444,6 +448,41 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("workflow pagination") {
+        it("retries a failed page from an empty workflow list at the same offset") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val firstPage = (21 downTo 2).map { build("other", it) }
+            val matchingJob = build("target", 1)
+            every { api.pageAt(0) } returns Observable.just(firstPage)
+            every { api.pageAt(20) } returnsMany listOf(
+                Observable.error(IllegalStateException("Page request failed")),
+                Observable.just(listOf(matchingJob))
+            )
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            scheduler.triggerActions()
+
+            presenter.getBuildsIfUnderfilled(canScroll = false)
+            scheduler.triggerActions()
+            presenter.canRetryPage.value shouldBe true
+            presenter.isLoading.value shouldBe false
+            presenter.hasMore.value shouldBe true
+            presenter.page.value shouldBe 1
+            builds.assertValue(emptyList())
+
+            presenter.getBuildsIfUnderfilled(canScroll = false)
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.pageAt(20) }
+
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            presenter.canRetryPage.value shouldBe false
+            presenter.page.value shouldBe 2
+            builds.assertValues(emptyList(), listOf(matchingJob))
+            verify(exactly = 2) { api.pageAt(20) }
+            verify(exactly = 0) { api.pageAt(40) }
+            builds.dispose()
+        }
+
         it("loads through filtered-out pages and stops after an empty API page") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val matchingJob = build("target", 1)
