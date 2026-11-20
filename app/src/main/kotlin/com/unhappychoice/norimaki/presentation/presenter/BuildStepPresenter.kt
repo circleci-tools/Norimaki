@@ -3,14 +3,14 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
-import com.unhappychoice.norimaki.domain.model.findByStepNumber
+import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
-import com.unhappychoice.norimaki.domain.model.step
-import com.unhappychoice.norimaki.domain.model.vcsType
 import com.unhappychoice.norimaki.extension.Utf8StreamDecoder
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
@@ -19,55 +19,76 @@ import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
+import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildStepPresenter internal constructor(
     private val createOutputClient: (String) -> BuildOutputClient
 ) : PresenterNeedsToken<BuildStepView>() {
-    constructor() : this({ token -> BuildOutputClient(token) })
+    constructor() : this({ BuildOutputClient(it) })
 
-    val build: Build by instance()
-    val buildStep: BuildStep by instance()
-    private lateinit var outputClient: BuildOutputClient
+    private val buildId: BuildId by instance()
+    private val stepId: BuildStepId by instance()
 
     internal val log = BuildLog()
+
     val logLoadFailed = Variable(false)
 
     override fun onAuthenticated() {
-        outputClient = createOutputClient(requireNotNull(account).token)
-        when (buildStep.isFinished()) {
-            true -> getActions()
-            false -> pollRunningActions()
-        }
+        val verified = account ?: return
+        val client = verified.client
+        val outputClient = createOutputClient(verified.token)
+        log.clear()
+        logLoadFailed.value = false
+        pollBuildStep(stepId) { buildId.load(client) }
+            .subscribeOnIoObserveOnUI()
+            .subscribeBy(
+                onNext = { (build, step) ->
+                    view?.showStep(step)
+                    if (step.isFinished()) getActions(step, outputClient)
+                    else pollRunningActions(build, step, client, outputClient)
+                },
+                onError = { logLoadFailed.value = true }
+            )
+            .addTo(bag)
     }
 
-    fun getActions() {
-        if (account == null) return
+    private fun getActions(buildStep: BuildStep, outputClient: BuildOutputClient) {
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
         completedActionLogs(actions, outputClient::fetchOutput).renderLog()
     }
 
-    internal fun runningOutput(client: CircleCIAPIClientV1_1, outputClient: BuildOutputClient): Observable<String> {
+    internal fun runningOutput(
+        build: Build,
+        buildStep: BuildStep,
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient
+    ): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
             outputUrls,
-            stepFinished(client, buildStep.step()),
+            stepFinished(client),
             outputClient::fetchRawOutput,
             fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
         )
     }
 
-    private fun pollRunningActions() {
-        val client = account?.client ?: return
-        runningOutput(client, outputClient).renderLog()
+    private fun pollRunningActions(
+        build: Build,
+        buildStep: BuildStep,
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient
+    ) {
+        runningOutput(build, buildStep, client, outputClient).renderLog()
     }
 
-    private fun stepFinished(client: CircleCIAPIClientV1_1, stepNumber: Int?): Observable<Build> =
+    private fun stepFinished(client: CircleCIAPIClientV1_1): Observable<Build> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
-            client.getBuild(build.vcsType(), build.username!!, build.reponame!!, build.buildNum!!)
-        }.filter { it.isFinished() || it.steps?.findByStepNumber(stepNumber)?.isFinished() == true }
+            buildId.load(client)
+        }.filter { it.isFinished() || stepId.resolve(it.steps)?.isFinished() == true }
 
     private fun Observable<String>.renderLog() {
         val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation(), true)
@@ -79,6 +100,26 @@ class BuildStepPresenter internal constructor(
         const val LOG_POLLING_SECONDS = 1L
     }
 }
+
+internal fun pollBuildStep(
+    stepId: BuildStepId,
+    scheduler: Scheduler = Schedulers.computation(),
+    fetchBuild: () -> Observable<Build>
+): Observable<Pair<Build, BuildStep>> =
+    Observable.defer(fetchBuild)
+        .concatWith(
+            Observable.timer(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS, scheduler)
+                .flatMap { polling(BuildPresenter.BUILD_POLLING_SECONDS, scheduler = scheduler, fetch = fetchBuild) }
+        )
+        .flatMap { build ->
+            val step = stepId.resolve(build.steps)
+            when {
+                step != null -> Observable.just(build to step)
+                build.isFinished() -> Observable.error(NoSuchElementException("Build step was not found"))
+                else -> Observable.empty()
+            }
+        }
+        .take(1)
 
 internal fun completedActionLogs(
     outputUrls: List<String>,

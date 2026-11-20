@@ -3,7 +3,7 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.Context
 import android.util.AttributeSet
 import androidx.lifecycle.Observer
-import com.jakewharton.rxbinding2.view.clicks
+import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext

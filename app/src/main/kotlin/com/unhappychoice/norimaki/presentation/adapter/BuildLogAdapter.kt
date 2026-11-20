@@ -36,6 +36,7 @@ internal class BuildLogAdapter(private val log: BuildLog) : RecyclerView.Adapter
     }
 
     fun update(change: LogUpdate) {
+        if (change.removedCount > 0) notifyItemRangeRemoved(0, change.removedCount)
         change.changedLine?.let { notifyItemChanged(it, AppendLog) }
         if (change.insertCount > 0) notifyItemRangeInserted(change.insertStart, change.insertCount)
     }

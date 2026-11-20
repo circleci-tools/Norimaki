@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.log
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
@@ -76,6 +77,26 @@ class BuildLogTest : DescribeSpec({
 
             failures shouldBe listOf(failure to "last output")
             subscription.dispose()
+        }
+
+        it("ignores chunks containing only escapes and resets colors between runs") {
+            val log = BuildLog()
+            val updates = log.changes.test()
+
+            log.render(Observable.just("\u001B[2K\u001B[31m"), Schedulers.trampoline())
+            log.lineCount shouldBe 0
+            updates.assertNoValues()
+
+            log.render(Observable.just("\u001B[31mred\u001B[39m plain\u001B[31m"), Schedulers.trampoline())
+            log[0] shouldBe listOf(LogSpan("red", 0xFFF00000.toInt()), LogSpan(" plain", null))
+
+            log.clear()
+            log.clear()
+            log.lineCount shouldBe 0
+            updates.assertValues(LogUpdate(null, 0, 1), LogUpdate(null, 0, 0, removedCount = 1))
+
+            log.render(Observable.just("fresh"), Schedulers.trampoline())
+            log[0] shouldBe listOf(LogSpan("fresh", null))
         }
 
         it("continues a partial line and ANSI sequence across chunks") {

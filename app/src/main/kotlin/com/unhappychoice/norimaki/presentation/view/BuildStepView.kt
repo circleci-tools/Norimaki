@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.adapter.BuildLogAdapter
@@ -34,6 +35,10 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         presenter.logLoadFailed.asObservable()
             .subscribeNext { failed -> binding.logLoadError.visibility = if (failed) View.VISIBLE else View.GONE }
             .addTo(logSubscriptions)
+    }
+
+    internal fun showStep(step: BuildStep) {
+        updateScreenTitle(presenter.activity, step.name)
     }
 
     override fun onDetachedFromWindow() {

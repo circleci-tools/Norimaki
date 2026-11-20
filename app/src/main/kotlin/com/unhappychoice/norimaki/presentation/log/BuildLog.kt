@@ -6,7 +6,7 @@ import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.subjects.PublishSubject
 
-internal data class LogUpdate(val changedLine: Int?, val insertStart: Int, val insertCount: Int)
+internal data class LogUpdate(val changedLine: Int?, val insertStart: Int, val insertCount: Int, val removedCount: Int = 0)
 
 internal class BuildLog {
     private val lines = mutableListOf<MutableList<LogSpan>>()
@@ -26,6 +26,13 @@ internal class BuildLog {
         chunks.map(format)
             .observeOn(displayScheduler, true)
             .subscribeBy(onNext = ::append, onError = onError)
+
+    fun clear() {
+        val removedCount = lineCount
+        if (removedCount == 0) return
+        lines.clear()
+        updates.onNext(LogUpdate(null, 0, 0, removedCount))
+    }
 
     private fun append(chunk: List<List<LogSpan>>) {
         if (chunk.size == 1 && chunk.first().isEmpty()) return
