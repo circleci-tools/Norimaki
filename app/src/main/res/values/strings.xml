@@ -15,4 +15,7 @@
     <string name="artifact_downloading">Saving artifact…</string>
     <string name="artifact_saved">Artifact saved.</string>
     <string name="artifact_save_failed">Could not save the artifact.</string>
+    <string name="clear_project_cache_and_rebuild">Clear project cache and rebuild</string>
+    <string name="clear_project_cache_message">This clears the cache for the entire %1$s project before retrying the selected build. Other builds can be affected even if the retry fails.</string>
+    <string name="clear_cache_and_rebuild">Clear cache and rebuild</string>
 </resources>
