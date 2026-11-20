@@ -148,9 +148,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             } else {
                 fetchLatestBuilds(lastPollIds, ::getBuildsAPI)
                     .subscribeOnIoObserveOnUI()
-                    .doOnNext { lastPollIds = it.mapTo(hashSetOf()) { build -> build.uniqueId() } }
-                    .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
-                    .map { IncomingPage(it, paginated = false) }
+                    .concatMap { latest ->
+                        val pollIds = latest.mapTo(hashSetOf()) { it.uniqueId() }
+                        refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails)
+                            .map { IncomingPage(it, paginated = false, pollIds = pollIds) }
+                    }
             }
         }
 
@@ -171,6 +173,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .map { updated -> page to updated }
     }.subscribeNext { (incoming, updated) ->
         if (updated !== history.value) history.value = updated
+        incoming.pollIds?.let { lastPollIds = it }
         if (incoming.paginated) {
             if (page.value == 0) lastPollIds = incoming.builds.mapTo(hashSetOf()) { it.uniqueId() }
             hasMore.value = incoming.builds.isNotEmpty()
@@ -180,7 +183,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         }
     }
 
-    private data class IncomingPage(val builds: List<Build>, val paginated: Boolean)
+    private data class IncomingPage(
+        val builds: List<Build>,
+        val paginated: Boolean,
+        val pollIds: Set<String>? = null
+    )
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
         val client = account?.client ?: return Observable.empty()

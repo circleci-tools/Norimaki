@@ -134,6 +134,38 @@ class BuildListPresenterTest : DescribeSpec({
             verify(exactly = 5) { api.pageAt(0) }
         }
 
+        it("refetches older builds when polling resumes before the pending results are applied") {
+            val owner = PollingLifecycleOwner()
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val known = build("target", 1)
+            val missed = build("target", 2)
+            val firstPage = (22 downTo 3).map { build("other", it) }
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(known)),
+                Observable.just(firstPage)
+            )
+            every { api.pageAt(20) } returns Observable.just(listOf(missed, known))
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            scheduler.triggerActions()
+
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            presenter.observePolling(owner.lifecycle)
+            val mergeScheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { mergeScheduler }
+            advanceRefresh()
+            verify(exactly = 1) { api.pageAt(20) }
+            builds.assertValues(emptyList(), listOf(known))
+
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            verify(exactly = 2) { api.pageAt(20) }
+
+            mergeScheduler.triggerActions()
+            builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
+            builds.dispose()
+        }
+
         it("cancels an in-flight poll when stopped") {
             val owner = PollingLifecycleOwner()
             val api = mockk<CircleCIAPIClientV1_1>()
