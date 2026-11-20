@@ -2,9 +2,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.refreshBuildList
-import com.unhappychoice.norimaki.domain.model.vcsType
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.polling
@@ -37,13 +38,13 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
     private var initialLoadSettled = CompletableSubject.create()
-    private var initialPage = emptyList<Build>()
+    private var lastPollIds = emptySet<String>()
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
 
     override fun onAuthenticated() {
         initialLoadSettled = CompletableSubject.create()
-        initialPage = emptyList()
+        lastPollIds = emptySet()
         observePages().addTo(bag)
         startBuilds()
     }
@@ -77,7 +78,8 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun goToBuildView(build: Build) {
         if (account == null) return
-        goTo(activity, BuildScreen(build))
+        val buildId = BuildId.from(build) ?: return
+        goTo(activity, BuildScreen(buildId))
     }
 
     fun changeAPIToken() {
@@ -100,19 +102,19 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
                 getBuilds()
                 Observable.empty()
             } else {
-                fetchLatestBuilds(history.value.builds + initialPage, ::getBuildsAPI)
+                fetchLatestBuilds(lastPollIds, ::getBuildsAPI)
                     .subscribeOnIoObserveOnUI()
+                    .doOnNext { lastPollIds = it.mapTo(hashSetOf()) { build -> build.uniqueId() } }
                     .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
             }
         }
 
-    private fun getBuildDetails(build: Build): Observable<Build> {
-        val username = build.username ?: return Observable.empty()
-        val repository = build.reponame ?: return Observable.empty()
-        val number = build.buildNum ?: return Observable.empty()
-        val client = account?.client ?: return Observable.empty()
-        return Observable.defer { client.getBuild(build.vcsType(), username, repository, number) }
-            .subscribeOnIoObserveOnUI()
+    internal fun getBuildDetails(build: Build): Observable<Build> {
+        val buildId = BuildId.from(build) ?: return Observable.empty()
+        return Observable.defer {
+            val client = account?.client ?: return@defer Observable.empty<Build>()
+            buildId.load(client)
+        }.subscribeOnIoObserveOnUI()
     }
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
@@ -125,7 +127,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }.subscribeNext { (incoming, updated) ->
         if (updated !== history.value) history.value = updated
         if (incoming.paginated) {
-            if (page.value == 0) initialPage = incoming.builds
+            if (page.value == 0) lastPollIds = incoming.builds.mapTo(hashSetOf()) { it.uniqueId() }
             hasMore.value = incoming.builds.isNotEmpty()
             isLoading.value = false
             page.value += 1
