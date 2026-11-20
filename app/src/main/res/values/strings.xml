@@ -6,11 +6,12 @@
     <string name="drawer_close">Close</string>
     <string name="api_token_required">Enter an API token.</string>
     <string name="api_token_verification_failed">Could not verify this API token. Check the token and try again.</string>
-    <string name="build_log_load_error">Could not load the rest of the build log.</string>
+    <string name="build_load_error">Could not load the build details.</string>
+    <string name="build_load_retry">Retry</string>
+    <string name="build_log_load_error">Could not load the build log.</string>
     <string name="workflow_refresh">Refresh</string>
     <string name="workflow_no_jobs">No jobs in this workflow.</string>
     <string name="workflow_load_error">Could not load workflow jobs. Try refreshing.</string>
-    <string name="workflow_build_load_error">Could not load build details.</string>
     <string name="workflow_approve_title">Approve held job?</string>
     <string name="workflow_approve">Approve</string>
     <string name="workflow_approve_confirmation">Job: %1$s\nProject: %2$s\nWorkflow: %3$s\nWorkflow run ID: %4$s</string>

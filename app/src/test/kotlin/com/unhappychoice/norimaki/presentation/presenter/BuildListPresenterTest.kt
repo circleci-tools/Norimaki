@@ -2,26 +2,33 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
+import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.reactivex.Observable
 import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
+import java.util.Date
+import java.util.concurrent.TimeUnit
 import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
-import java.util.Date
-import java.util.concurrent.TimeUnit
 
 class BuildListPresenterTest : DescribeSpec({
+    val activity = mockk<MainActivity>()
     lateinit var scope: MortarScope
 
     lateinit var scheduler: TestScheduler
@@ -46,6 +53,7 @@ class BuildListPresenterTest : DescribeSpec({
         session: SessionService = testSession(api)
     ) = BuildListPresenter().apply {
         di = DI {
+            bind<MainActivity>() with singleton { activity }
             bind<SessionService>() with singleton { session }
             bind<String>() with singleton { "github/owner/repo" }
         }
@@ -64,7 +72,53 @@ class BuildListPresenterTest : DescribeSpec({
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
+    describe("build navigation") {
+        it("opens a build only when it has an identifier and an active session") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            val session = testSession(api)
+            val presenter = presenter(api, session = session)
+            val valid = build(42)
+            val incomplete = listOf(
+                build(43).apply { every { username } returns null },
+                build(44).apply { every { reponame } returns null },
+                build(45).apply { every { buildNum } returns null }
+            )
+            val flow = mockk<Flow>(relaxed = true)
+
+            mockkStatic(Flow::class)
+            try {
+                every { Flow.get(activity) } returns flow
+                incomplete.forEach(presenter::goToBuildView)
+                presenter.goToBuildView(valid)
+                session.replace("replacement-token").test().assertComplete()
+                presenter.goToBuildView(valid)
+
+                verify(exactly = 1) { flow.set(any()) }
+                verify { flow.set(BuildScreen(BuildId("github", "owner", "repo", 42))) }
+            } finally {
+                unmockkStatic(Flow::class)
+            }
+        }
+    }
+
     describe("project build polling") {
+        it("does not fetch build details when the session ends before subscription") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val session = testSession(api)
+            val running = build(1, state = "running")
+            every { api.pageAt(0) } returns Observable.just(listOf(running))
+            val presenter = presenter(api, session = session)
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(running))
+
+            val details = presenter.getBuildDetails(running)
+            session.replace("replacement-token").test().assertComplete()
+
+            details.test().assertResult()
+            verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
+        }
+
         it("updates a paginated build from its details without advancing pagination") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build(3)
@@ -89,6 +143,34 @@ class BuildListPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
             presenter.page.value shouldBe 2
             presenter.hasMore.value shouldBe true
+            builds.dispose()
+        }
+
+        it("stops at the first unchanged project page and displays a new build once") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val added = build(200)
+            var projectBuilds = (199 downTo 1).map { build(it) }
+            val offsets = mutableListOf<Int>()
+            every { api.pageAt(any()) } answers {
+                val offset = arg<Int>(3)
+                offsets.add(offset)
+                Observable.just(projectBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+            val builds = presenter(api).builds.test()
+            scheduler.triggerActions()
+            offsets shouldBe listOf(0) + (0 until 200 step BUILD_LIST_PAGE_SIZE).toList()
+            builds.values().last() shouldBe projectBuilds
+
+            offsets.clear()
+            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            offsets shouldBe listOf(0)
+            builds.values().last() shouldBe projectBuilds
+
+            projectBuilds = listOf(added) + projectBuilds
+            offsets.clear()
+            scheduler.advanceTimeBy(2 * BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+            offsets shouldBe listOf(0, 0)
+            builds.values().count { it == projectBuilds } shouldBe 1
             builds.dispose()
         }
 

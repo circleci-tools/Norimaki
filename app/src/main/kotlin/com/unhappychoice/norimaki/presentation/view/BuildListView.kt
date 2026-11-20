@@ -7,8 +7,8 @@ import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
 import androidx.recyclerview.widget.GridLayoutManager
+import com.jakewharton.rxbinding3.recyclerview.scrollEvents
 import com.unhappychoice.norimaki.R
-import com.jakewharton.rxbinding2.support.v7.widget.scrollEvents
 import com.unhappychoice.norimaki.databinding.BuildListViewBinding
 import com.unhappychoice.norimaki.extension.isNearEnd
 import com.unhappychoice.norimaki.extension.subscribeNext

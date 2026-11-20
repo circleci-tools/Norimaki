@@ -1,9 +1,9 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
@@ -17,11 +17,9 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
-import io.mockk.slot
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.reactivex.Completable
-import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
@@ -149,37 +147,27 @@ class WorkflowPresenterTest : DescribeSpec({
         }
     }
 
-    it("uses the existing build API for numbered jobs and skips jobs without numbers") {
-        val api = mockk<CircleCIAPIClientV1_1> {
-            every { getBuild("github", "owner", "repo", 42) } returns Observable.error(IOException())
-        }
-        val presenter = presenter(mockk { every { jobs("run") } returns Single.just(emptyList()) }, api)
-        val updates = presenter.updates.test()
-
-        presenter.openBuild(hold)
-        presenter.openBuild(WorkflowJob("build", "test", "build", "success", 42, null))
-
-        verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
-        updates.values().last().message shouldBe R.string.workflow_build_load_error
-    }
-
-    it("opens build details with the fetched build for a numbered job") {
+    it("opens build details only for numbered jobs with an active session") {
         val activity = mockk<MainActivity>()
-        val build = mockk<Build>()
-        val api = mockk<CircleCIAPIClientV1_1> {
-            every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
-        }
-        val presenter = presenter(mockk { every { jobs("run") } returns Single.just(emptyList()) }, api, activity)
+        val session = testSession(mockk())
+        val presenter = presenter(
+            mockk { every { jobs("run") } returns Single.just(emptyList()) },
+            activity = activity,
+            session = session
+        )
+        val job = WorkflowJob("build", "test", "build", "success", 42, null)
         val flow = mockk<Flow>(relaxed = true)
-        val destination = slot<BuildScreen>()
         mockkStatic(Flow::class)
         try {
             every { Flow.get(activity) } returns flow
 
-            presenter.openBuild(WorkflowJob("build", "test", "build", "success", 42, null))
+            presenter.openBuild(hold)
+            presenter.openBuild(job)
+            session.replace("replacement-token").test().assertComplete()
+            presenter.openBuild(job)
 
-            verify(exactly = 1) { flow.set(capture(destination)) }
-            (destination.captured.build === build) shouldBe true
+            verify(exactly = 1) { flow.set(any()) }
+            verify { flow.set(BuildScreen(BuildId("github", "owner", "repo", 42))) }
         } finally {
             unmockkStatic(Flow::class)
         }

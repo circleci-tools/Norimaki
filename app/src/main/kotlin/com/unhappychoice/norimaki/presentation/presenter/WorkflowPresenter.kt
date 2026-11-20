@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.domain.service.VerifiedSession
 import com.unhappychoice.norimaki.extension.Variable
@@ -75,12 +76,10 @@ class WorkflowPresenter(
     }
 
     fun openBuild(job: WorkflowJob) {
-        val api = account?.client ?: return
+        if (account == null || state.value.busy) return
         val number = job.jobNumber ?: return
         val (vcs, owner, repo) = screen.projectName.split('/')
-        runRequest(api.getBuild(vcs, owner, repo, number).firstOrError(), R.string.workflow_build_load_error) {
-            goTo(activity, BuildScreen(it))
-        }
+        goTo(activity, BuildScreen(BuildId(vcs, owner, repo, number)))
     }
 
     private fun <T : Any> runRequest(request: Single<T>, errorMessage: Int, onSuccess: (T) -> Unit) {

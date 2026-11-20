@@ -27,6 +27,7 @@ class SessionService(
     private var pendingRestore: Single<VerifiedSession>? = null
 
     val changes: Observable<Optional<VerifiedSession>> = active.hide()
+    val hasVerifiedSession: Boolean get() = active.value?.toNullable() != null
     val savedToken: String get() = readToken()
 
     fun restore(): Single<VerifiedSession> = Single.defer {

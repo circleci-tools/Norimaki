@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
@@ -31,14 +32,12 @@ class APITokenViewLoggingTest {
         val enteredToken = "dummy-entered-token"
         val editedToken = "dummy-edited-token"
         var savedToken = storedToken
-        val model = APITokenViewModel(
-            SessionService(
-                readToken = { savedToken },
-                writeToken = { savedToken = it },
-                createClient = { mockk() },
-                verify = { Single.just(mockk()) }
-            )
-        )
+        val model = APITokenViewModel(SessionService(
+            readToken = { savedToken },
+            writeToken = { savedToken = it },
+            createClient = { mockk() },
+            verify = { Single.just(mockk()) }
+        ))
         val presenter = mockk<APITokenPresenter>(relaxed = true) {
             every { this@mockk.model } returns model
             every { observeVerification(any()) } answers { model.verification.observeForever(firstArg()) }
@@ -46,13 +45,16 @@ class APITokenViewLoggingTest {
         }
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
-            val activity = controller.get()
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
             val form = showForm(activity, presenter)
             val input = form.accessTokenTextView
             assertEquals(storedToken, input.text.toString())
 
             input.setText(enteredToken)
+            assertEquals(enteredToken, input.text.toString())
+            assertEquals(storedToken, savedToken)
             input.setText(editedToken)
+            assertEquals(editedToken, input.text.toString())
             assertEquals(storedToken, savedToken)
             form.submitButton.performClick()
             assertEquals(editedToken, savedToken)
