@@ -9,12 +9,13 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.runTime
 import com.unhappychoice.norimaki.domain.model.statusColor
 import io.reactivex.subjects.PublishSubject
 
 class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAdapter.ViewHolder>() {
-    val onClickItem = PublishSubject.create<BuildStep>()
+    val onClickItem = PublishSubject.create<BuildStepId>()
 
     fun submitSteps(newSteps: List<BuildStep>) {
         val snapshot = newSteps.toList()
@@ -58,7 +59,12 @@ class BuildStepAdapter(val context: Context) : RecyclerView.Adapter<BuildStepAda
         private val time = view.findViewById<TextView>(R.id.time)
 
         init {
-            view.setOnClickListener { boundItem?.let(onClickItem::onNext) }
+            view.setOnClickListener {
+                if (boundItem == null) return@setOnClickListener
+                val position = bindingAdapterPosition
+                val step = steps.getOrNull(position) ?: return@setOnClickListener
+                if (step.actions.isNotEmpty()) onClickItem.onNext(BuildStepId.from(step, position))
+            }
         }
     }
 
