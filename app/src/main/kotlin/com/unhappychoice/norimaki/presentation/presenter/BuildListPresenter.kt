@@ -23,9 +23,11 @@ import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.CompletableSubject
 import io.reactivex.subjects.PublishSubject
 import org.kodein.di.instance
 import org.kodein.di.instanceOrNull
+import java.util.concurrent.TimeUnit
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
@@ -35,14 +37,16 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
+    private var initialLoadSettled = CompletableSubject.create()
+    private var lastPollIds = emptySet<String>()
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     val builds = history.asObservable().map { it.builds }
 
     override fun onAuthenticated() {
+        initialLoadSettled = CompletableSubject.create()
+        lastPollIds = emptySet()
         observePages().addTo(bag)
-        getBuilds()
-
-        pollLatestBuilds()
+        startBuilds()
     }
 
     override fun onSessionEnded() {
@@ -59,7 +63,10 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .singleOrError()
             .toObservable()
             .subscribeOnIoObserveOnUI()
-            .doOnError { isLoading.value = false }
+            .doOnError {
+                isLoading.value = false
+                initialLoadSettled.onComplete()
+            }
             .doOnDispose { isLoading.value = false }
             .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = true)) }
             .addTo(bag)
@@ -67,22 +74,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     fun getBuildsIfUnderfilled(canScroll: Boolean) {
         if (isWorkflow && !canScroll) getBuilds()
-    }
-
-    private fun pollLatestBuilds() {
-        Observable.defer {
-            var lastPollIds: Set<String>? = null
-            polling(BUILD_LIST_POLLING_SECONDS) {
-                history.asObservable().take(1).flatMap { current ->
-                    val knownIds = lastPollIds ?: current.buildIds
-                    fetchLatestBuilds(knownIds, ::getBuildsAPI)
-                }.doOnNext { fetched -> lastPollIds = fetched.mapTo(hashSetOf()) { it.uniqueId() } }
-                    .subscribeOnIoObserveOnUI()
-                    .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
-            }
-        }
-            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
-            .addTo(bag)
     }
 
     fun goToBuildView(build: Build) {
@@ -94,6 +85,29 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
     }
+
+    private fun startBuilds() {
+        getBuilds()
+        initialLoadSettled
+            .andThen(Observable.timer(BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS))
+            .flatMap { polling(BUILD_LIST_POLLING_SECONDS, fetch = ::refreshBuilds) }
+            .subscribeNext { incomingPages.onNext(IncomingPage(it, paginated = false)) }
+            .addTo(bag)
+    }
+
+    private fun refreshBuilds(): Observable<List<Build>> = Observable.just(Unit)
+        .observeOn(AndroidSchedulers.mainThread())
+        .flatMap {
+            if (page.value == 0) {
+                getBuilds()
+                Observable.empty()
+            } else {
+                fetchLatestBuilds(lastPollIds, ::getBuildsAPI)
+                    .subscribeOnIoObserveOnUI()
+                    .doOnNext { lastPollIds = it.mapTo(hashSetOf()) { build -> build.uniqueId() } }
+                    .concatMap { latest -> refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails) }
+            }
+        }
 
     internal fun getBuildDetails(build: Build): Observable<Build> {
         val buildId = BuildId.from(build) ?: return Observable.empty()
@@ -113,9 +127,11 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }.subscribeNext { (incoming, updated) ->
         if (updated !== history.value) history.value = updated
         if (incoming.paginated) {
+            if (page.value == 0) lastPollIds = incoming.builds.mapTo(hashSetOf()) { it.uniqueId() }
             hasMore.value = incoming.builds.isNotEmpty()
             isLoading.value = false
             page.value += 1
+            initialLoadSettled.onComplete()
         }
     }
 

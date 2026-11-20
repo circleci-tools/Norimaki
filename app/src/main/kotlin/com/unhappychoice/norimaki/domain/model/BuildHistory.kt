@@ -7,8 +7,6 @@ internal class BuildHistory private constructor(val builds: List<Build>) {
 
     private val buildsById = builds.associateBy { it.uniqueId() }
 
-    val buildIds: Set<String> get() = buildsById.keys
-
     fun merge(page: List<Build>): BuildHistory? {
         val distinctPage = page.distinctBy { it.uniqueId() }
         if (distinctPage.all { buildsById[it.uniqueId()] == it }) return null
