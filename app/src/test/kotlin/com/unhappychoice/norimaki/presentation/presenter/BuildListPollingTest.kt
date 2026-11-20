@@ -34,7 +34,7 @@ class BuildListPollingTest : DescribeSpec({
             val firstPage = (1000 downTo 981).map(::build)
             val offsets = mutableListOf<Int>()
 
-            fetchLatestBuilds(history) { offset ->
+            fetchLatestBuilds(history.buildIds) { offset ->
                 offsets.add(offset)
                 Observable.just(firstPage.takeIf { offset == 0 }.orEmpty())
             }.test().assertResult(firstPage)
@@ -62,7 +62,7 @@ class BuildListPollingTest : DescribeSpec({
             pagination.hasMore.value shouldBe false
 
             val scheduler = TestScheduler()
-            val polls = polling(10, scheduler = scheduler) { fetchLatestBuilds(history, fetchPage) }
+            val polls = polling(10, scheduler = scheduler) { fetchLatestBuilds(history.buildIds, fetchPage) }
                 .subscribe { history = history.merge(it) ?: history }
             offsets shouldBe listOf(0, 20, 0)
             apiBuilds = allBuilds
@@ -78,7 +78,7 @@ class BuildListPollingTest : DescribeSpec({
             val offsets = mutableListOf<Int>()
             val latest = (40 downTo 1).map(::build)
             val history = checkNotNull(BuildHistory().merge(listOf(build(100))))
-            val pages = fetchLatestBuilds(history) { offset ->
+            val pages = fetchLatestBuilds(history.buildIds) { offset ->
                 offsets.add(offset)
                 Observable.just(latest.drop(offset).take(20))
             }
