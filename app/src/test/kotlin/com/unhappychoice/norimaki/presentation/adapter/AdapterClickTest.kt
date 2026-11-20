@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.adapter
 
 import android.app.Application
 import android.content.Context
+import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -41,11 +42,15 @@ class AdapterClickTest {
 
     @Test
     fun buildStepClickFollowsTheBoundItem() {
-        val adapter = BuildStepAdapter(context)
+        val adapter = BuildStepAdapter(context, Runnable::run)
         val row = rowWithTextViews(R.id.buildTitle, R.id.time)
         row.addView(View(context).apply { id = R.id.statusIndicator })
         val steps = List(10) { BuildStep("Step $it", emptyList()) }
-        assertReboundClicks(row, adapter, adapter::submitSteps, adapter.onClickItem, steps) {
+        val submitSteps: (List<BuildStep>) -> Unit = {
+            adapter.submitSteps(it)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertReboundClicks(row, adapter, submitSteps, adapter.onClickItem, steps) {
             adapter.ViewHolder(row)
         }
     }
