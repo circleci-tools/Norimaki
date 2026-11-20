@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki
 
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -14,6 +15,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
@@ -55,13 +57,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val artifactPickerState by lazy { ViewModelProvider(this)[ArtifactPickerState::class.java] }
+    private var artifactResult: Pair<ArtifactSelection, Uri>? = null
     private val artifactPicker = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { destination ->
         val selection = artifactPickerState.selection
         artifactPickerState.selection = null
         if (destination != null && selection != null) {
-            (getCurrentView() as? ArtifactsView)?.presenter?.save(selection, destination)
+            artifactResult = selection to destination
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) savePickedArtifact()
         }
     }
 
@@ -112,11 +116,16 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
+        if (artifactPickerState.selection == null) {
+            artifactPickerState.selection = savedInstanceState?.getBundle(ARTIFACT_SELECTION)
+                ?.let(ArtifactSelection::restore)
+        }
         setupView()
     }
 
     override fun onPostResume() {
         super.onPostResume()
+        savePickedArtifact()
         if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus, ::isTokenScreenVisible)
@@ -134,6 +143,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        artifactPickerState.selection?.let { outState.putBundle(ARTIFACT_SELECTION, it.toBundle()) }
         BundleServiceRunner.getBundleServiceRunner(this).onSaveInstanceState(outState)
         super.onSaveInstanceState(outState)
     }
@@ -149,6 +159,12 @@ class MainActivity : AppCompatActivity() {
         }
         (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
         return true
+    }
+
+    private fun savePickedArtifact() {
+        val (selection, destination) = artifactResult ?: return
+        artifactResult = null
+        (getCurrentView() as? ArtifactsView)?.presenter?.save(selection, destination)
     }
 
     private fun setupView() {
@@ -194,6 +210,10 @@ class MainActivity : AppCompatActivity() {
             .install()
 
     private fun getCurrentView(): View? = binding.containerView.getChildAt(0)
+
+    private companion object {
+        const val ARTIFACT_SELECTION = "artifact_selection"
+    }
 }
 
 internal class ArtifactPickerState : ViewModel() {

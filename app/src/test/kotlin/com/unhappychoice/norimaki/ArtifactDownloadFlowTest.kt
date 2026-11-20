@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.Looper
 import android.view.View
 import android.widget.Button
@@ -17,6 +18,7 @@ import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.ArtifactsView
 import flow.Flow
+import io.mockk.mockk
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import java.io.File
@@ -77,6 +79,34 @@ class ArtifactDownloadFlowTest {
         assertTrue(list.isEnabled)
         assertEquals(View.GONE, progress.visibility)
         assertEquals(activity.getString(R.string.artifact_saved), ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test
+    fun savesTheSelectedArtifactAfterProcessRecreationAndSessionRestoration() {
+        val savedState = Bundle()
+        val original = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = original.get()
+        val app = activity.application as ArtifactDownloadTestApplication
+        activity.openArtifacts()
+        val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
+        val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
+        original.pause().stop().saveInstanceState(savedState).destroy()
+        val verification = app.resetSession()
+
+        Robolectric.buildActivity(MainActivity::class.java).setup(savedState).use { recreated ->
+            val restored = recreated.get()
+            assertEquals(ArtifactsScreen(buildId), Flow.get(restored).history.top<Any>())
+            restored.deliverDestination(picker, destination)
+            flushIo()
+            assertTrue(app.requests.isEmpty())
+
+            verification.onSuccess(mockk())
+            flushIo()
+
+            assertArrayEquals(app.bytes, destination.readBytes())
+            assertEquals("https://dl.circleci.com/file", app.requests.single().url.toString())
+            assertEquals("test-token", app.requests.single().header("Circle-Token"))
+        }
     }
 
     @Test
@@ -193,17 +223,21 @@ class ArtifactDownloadFlowTest {
         Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
             val activity = controller.get()
             val app = activity.application as ArtifactDownloadTestApplication
-            Flow.get(activity).set(BuildScreen(buildId))
-            finishTransition()
-            val menu = PopupMenu(activity, activity.binding.toolbar).menu
-            activity.onCreateOptionsMenu(menu)
-            activity.onOptionsItemSelected(menu.findItemByTitle(activity.getString(R.string.artifacts)))
-            finishTransition()
-
-            assertEquals(ArtifactsScreen(buildId), Flow.get(activity).history.top<Any>())
-            assertEquals("Artifacts · repo #42", activity.supportActionBar?.title)
+            activity.openArtifacts()
             test(activity, app)
         }
+    }
+
+    private fun MainActivity.openArtifacts() {
+        Flow.get(this).set(BuildScreen(buildId))
+        finishTransition()
+        val menu = PopupMenu(this, binding.toolbar).menu
+        onCreateOptionsMenu(menu)
+        onOptionsItemSelected(menu.findItemByTitle(getString(R.string.artifacts)))
+        finishTransition()
+
+        assertEquals(ArtifactsScreen(buildId), Flow.get(this).history.top<Any>())
+        assertEquals("Artifacts · repo #42", supportActionBar?.title)
     }
 
     private fun MainActivity.selectArtifact(

@@ -2,12 +2,14 @@ package com.unhappychoice.norimaki
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Artifact
+import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.testSession
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
+import io.reactivex.subjects.SingleSubject
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -15,18 +17,25 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.kodein.di.DI
 import org.kodein.di.bind
+import org.kodein.di.provider
 import org.kodein.di.singleton
 
 class ArtifactDownloadTestApplication : NorimakiApplication() {
     val bytes = byteArrayOf(0, 42, -1)
     val requests = mutableListOf<Request>()
 
+    private var session: SessionService? = null
+
     override val module by lazy {
         DI {
             extend(super.module, allowOverride = true)
-            bind<SessionService>(overrides = true) with singleton { testSession(api) }
+            bind<SessionService>(overrides = true) with provider { session ?: testSession(api).also { session = it } }
             bind<ArtifactDownloader>(overrides = true) with singleton { ArtifactDownloader(http) }
         }
+    }
+
+    fun resetSession(): SingleSubject<User> = SingleSubject.create<User>().also { verification ->
+        session = SessionService({ "test-token" }, {}, { api }, { verification })
     }
 
     private val api = mockk<CircleCIAPIClientV1_1> {

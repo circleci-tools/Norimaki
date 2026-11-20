@@ -7,7 +7,6 @@ import com.github.unhappychoice.circleci.v1.response.Artifact
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
-import com.unhappychoice.norimaki.domain.service.VerifiedSession
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.ArtifactsView
@@ -24,9 +23,17 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
     private val downloader: ArtifactDownloader by instance()
     private var state: ArtifactListState = ArtifactListState.Loading
     private var downloading = false
+    private var pendingSave: Pair<ArtifactSelection, Uri>? = null
 
-    override fun onAuthenticated() = load()
+    override fun onAuthenticated() {
+        val result = pendingSave
+        pendingSave = null
+        result?.let { (selection, destination) -> save(selection, destination) }
+        load()
+    }
+
     override fun onSessionEnded() {
+        pendingSave = null
         downloading = false
         view?.setDownloading(false)
         show(ArtifactListState.Failed)
@@ -55,12 +62,17 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
     }
 
     internal fun save(selection: ArtifactSelection, destination: Uri) {
-        val verified = account ?: return
-        if (selection.session !== verified || selection.buildId != buildId || downloading) return
+        if (selection.buildId != buildId || downloading) return
+        val verified = account
+        if (verified == null) {
+            if (selection.isRestored) pendingSave = selection to destination
+            return
+        }
+        if (!selection.matches(verified)) return
         val resolver = activity.contentResolver
         downloading = true
         view?.setDownloading(true)
-        downloader.download(selection.artifact.url, verified.token, { deleteDocument(resolver, destination) }) {
+        downloader.download(selection.url, verified.token, { deleteDocument(resolver, destination) }) {
             resolver.openOutputStream(destination, "w") ?: throw IOException("Could not open destination")
         }
             .subscribeOn(Schedulers.io())
@@ -92,8 +104,4 @@ internal sealed interface ArtifactListState {
     data object Loading : ArtifactListState
     data object Failed : ArtifactListState
     data class Loaded(val artifacts: List<Artifact>) : ArtifactListState
-}
-
-internal class ArtifactSelection(val buildId: BuildId, val artifact: Artifact, val session: VerifiedSession) {
-    val filename: String get() = artifact.path.substringAfterLast('/').ifBlank { "artifact" }
 }
