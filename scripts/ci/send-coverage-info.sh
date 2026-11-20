@@ -1,4 +1,8 @@
-#! /bin/bash
+#!/bin/bash
+set +x
 set -eu
 
-bash <(curl -s https://codecov.io/bash) -t 401f65aa-84da-46b2-b5a6-a39982425cd0
+: "${CODECOV_TOKEN:?Set CODECOV_TOKEN in CircleCI project environment variables}"
+
+uploader=$(curl -fsSL https://codecov.io/bash)
+bash -s -- -Z <<< "$uploader"

@@ -58,6 +58,9 @@ jobs:
           name: Test release tag validation
           command: bash scripts/ci/test-release-tag.sh
       - run:
+          name: Test coverage upload script
+          command: bash scripts/ci/test-send-coverage-info.sh
+      - run:
           name: Send coverage
           command: ./scripts/ci/send-coverage-info.sh
   deploy:
