@@ -2,15 +2,16 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.BuildViewBinding
-import com.unhappychoice.norimaki.domain.model.projectName
+import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.BuildStepAdapter
@@ -51,6 +52,14 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
+        presenter.buildLoadFailed.asObservable()
+            .subscribeNext { failed ->
+                binding.buildLoadError.visibility = if (failed) View.VISIBLE else View.GONE
+            }
+            .addTo(bag)
+        binding.retryBuildLoad.setOnClickListener {
+            if (presenter.buildLoadFailed.value) presenter.pollBuild()
+        }
 
         binding.stepsView.adapter = adapter
         binding.stepsView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
@@ -65,6 +74,10 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
             .addTo(bag)
     }
 
+    internal fun showBuild(build: Build) {
+        updateScreenTitle(presenter.activity, build.revisionString())
+    }
+
     override fun onDetachedFromWindow() {
         cacheClearDialog?.dismiss()
         presenter.dropView(this)
@@ -74,7 +87,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     private fun confirmCacheClearAndRebuild() {
         if (cacheClearDialog != null) return
 
-        val message = context.getString(R.string.clear_project_cache_message, presenter.build.projectName())
+        val message = context.getString(R.string.clear_project_cache_message, presenter.projectName)
         cacheClearDialog = AlertDialog.Builder(context)
             .setTitle(R.string.clear_project_cache_and_rebuild)
             .setMessage(message)

@@ -4,10 +4,14 @@ import android.app.Activity
 import android.content.DialogInterface
 import android.os.Looper
 import android.view.MenuItem
+import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupMenu
 import android.widget.TextView
+import androidx.appcompat.app.ActionBar
 import androidx.appcompat.app.AlertDialog
+import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
@@ -36,11 +40,43 @@ class BuildViewTest {
     private val presenter = mockk<BuildPresenter>(relaxUnitFun = true) {
         every { hasWorkflow() } returns false
         every { steps } returns Variable(emptyList())
-        every { build } returns mockk {
-            every { vcsUrl } returns "https://github.com/owner/repo"
-            every { username } returns "owner"
-            every { reponame } returns "repo"
+        every { projectName } returns "github/owner/repo"
+        every { buildLoadFailed } returns Variable(false)
+    }
+
+    @Test
+    fun retriesLoadingTheBuildAfterFailure() = withBuildView { _, view ->
+        val failed = presenter.buildLoadFailed
+        val error = view.findViewById<View>(R.id.buildLoadError)
+        val retry = view.findViewById<View>(R.id.retryBuildLoad)
+        assertEquals(View.GONE, error.visibility)
+        retry.performClick()
+        verify(exactly = 0) { presenter.pollBuild() }
+
+        failed.value = true
+        assertEquals(View.VISIBLE, error.visibility)
+        retry.performClick()
+        verify(exactly = 1) { presenter.pollBuild() }
+
+        failed.value = false
+        assertEquals(View.GONE, error.visibility)
+    }
+
+    @Test
+    fun showsTheLoadedBuildTitleInTheActionBar() = withBuildView { _, view ->
+        val actionBar = mockk<ActionBar>(relaxed = true)
+        val host = mockk<MainActivity> { every { supportActionBar } returns actionBar }
+        every { presenter.activity } returns host
+        val build = mockk<Build> {
+            every { branch } returns "main"
+            every { buildNum } returns 42
+            every { vcsRevision } returns "abcdef123"
         }
+
+        view.showBuild(build)
+
+        assertEquals("main #42 (abcdef)", view.screenTitle)
+        verify { actionBar.title = "main #42 (abcdef)" }
     }
 
     @Test
