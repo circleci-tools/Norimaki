@@ -8,6 +8,7 @@ import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.BuildViewBinding
 import com.unhappychoice.norimaki.domain.model.revisionString
 import com.unhappychoice.norimaki.extension.subscribeNext
@@ -31,6 +32,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onCreateOptionsMenu(menu: Menu?) {
         menu?.add(Menu.NONE, MenuResource.Rebuild.id, Menu.NONE, "Rebuild")
         menu?.add(Menu.NONE, MenuResource.RebuildWithoutCache.id, Menu.NONE, "Rebuild without cache")
+        menu?.add(Menu.NONE, MenuResource.Artifacts.id, Menu.NONE, R.string.artifacts)
         if (presenter.hasWorkflow()) menu?.add(Menu.NONE, MenuResource.Workflow.id, Menu.NONE, "Show workflow jobs")
     }
 
@@ -38,12 +40,13 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         when (item?.itemId) {
             MenuResource.Rebuild.id -> presenter.rebuild()
             MenuResource.RebuildWithoutCache.id -> presenter.rebuildWithoutCache()
+            MenuResource.Artifacts.id -> presenter.goToArtifactsScreen()
             MenuResource.Workflow.id -> presenter.goToWorkflowScreen()
         }
     }
 
     private enum class MenuResource(val id: Int) {
-        Rebuild(0), RebuildWithoutCache(1), Workflow(2)
+        Rebuild(0), RebuildWithoutCache(1), Workflow(2), Artifacts(3)
     }
 
     override fun onAttachedToWindow() {
