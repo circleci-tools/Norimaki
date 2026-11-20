@@ -33,7 +33,7 @@ internal class BuildListRequests(
     val builds = history.asObservable().map { it.builds }
 
     private var requestNumber = 0L
-    private var lastPollIds: Set<String>? = null
+    private var lastPollIds = emptySet<String>()
     private val latestRequestByBuild = mutableMapOf<String, Long>()
     private val incoming = PublishSubject.create<Response>().toSerialized()
 
@@ -49,7 +49,7 @@ internal class BuildListRequests(
     }
 
     fun reset() {
-        lastPollIds = null
+        lastPollIds = emptySet()
         latestRequestByBuild.clear()
         page.value = 0
         hasMore.value = true
@@ -60,8 +60,7 @@ internal class BuildListRequests(
     private fun pollLatest(): Observable<Unit> {
         if (page.value == 0) return requestPage(0)
 
-        val knownIds = lastPollIds ?: history.value.builds.mapTo(hashSetOf()) { it.uniqueId() }
-        val refreshed = fetchLatestBuilds(knownIds, fetch)
+        val refreshed = fetchLatestBuilds(lastPollIds, fetch)
             .observeOn(ui)
             .doOnNext { latest -> lastPollIds = latest.mapTo(hashSetOf()) { it.uniqueId() } }
             .concatMap { latest ->
@@ -111,6 +110,7 @@ internal class BuildListRequests(
         update.builds.forEach { latestRequestByBuild[it.uniqueId()] = response.number }
         if (update.history !== history.value) history.value = update.history
         if (response.paginated) {
+            if (page.value == 0) lastPollIds = response.builds.mapTo(hashSetOf()) { it.uniqueId() }
             hasMore.value = response.builds.isNotEmpty()
             isLoading.value = false
             page.value += 1
