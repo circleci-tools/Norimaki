@@ -1,9 +1,11 @@
 package com.unhappychoice.norimaki.infrastructure.output
 
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
@@ -127,6 +129,49 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchFinalRawOutput()") {
+        listOf(206, 503, 204).forEach { finalStatus ->
+            it("streams the remaining final ranges in order or reports a load failure with HTTP $finalStatus") {
+                val scheduler = TestScheduler()
+                val finished = PublishSubject.create<Build>()
+                val ranges = mutableListOf<String?>()
+                val live = "a".repeat(100)
+                val log = live + "b".repeat(99) + "猫" + "c".repeat(98)
+                val bytes = log.toByteArray()
+                val client = outputClient { request ->
+                    val range = request.header("Range")
+                    ranges.add(range)
+                    when (range) {
+                        "bytes=0-" -> response(request, 206, live, "bytes 0-99/*")
+                        "bytes=100-" -> response(request, 206, contentRange = "bytes 100-199/300")
+                            .newBuilder().body(bytes.copyOfRange(100, 200).toResponseBody()).build()
+                        "bytes=200-" -> if (finalStatus == 206) {
+                            response(request, 206, contentRange = "bytes 200-299/300")
+                                .newBuilder().body(bytes.copyOfRange(200, 300).toResponseBody()).build()
+                        } else {
+                            response(request, finalStatus)
+                        }
+                        else -> error("Unexpected range: $range")
+                    }
+                }
+                val observer = pollActionOutputs(listOf(url), finished, client::fetchRawOutput, scheduler) { outputUrl, start ->
+                    client.fetchFinalRawOutput(outputUrl, start, scheduler)
+                }.test()
+
+                observer.assertValues(live).assertNotComplete()
+                finished.onNext(mockk<Build>())
+                scheduler.advanceTimeBy(5, SECONDS)
+
+                if (finalStatus == 206) {
+                    observer.assertResult(live, "b".repeat(99), "猫" + "c".repeat(98))
+                    observer.values().joinToString("") shouldBe log
+                    ranges shouldBe listOf("bytes=0-", "bytes=100-", "bytes=200-")
+                } else {
+                    observer.assertFailure(IOException::class.java, live, "b".repeat(99))
+                    ranges shouldBe listOf("bytes=0-", "bytes=100-") + List(3) { "bytes=200-" }
+                }
+            }
+        }
+
         listOf(429, 503, null).forEach { status ->
             it("should emit the remaining bytes once at the same offset after an initial failure with status $status") {
                 val scheduler = TestScheduler()
@@ -238,7 +283,10 @@ class BuildOutputClientTest : DescribeSpec({
             client.fetchRawOutput(url, 3L).map { it.bytes.decodeToString() }.test().assertResult("log")
         }
 
-        listOf(null, "invalid", "bytes 41-43/44", "bytes 43-45/46").forEach { range ->
+        listOf(
+            null, "invalid", "bytes 41-43/44", "bytes 43-45/46",
+            "bytes 42-41/*", "bytes 42-44/44", "bytes 42-45/46"
+        ).forEach { range ->
             it("should reject a partial response with Content-Range ${range ?: "missing"}") {
                 val client = outputClient { response(it, 206, "log", range) }
 
