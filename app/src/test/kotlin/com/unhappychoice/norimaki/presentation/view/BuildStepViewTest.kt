@@ -10,17 +10,18 @@ import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ScrollView
 import android.widget.TextView
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.removeAnsiEscapeCode
 import com.unhappychoice.norimaki.extension.replaceAnsiColorCodeToHtml
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
+import com.unhappychoice.norimaki.presentation.presenter.ActionSnapshot
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.presenter.completedActionLogs
 import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
@@ -49,6 +50,7 @@ class BuildStepViewTest {
     private val log = Variable("")
     private val loadFailed = Variable(false)
     private val searchAvailable = Variable(false)
+    private val canRetry = Variable(false)
 
     @Before
     fun useTestScheduler() {
@@ -65,6 +67,7 @@ class BuildStepViewTest {
     fun searchesRetainedOutputWhileShowingTheLoadError() {
         withView { activity, view ->
             val output = view.findViewById<TextView>(R.id.logText)
+            val retry = view.findViewById<View>(R.id.retryStepLoad)
             val error = view.findViewById<TextView>(R.id.logLoadError)
 
             log.value = "<b>Build output</b>"
@@ -72,6 +75,7 @@ class BuildStepViewTest {
 
             assertEquals("Build output", output.text.toString())
             assertEquals(View.GONE, error.visibility)
+            assertEquals(View.GONE, retry.visibility)
 
             loadFailed.value = true
             searchAvailable.value = true
@@ -89,6 +93,19 @@ class BuildStepViewTest {
 
             assertEquals(6 until 12, highlightedRange(output))
             assertEquals(View.VISIBLE, error.visibility)
+            assertEquals(View.GONE, retry.visibility)
+
+            canRetry.value = true
+            renderUpdates()
+            assertEquals(View.VISIBLE, retry.visibility)
+            retry.performClick()
+            verify(exactly = 1) { view.presenter.retryStepLoad() }
+
+            canRetry.value = false
+            loadFailed.value = false
+            renderUpdates()
+            assertEquals(View.GONE, retry.visibility)
+            assertEquals(View.GONE, error.visibility)
         }
     }
 
@@ -185,7 +202,7 @@ class BuildStepViewTest {
     @Test
     fun searchesLiveLogAfterTheFinalReadCompletesASplitHyperlink() {
         assertSearchOmitsHyperlinkControls { chunks ->
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val parts = chunks.map { it.toByteArray() }
             val partsByOffset = parts.runningFold(0L) { offset, part -> offset + part.size }
                 .zip(parts).toMap()
@@ -198,7 +215,7 @@ class BuildStepViewTest {
 
             scheduler.advanceTimeBy((parts.size - 2) * BuildStepPresenter.LOG_POLLING_SECONDS, SECONDS)
             output.assertNotComplete()
-            finished.onNext(mockk<Build>())
+            finished.onNext(ActionSnapshot(emptyList(), finished = true))
             output.assertComplete().assertNoErrors()
             output.values()
         }
@@ -314,6 +331,7 @@ class BuildStepViewTest {
             every { logString } returns log
             every { logLoadFailed } returns loadFailed
             every { logSearchAvailable } returns searchAvailable
+            every { canRetryStepLoad } returns canRetry
         }
         Robolectric.buildActivity(Activity::class.java).use { controller ->
             val activity = controller.setup().get()

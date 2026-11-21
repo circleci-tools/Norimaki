@@ -2,12 +2,15 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Observer
 import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
 import com.unhappychoice.norimaki.presentation.viewmodel.APITokenViewModel
+import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -40,13 +43,15 @@ class APITokenViewLoggingTest {
             createClient = { mockk() },
             verify = { verification }
         ))
-        val presenter = mockk<APITokenPresenter>(relaxed = true) {
-            every { this@mockk.model } returns model
-            every { observeVerification(any()) } answers { model.verification.observeForever(firstArg()) }
-        }
-
-        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
             val activity = controller.get().apply { setTheme(R.style.AppTheme) }
+            val presenter = mockk<APITokenPresenter>(relaxed = true) {
+                every { this@mockk.model } returns model
+                every { observeVerification(any()) } answers {
+                    model.verification.observe(activity, firstArg<Observer<TokenVerification>>())
+                }
+                every { goToBuildList() } answers { model.reset() }
+            }
             val form = showForm(activity, presenter)
             val input = form.accessTokenTextView
             assertEquals(storedToken, input.text.toString())

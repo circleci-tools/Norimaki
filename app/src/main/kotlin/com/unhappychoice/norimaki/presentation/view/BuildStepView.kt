@@ -32,6 +32,12 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
             .subscribeNext(logSearch::setAvailable)
             .addTo(bag)
 
+        binding.retryStepLoad.setOnClickListener { presenter.retryStepLoad() }
+        presenter.canRetryStepLoad.asObservable()
+            .subscribeOnIoObserveOnUI()
+            .subscribeNext { retry -> binding.retryStepLoad.visibility = if (retry) View.VISIBLE else View.GONE }
+            .addTo(bag)
+
         presenter.logString.asObservable()
             .subscribeOnIoObserveOnUI()
             .subscribeNext { logSearch.render(Html.fromHtml(it)) }
