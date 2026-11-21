@@ -81,7 +81,7 @@ class BuildListPresenterTest : DescribeSpec({
         scheduler.triggerActions()
     }
 
-    fun build(id: String?, number: Int, state: String = "finished"): Build {
+    fun build(id: String?, number: Int, state: String = "finished", result: String = state): Build {
         val workflow = id?.let { mockk<Workflow> { every { workflowId } returns it } }
         return mockk {
             every { workflows } returns workflow
@@ -91,6 +91,7 @@ class BuildListPresenterTest : DescribeSpec({
             every { buildNum } returns number
             every { queuedAt } returns null
             every { lifecycle } returns state
+            every { status } returns result
         }
     }
 
@@ -339,6 +340,35 @@ class BuildListPresenterTest : DescribeSpec({
 
             details.test().assertResult()
             verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
+        }
+
+        it("publishes ten changed build statuses in one history update when the latest page is unchanged") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val latest = listOf(build("target", 11))
+            val running = (1..10).map { build("target", it, state = "running") }
+            val finished = (1..10).map { number ->
+                build("target", number, result = "success").also { response ->
+                    every { api.getBuild("github", "owner", "repo", number) } returns Observable.just(response)
+                }
+            }
+            every { api.pageAt(0) } returns Observable.just(latest)
+            every { api.pageAt(20) } returns Observable.just(running)
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+
+            try {
+                scheduler.triggerActions()
+                presenter.getBuilds()
+                scheduler.triggerActions()
+
+                startPolling(presenter)
+                advanceRefresh()
+
+                builds.assertValues(emptyList(), latest, running + latest, finished + latest)
+                builds.values().last().take(10).map { it.status } shouldBe List(10) { "success" }
+            } finally {
+                builds.dispose()
+            }
         }
 
         it("updates a paginated workflow build from its details without advancing pagination") {
