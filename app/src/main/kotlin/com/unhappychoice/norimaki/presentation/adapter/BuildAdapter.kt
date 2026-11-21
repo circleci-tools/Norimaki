@@ -43,6 +43,8 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
             indicator.setBackgroundColor(build.statusColor())
 
             Glide.with(context).load(build.avatarUrl())
+                .placeholder(R.drawable.ic_avatar_placeholder)
+                .error(R.drawable.ic_avatar_placeholder)
                 .into(author)
         }
 

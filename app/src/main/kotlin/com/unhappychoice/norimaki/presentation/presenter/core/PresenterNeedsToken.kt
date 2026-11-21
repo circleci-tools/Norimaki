@@ -34,9 +34,7 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     }
 
     override fun dropView(view: T) {
-        account = null
-        lifecycle.clear()
-        bag.clear()
+        onViewDropped()
         super.dropView(view)
     }
 
@@ -44,6 +42,12 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
         lifecycle.dispose()
         bag.dispose()
         super.onExitScope()
+    }
+
+    protected open fun onViewDropped() {
+        account = null
+        lifecycle.clear()
+        bag.clear()
     }
 
     protected abstract fun onAuthenticated()

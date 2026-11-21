@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.unhappychoice.norimaki.presentation.view.ArtifactsView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <ProgressBar
+        android:id="@+id/artifact_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal" />
+
+    <TextView
+        android:id="@+id/artifact_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/retry_artifacts"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:text="@string/build_load_retry"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/artifact_downloading"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:padding="16dp"
+        android:text="@string/artifact_downloading"
+        android:visibility="gone" />
+
+    <ListView
+        android:id="@+id/artifact_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="gone" />
+</com.unhappychoice.norimaki.presentation.view.ArtifactsView>

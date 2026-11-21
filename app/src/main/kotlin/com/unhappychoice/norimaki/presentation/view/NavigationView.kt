@@ -4,11 +4,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.v1.response.Project
 import com.gojuno.koptional.None
+import com.gojuno.koptional.Optional
 import com.gojuno.koptional.Some
 import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.MainActivity
@@ -16,6 +18,7 @@ import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.NavigationViewBinding
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.domain.service.VerifiedSession
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.adapter.ProjectAdapter
@@ -53,16 +56,18 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         session.changes
             .switchMap { state ->
                 setProjects(emptyList())
+                binding.projectLoadError.isVisible = false
                 Glide.with(context).clear(binding.profileImageView)
                 val account = state.toNullable()
                 binding.nameView.text = account?.user?.login.orEmpty()
-                if (account == null) return@switchMap Observable.empty<List<Project>>()
+                if (account == null) return@switchMap Observable.empty<Optional<List<Project>>>()
                 Glide.with(context).load(account.user.avatarUrl).into(binding.profileImageView)
-                account.client.getProjects()
-                    .subscribeOnIoObserveOnUI()
-                    .onErrorReturnItem(emptyList())
+                loadProjects(account)
             }
-            .subscribeNext(::setProjects)
+            .subscribeNext { result ->
+                binding.projectLoadError.isVisible = result == None
+                setProjects(result.toNullable().orEmpty())
+            }
             .addTo(bag)
 
         binding.recentView.clicks()
@@ -85,6 +90,17 @@ class NavigationView(context: Context, attr: AttributeSet): AndroidNavigationVie
         bag.clear()
         super.onDetachedFromWindow()
     }
+
+    private fun loadProjects(account: VerifiedSession): Observable<Optional<List<Project>>> =
+        binding.retryProjects.clicks()
+            .startWith(Unit)
+            .switchMap {
+                binding.projectLoadError.isVisible = false
+                Observable.defer { account.client.getProjects() }
+                    .subscribeOnIoObserveOnUI()
+                    .map<Optional<List<Project>>> { Some(it) }
+                    .onErrorReturnItem(None)
+            }
 
     private fun setProjects(projects: List<Project>) {
         adapter.projects.value = projects

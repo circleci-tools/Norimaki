@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
+import com.github.unhappychoice.circleci.v1.response.Project
 import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.domain.service.SessionService
 import io.mockk.every
@@ -13,6 +14,7 @@ import org.kodein.di.bind
 import org.kodein.di.singleton
 
 class BackTestApplication : NorimakiApplication() {
+    var projects: Observable<List<Project>> = Observable.never()
     val verifiedTokens = mutableListOf<String>()
     val rejection: SingleSubject<User> = SingleSubject.create()
 
@@ -28,7 +30,7 @@ class BackTestApplication : NorimakiApplication() {
         val user = mockk<User>(relaxed = true)
         val clients = listOf("saved", "rejected", "replacement").associateWith {
             mockk<CircleCIAPIClientV1_1> {
-                every { getProjects() } returns Observable.never()
+                every { getProjects() } answers { projects }
                 every { getRecentBuilds(any(), any()) } returns Observable.never()
                 every { getProjectBuilds(any(), any(), any(), any(), any()) } returns Observable.never()
             }
