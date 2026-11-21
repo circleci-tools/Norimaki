@@ -8,6 +8,7 @@ import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowHttpException
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.WorkflowView
@@ -165,7 +166,24 @@ class WorkflowPresenterTest : DescribeSpec({
             verify(exactly = 1) { client.jobs("run") }
         }
 
+        it("keeps the held job actionable when approval and refresh both fail") {
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returnsMany listOf(Single.just(listOf(hold)), Single.error(IOException()))
+                every { approve("run", "request") } returns Completable.error(IOException())
+            }
+            val presenter = presenter(client)
+            val updates = presenter.updates.test()
+
+            presenter.approve(hold)
+
+            updates.values().last() shouldBe WorkflowState(
+                listOf(hold), message = R.string.workflow_approval_error, refreshFailed = true
+            )
+            presenter.canApprove(hold) shouldBe true
+        }
+
         listOf(
+            Triple(401, hold, R.string.workflow_approval_permission),
             Triple(403, hold, R.string.workflow_approval_permission),
             Triple(400, resolved, R.string.workflow_approval_resolved),
             Triple(500, hold, R.string.workflow_approval_error)
@@ -188,8 +206,9 @@ class WorkflowPresenterTest : DescribeSpec({
     it("opens build details only for numbered jobs with an active session") {
         val activity = mockk<MainActivity>()
         val session = testSession(mockk())
+        val jobs = SingleSubject.create<List<WorkflowJob>>()
         val presenter = presenter(
-            mockk { every { jobs("run") } returns Single.just(emptyList()) },
+            mockk { every { jobs("run") } returns jobs },
             activity = activity,
             session = session
         )
@@ -199,6 +218,10 @@ class WorkflowPresenterTest : DescribeSpec({
         try {
             every { Flow.get(activity) } returns flow
 
+            presenter.openBuild(job)
+            verify(exactly = 0) { flow.set(any()) }
+
+            jobs.onSuccess(emptyList())
             presenter.openBuild(hold)
             presenter.openBuild(job)
             session.replace("replacement-token").test().assertComplete()
@@ -206,6 +229,25 @@ class WorkflowPresenterTest : DescribeSpec({
 
             verify(exactly = 1) { flow.set(any()) }
             verify { flow.set(BuildScreen(BuildId("github", "owner", "repo", 42))) }
+        } finally {
+            unmockkStatic(Flow::class)
+        }
+    }
+
+    it("opens the token screen to change credentials") {
+        val activity = mockk<MainActivity>()
+        val presenter = presenter(
+            mockk { every { jobs("run") } returns Single.just(emptyList()) },
+            activity = activity
+        )
+        val flow = mockk<Flow>(relaxed = true)
+        mockkStatic(Flow::class)
+        try {
+            every { Flow.get(activity) } returns flow
+
+            presenter.changeAPIToken()
+
+            verify(exactly = 1) { flow.set(ofType<APITokenScreen>()) }
         } finally {
             unmockkStatic(Flow::class)
         }

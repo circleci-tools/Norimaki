@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.ListView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.view.menu.MenuBuilder
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.presentation.presenter.WorkflowPresenter
@@ -80,6 +81,8 @@ class WorkflowViewTest {
             assertTrue(jobs.isEnabled)
             assertTrue(refresh.isEnabled)
             assertEquals(View.GONE, progress.visibility)
+            states.onNext(WorkflowState(jobs = listOf(build, resolved)))
+            assertEquals(View.GONE, message.visibility)
             val adapter = jobs.adapter
             assertTrue(adapter.isEnabled(0))
             assertFalse(adapter.isEnabled(1))
@@ -92,7 +95,16 @@ class WorkflowViewTest {
             assertSame(row, adapter.getView(1, row, jobs))
             assertEquals("success", row.findViewById<TextView>(android.R.id.text2).text.toString())
 
+            val menu = MenuBuilder(activity)
+            view.onCreateOptionsMenu(null)
+            view.onCreateOptionsMenu(menu)
+            view.onOptionsItemSelected(null)
+            view.onOptionsItemSelected(menu.add(0, 100, 0, "Unrelated"))
+            verify(exactly = 0) { presenter.changeAPIToken() }
+            view.onOptionsItemSelected(menu.getItem(0))
+
             refresh.performClick()
+            verify(exactly = 1) { presenter.changeAPIToken() }
             verify(exactly = 1) { presenter.openBuild(build) }
             verify(exactly = 1) { presenter.refresh() }
         }
@@ -131,6 +143,14 @@ class WorkflowViewTest {
             (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_POSITIVE).performClick()
             shadowOf(activity.mainLooper).idle()
 
+            verify(exactly = 1) { presenter.approve(hold) }
+
+            jobs.performItemClick(row, 0, 0)
+            val pendingConfirmation = ShadowDialog.getLatestDialog() as AlertDialog
+            assertTrue(pendingConfirmation.isShowing)
+            activity.setContentView(View(activity))
+            shadowOf(activity.mainLooper).idle()
+            assertFalse(pendingConfirmation.isShowing)
             verify(exactly = 1) { presenter.approve(hold) }
         }
     }

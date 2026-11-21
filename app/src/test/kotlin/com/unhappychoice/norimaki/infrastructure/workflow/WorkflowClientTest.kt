@@ -17,7 +17,7 @@ class WorkflowClientTest : DescribeSpec({
                 requests.add(request)
                 if (requests.size == 1) {
                     response(request, 200, """
-                        {"items":[{"id":"build","name":"test","job_number":42,"status":"success","type":"build"}],
+                        {"items":[{"id":"build","name":"test","job_number":42,"status":"on_hold","type":"build","approval_request_id":"not-an-approval"}],
                          "next_page_token":"a+/="}
                     """.trimIndent())
                 } else {
