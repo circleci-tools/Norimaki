@@ -15,6 +15,7 @@ import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.removeAnsiEscapeCode
 import com.unhappychoice.norimaki.extension.replaceAnsiColorCodeToHtml
+import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.presenter.completedActionLogs
 import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
@@ -189,10 +190,10 @@ class BuildStepViewTest {
             val partsByOffset = parts.runningFold(0L) { offset, part -> offset + part.size }
                 .zip(parts).toMap()
             val output = pollActionOutputs(listOf("action"), finished, { _, offset ->
-                Observable.just(partsByOffset.getValue(offset))
+                Observable.just(RawOutputChunk(partsByOffset.getValue(offset)))
             }, scheduler, fetchFinalOutput = { _, offset ->
                 assertEquals(parts.dropLast(1).sumOf { it.size.toLong() }, offset)
-                Observable.just(parts.last())
+                Observable.just(RawOutputChunk(parts.last()))
             }).test()
 
             scheduler.advanceTimeBy((parts.size - 2) * BuildStepPresenter.LOG_POLLING_SECONDS, SECONDS)

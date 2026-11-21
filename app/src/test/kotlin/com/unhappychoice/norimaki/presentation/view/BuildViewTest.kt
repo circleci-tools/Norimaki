@@ -46,6 +46,21 @@ class BuildViewTest {
     }
 
     @Test
+    fun routesOnlyTheArtifactsMenuItemToArtifactNavigation() = withBuildView { activity, view ->
+        view.onOptionsItemSelected(null)
+        val menu = PopupMenu(activity, view).menu
+        view.onCreateOptionsMenu(menu)
+        menu.add(0, 100, 0, "Unrelated item")
+        val items = (0 until menu.size()).map(menu::getItem)
+        val artifacts = items.single { it.title == activity.getString(R.string.artifacts) }
+        items.filter { it != artifacts }.forEach(view::onOptionsItemSelected)
+        verify(exactly = 0) { presenter.goToArtifactsScreen() }
+
+        view.onOptionsItemSelected(artifacts)
+        verify(exactly = 1) { presenter.goToArtifactsScreen() }
+    }
+
+    @Test
     fun retriesLoadingTheBuildAfterFailure() = withBuildView { _, view ->
         val failed = presenter.buildLoadFailed
         val error = view.findViewById<View>(R.id.buildLoadError)

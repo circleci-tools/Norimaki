@@ -1,6 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
+import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
@@ -20,7 +22,7 @@ class BuildStepOutputTest : DescribeSpec({
             )
             val available = logs.mapValues { (_, lines) -> lines.first() }.toMutableMap()
             val observer = pollActionOutputs(logs.keys.toList(), finished, { url, offset ->
-                Observable.just(available.getValue(url).toByteArray().drop(offset.toInt()).toByteArray())
+                Observable.just(RawOutputChunk(available.getValue(url).toByteArray().drop(offset.toInt()).toByteArray()))
             }, scheduler).test()
 
             observer.assertValues("one\n", "action two\n").assertNotComplete()
@@ -35,6 +37,53 @@ class BuildStepOutputTest : DescribeSpec({
             observer.assertResult("one\n", "action two\n", "one more\n", "two more\n", "one done\n", "two done\n")
         }
 
+        it("shows the limit once and skips both polling and final reads for capped actions") {
+            val scheduler = TestScheduler()
+            val finished = PublishSubject.create<Build>()
+            val requests = mutableListOf<Pair<String, Long>>()
+            val observer = pollActionOutputs(listOf("capped", "other"), finished, { url, offset ->
+                requests += url to offset
+                val chunk = when {
+                    url == "capped" -> RawOutputChunk("prefix".toByteArray(), limitReached = true)
+                    offset == 0L -> RawOutputChunk("other".toByteArray())
+                    else -> RawOutputChunk(byteArrayOf())
+                }
+                Observable.just(chunk)
+            }, scheduler, fetchFinalOutput = { url, offset ->
+                requests += url to offset
+                Observable.just(RawOutputChunk(" done".toByteArray()))
+            }).test()
+
+            scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
+            finished.onNext(mockk<Build>())
+
+            observer.assertResult("prefix" + OUTPUT_LIMIT_MESSAGE, "other", " done")
+            requests shouldBe listOf("capped" to 0L, "other" to 0L, "other" to 5L, "other" to 5L)
+        }
+
+        it("flushes a capped final read once and still drains the next action") {
+            val finished = PublishSubject.create<Build>()
+            val bytes = "é".toByteArray()
+            val observer = pollActionOutputs(
+                listOf("capped", "other"),
+                finished,
+                { _, _ -> Observable.just(RawOutputChunk(byteArrayOf())) },
+                TestScheduler(),
+                fetchFinalOutput = { url, _ ->
+                    val chunk = if (url == "capped") {
+                        RawOutputChunk(bytes.copyOf(1), limitReached = true)
+                    } else {
+                        RawOutputChunk("last line".toByteArray())
+                    }
+                    Observable.just(chunk)
+                }
+            ).test()
+
+            finished.onNext(mockk<Build>())
+
+            observer.assertResult("\uFFFD" + OUTPUT_LIMIT_MESSAGE, "last line")
+        }
+
         it("keeps split UTF-8 sequences separate and completes them during the final drain") {
             val finished = PublishSubject.create<Build>()
             val first = "é".toByteArray()
@@ -44,10 +93,10 @@ class BuildStepOutputTest : DescribeSpec({
             val finalOffsets = mutableListOf<Pair<String, Long>>()
 
             val observer = pollActionOutputs(logs.keys.toList(), finished, { url, _ ->
-                Observable.just(prefixes.getValue(url).toByteArray())
+                Observable.just(RawOutputChunk(prefixes.getValue(url).toByteArray()))
             }, TestScheduler(), fetchFinalOutput = { url, offset ->
                 finalOffsets += url to offset
-                Observable.just(logs.getValue(url).drop(offset.toInt()).toByteArray())
+                Observable.just(RawOutputChunk(logs.getValue(url).drop(offset.toInt()).toByteArray()))
             }).test()
 
             observer.assertNoValues().assertNotComplete()
@@ -66,11 +115,11 @@ class BuildStepOutputTest : DescribeSpec({
             ).mapValues { (_, parts) -> parts.map { it.toByteArray() } }
             var poll = 0
             val observer = pollActionOutputs(chunks.keys.toList(), finished, { url, _ ->
-                Observable.just(chunks.getValue(url)[poll])
+                Observable.just(RawOutputChunk(chunks.getValue(url)[poll]))
             }, scheduler, fetchFinalOutput = { url, offset ->
                 val parts = chunks.getValue(url)
                 offset shouldBe parts.take(2).sumOf { it.size.toLong() }
-                Observable.just(parts.last())
+                Observable.just(RawOutputChunk(parts.last()))
             }).test()
 
             observer.assertValues("before ", "other output\n").assertNotComplete()
@@ -90,11 +139,11 @@ class BuildStepOutputTest : DescribeSpec({
                 Observable.fromCallable {
                     requestedOffsets += url to offset
                     if (url == "first" && offset == 0L) finished.onNext(mockk<Build>())
-                    "$url\n".toByteArray()
+                    RawOutputChunk("$url\n".toByteArray())
                 }
             }, TestScheduler(), fetchFinalOutput = { url, offset ->
                 finalOffsets += url to offset
-                Observable.just("$url done\n".toByteArray())
+                Observable.just(RawOutputChunk("$url done\n".toByteArray()))
             }).test()
 
             observer.assertResult("first\n", "second\n", "first done\n", "second done\n")
@@ -111,10 +160,10 @@ class BuildStepOutputTest : DescribeSpec({
             val observer = pollActionOutputs(listOf("action"), finished, { _, offset ->
                 requestedOffsets += offset
                 Observable.timer(2_500, TimeUnit.MILLISECONDS, scheduler)
-                    .map { log.substring(offset.toInt(), offset.toInt() + 1).toByteArray() }
+                    .map { RawOutputChunk(log.substring(offset.toInt(), offset.toInt() + 1).toByteArray()) }
             }, scheduler, fetchFinalOutput = { _, offset ->
                 finalOffsets += offset
-                Observable.just(log.substring(offset.toInt()).toByteArray())
+                Observable.just(RawOutputChunk(log.substring(offset.toInt()).toByteArray()))
             }).test()
 
             scheduler.advanceTimeTo(61, TimeUnit.SECONDS)
