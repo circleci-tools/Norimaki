@@ -28,8 +28,8 @@ import java.util.concurrent.TimeUnit.SECONDS
 import mortar.MortarScope
 
 class BuildStepPresenterTest : DescribeSpec({
-    fun action(number: Int, end: Date?): BuildAction = mockk {
-        every { index } returns 0
+    fun action(number: Int, end: Date?, actionIndex: Int = 0): BuildAction = mockk {
+        every { index } returns actionIndex
         every { step } returns number
         every { endTime } returns end
     }
@@ -116,6 +116,62 @@ class BuildStepPresenterTest : DescribeSpec({
                     RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
                 }
             }
+        }
+    }
+
+    it("shows actions discovered during live polling and in the terminal snapshot without duplicates") {
+        val scheduler = TestScheduler()
+        val initialStep = BuildStep("Run tests", listOf(action(5, null)))
+        val expandedStep = BuildStep("Run tests", listOf(action(5, null), action(5, null, 1)))
+        val finishedStep = BuildStep("Run tests", (0..2).map { action(5, Date(), it) })
+        val initial = build("running", listOf(initialStep))
+        val expanded = build("running", listOf(expandedStep))
+        val finished = build("running", listOf(finishedStep))
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } returnsMany listOf(
+                Observable.just(initial), Observable.just(initial), Observable.just(expanded), Observable.just(finished)
+            )
+        }
+        val urls = (0..2).map { "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/$it/5" }
+        val output = mockk<BuildOutputClient> {
+            every { fetchRawOutput(urls[0], any()) } answers {
+                Observable.just("first".toByteArray().drop(secondArg<Long>().toInt()).toByteArray())
+            }
+            every { fetchRawOutput(urls[1], any()) } answers {
+                Observable.just(" second".toByteArray().drop(secondArg<Long>().toInt()).toByteArray())
+            }
+            every { fetchFinalRawOutput(urls[0], 5L, any()) } returns Observable.just(" done".toByteArray())
+            every { fetchFinalRawOutput(urls[1], 7L, any()) } returns Observable.empty()
+            every { fetchFinalRawOutput(urls[2], 0L, any()) } returns Observable.just(" third".toByteArray())
+        }
+        val presenter = BuildStepPresenter { output }.apply {
+            di = DI {
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                bind<BuildStepId>() with singleton { BuildStepId(5) }
+                bind<SessionService>() with singleton { testSession(api) }
+            }
+        }
+        val view = mockk<BuildStepView>(relaxUnitFun = true)
+        var scope: MortarScope? = null
+        try {
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            scope = presenter.attachToTestScope(view)
+
+            presenter.logString.value shouldBe "first"
+            scheduler.advanceTimeTo(6, SECONDS)
+            presenter.logString.value shouldBe "first second"
+            scheduler.advanceTimeTo(10, SECONDS)
+            presenter.logString.value shouldBe "first second done third"
+            presenter.logLoadFailed.value shouldBe false
+            verify(exactly = 1) { view.showStep(initialStep) }
+            verify(exactly = 4) { api.getBuild("github", "owner", "repo", 42) }
+        } finally {
+            scope?.destroy()
+            RxAndroidPlugins.reset()
+            RxJavaPlugins.reset()
         }
     }
 
