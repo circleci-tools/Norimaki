@@ -1,11 +1,10 @@
 package com.unhappychoice.norimaki.infrastructure.output
 
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.extension.polling
+import com.unhappychoice.norimaki.presentation.presenter.ActionSnapshot
 import com.unhappychoice.norimaki.presentation.presenter.pollActionOutputs
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
@@ -132,7 +131,7 @@ class BuildOutputClientTest : DescribeSpec({
         listOf(206, 503, 204).forEach { finalStatus ->
             it("streams the remaining final ranges in order or reports a load failure with HTTP $finalStatus") {
                 val scheduler = TestScheduler()
-                val finished = PublishSubject.create<Build>()
+                val finished = PublishSubject.create<ActionSnapshot>()
                 val ranges = mutableListOf<String?>()
                 val live = "a".repeat(100)
                 val log = live + "b".repeat(99) + "猫" + "c".repeat(98)
@@ -158,7 +157,7 @@ class BuildOutputClientTest : DescribeSpec({
                 }.test()
 
                 observer.assertValues(live).assertNotComplete()
-                finished.onNext(mockk<Build>())
+                finished.onNext(ActionSnapshot(listOf(url), finished = true))
                 scheduler.advanceTimeBy(5, SECONDS)
 
                 if (finalStatus == 206) {
