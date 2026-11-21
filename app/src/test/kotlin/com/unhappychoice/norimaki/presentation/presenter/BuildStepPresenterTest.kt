@@ -67,21 +67,26 @@ class BuildStepPresenterTest : DescribeSpec({
     }
 
     describe("BuildStepPresenter running output") {
-        listOf("selected step", "build").forEach { completion ->
+        listOf("selected step", "build", "build with the selected step missing").forEach { completion ->
             it("keeps fetching a same-named running step until the $completion finishes") {
                 val scheduler = TestScheduler()
                 val selected = action(5, null)
                 val first = BuildStep("Run tests", listOf(action(2, Date())))
                 val second = BuildStep("Run tests", listOf(selected))
                 val running = build("running", listOf(first, second))
-                val finished = if (completion == "build") {
-                    build("finished", listOf(first, second))
+                val runningSnapshot = if (completion == "build with the selected step missing") {
+                    build("running", listOf(first))
                 } else {
-                    build("running", listOf(first, BuildStep("Run tests", listOf(action(5, Date())))))
+                    running
+                }
+                val finished = when (completion) {
+                    "build" -> build("finished", listOf(first, second))
+                    "build with the selected step missing" -> build("finished", listOf(first))
+                    else -> build("running", listOf(first, BuildStep("Run tests", listOf(action(5, Date())))))
                 }
                 val api = mockk<CircleCIAPIClientV1_1> {
                     every { getBuild("github", "owner", "repo", 42) } returnsMany
-                        listOf(Observable.just(running), Observable.just(finished))
+                        listOf(Observable.just(runningSnapshot), Observable.just(finished))
                 }
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
