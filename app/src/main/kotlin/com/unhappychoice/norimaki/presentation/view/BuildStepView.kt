@@ -32,6 +32,12 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         binding.logLines.itemAnimator = null
         binding.logLines.adapter = adapter
         presenter.log.changes.subscribeNext(adapter::update).addTo(logSubscriptions)
+
+        binding.retryStepLoad.setOnClickListener { presenter.retryStepLoad() }
+        presenter.canRetryStepLoad.asObservable()
+            .subscribeNext { retry -> binding.retryStepLoad.visibility = if (retry) View.VISIBLE else View.GONE }
+            .addTo(logSubscriptions)
+
         presenter.logLoadFailed.asObservable()
             .subscribeNext { failed -> binding.logLoadError.visibility = if (failed) View.VISIBLE else View.GONE }
             .addTo(logSubscriptions)

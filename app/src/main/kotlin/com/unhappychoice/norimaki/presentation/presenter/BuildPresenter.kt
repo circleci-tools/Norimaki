@@ -10,6 +10,7 @@ import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
@@ -57,6 +58,11 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     fun goToBuildStepScreen(stepId: BuildStepId) {
         if (account == null) return
         goTo(activity, BuildStepScreen(buildId, stepId))
+    }
+
+    fun goToTestResultsScreen() {
+        val loadedBuild = build ?: return
+        goTo(activity, TestResultsScreen(loadedBuild))
     }
 
     fun goToArtifactsScreen() {

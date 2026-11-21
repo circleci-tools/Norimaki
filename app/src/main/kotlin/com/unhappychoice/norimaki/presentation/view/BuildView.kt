@@ -54,6 +54,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
+        binding.testResults.setOnClickListener { presenter.goToTestResultsScreen() }
         presenter.buildLoadFailed.asObservable()
             .subscribeNext { failed ->
                 binding.buildLoadError.visibility = if (failed) View.VISIBLE else View.GONE
@@ -81,6 +82,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     }
 
     internal fun showBuild(build: Build) {
+        binding.testResults.isEnabled = true
         updateScreenTitle(presenter.activity, build.revisionString())
     }
 

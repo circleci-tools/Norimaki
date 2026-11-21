@@ -11,6 +11,7 @@ import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
 import org.junit.Assert.assertEquals
@@ -28,12 +29,14 @@ import org.robolectric.annotation.Config
 class BuildStepViewTest {
     private val log = BuildLog()
     private val loadFailed = Variable(false)
+    private val canRetry = Variable(false)
 
     @Test
     fun rendersBuildStepOutputAndShowsTheErrorWithoutClearingExistingLogs() {
         val presenter = mockk<BuildStepPresenter>(relaxUnitFun = true) {
             every { this@mockk.log } returns this@BuildStepViewTest.log
             every { logLoadFailed } returns loadFailed
+            every { canRetryStepLoad } returns canRetry
         }
 
         Robolectric.buildActivity(Activity::class.java).use { controller ->
@@ -42,6 +45,7 @@ class BuildStepViewTest {
             view.di = DI { bind<BuildStepPresenter>() with singleton { presenter } }
             activity.setContentView(view)
             val output = view.findViewById<RecyclerView>(R.id.logLines)
+            val retry = view.findViewById<View>(R.id.retryStepLoad)
             val error = view.findViewById<TextView>(R.id.logLoadError)
 
             val chunks = PublishSubject.create<String>()
@@ -52,12 +56,26 @@ class BuildStepViewTest {
                 chunks.onNext("put")
                 assertEquals("Build output", renderOutput(output))
                 assertEquals(View.GONE, error.visibility)
+                assertEquals(View.GONE, retry.visibility)
 
                 loadFailed.value = true
 
                 assertEquals(View.VISIBLE, error.visibility)
                 assertEquals(activity.getString(R.string.build_log_load_error), error.text.toString())
                 assertEquals("Build output", renderOutput(output))
+                assertEquals(View.GONE, retry.visibility)
+
+                canRetry.value = true
+
+                assertEquals(View.VISIBLE, retry.visibility)
+                retry.performClick()
+                verify(exactly = 1) { presenter.retryStepLoad() }
+
+                canRetry.value = false
+                loadFailed.value = false
+
+                assertEquals(View.GONE, retry.visibility)
+                assertEquals(View.GONE, error.visibility)
 
                 log.clear()
                 assertEquals(0, output.adapter?.itemCount)

@@ -79,7 +79,7 @@ class BuildViewTest {
     }
 
     @Test
-    fun showsTheLoadedBuildTitleInTheActionBar() = withBuildView { _, view ->
+    fun showsTheLoadedBuildTitleAndEnablesTestResults() = withBuildView { _, view ->
         val actionBar = mockk<ActionBar>(relaxed = true)
         val host = mockk<MainActivity> { every { supportActionBar } returns actionBar }
         every { presenter.activity } returns host
@@ -89,7 +89,14 @@ class BuildViewTest {
             every { vcsRevision } returns "abcdef123"
         }
 
+        val testResults = view.findViewById<View>(R.id.testResults)
+        assertFalse(testResults.isEnabled)
+
         view.showBuild(build)
+
+        assertTrue(testResults.isEnabled)
+        assertTrue(testResults.performClick())
+        verify(exactly = 1) { presenter.goToTestResultsScreen() }
 
         assertEquals("main #42 (abcdef)", view.screenTitle)
         verify { actionBar.title = "main #42 (abcdef)" }

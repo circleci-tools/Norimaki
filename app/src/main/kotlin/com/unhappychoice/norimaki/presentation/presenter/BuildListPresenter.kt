@@ -46,6 +46,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private val history = Variable(BuildHistory())
     private var initialLoadSettled = CompletableSubject.create()
     private var lastPollIds = emptySet<String>()
+    private var buildPolling = BuildListPolling(::getBuildsAPI)
     private val incomingPages = PublishSubject.create<IncomingPage>().toSerialized()
     private var pollingRegistration: Disposable? = null
     private var hasStartedPolling = false
@@ -59,6 +60,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     override fun onSessionEnded() {
         initialLoadSettled = CompletableSubject.create()
         lastPollIds = emptySet()
+        buildPolling = BuildListPolling(::getBuildsAPI)
         hasStartedPolling = false
         canRetryPage.value = false
         isLoading.value = false
@@ -150,7 +152,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             if (page.value == 0) {
                 loadPage()
             } else {
-                fetchLatestBuilds(lastPollIds, ::getBuildsAPI)
+                buildPolling.fetchLatestBuilds(lastPollIds)
                     .subscribeOnIoObserveOnUI()
                     .concatMap { latest ->
                         val pollIds = latest.mapTo(hashSetOf()) { it.uniqueId() }

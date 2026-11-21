@@ -28,6 +28,11 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
         holder.bind(getItem(position))
     }
 
+    override fun onViewAttachedToWindow(holder: ViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        holder.refreshElapsedTime()
+    }
+
     override fun onViewRecycled(holder: ViewHolder) {
         holder.clearBoundItem()
         super.onViewRecycled(holder)
@@ -39,13 +44,18 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
             repositoryTitle.text = build.repositoryWithWorkflowString()
             branchTitle.text = build.revisionString()
             commitTitle.text = build.subject
-            createdAt.text = build.queuedAt?.getTimeAgo()
+            refreshElapsedTime()
             indicator.setBackgroundColor(build.statusColor())
 
             Glide.with(context).load(build.avatarUrl())
                 .placeholder(R.drawable.ic_avatar_placeholder)
                 .error(R.drawable.ic_avatar_placeholder)
                 .into(author)
+        }
+
+        internal fun refreshElapsedTime() {
+            val label = boundItem?.queuedAt?.getTimeAgo()
+            if (createdAt.text.toString() != label.orEmpty()) createdAt.text = label
         }
 
         fun clearBoundItem() {

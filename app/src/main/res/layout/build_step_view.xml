@@ -15,6 +15,14 @@
         android:text="@string/build_log_load_error"
         android:visibility="gone" />
 
+    <Button
+        android:id="@+id/retryStepLoad"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/horizontal_margin"
+        android:text="@string/build_load_retry"
+        android:visibility="gone" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/logLines"
         android:layout_width="match_parent"
