@@ -8,6 +8,8 @@ import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
+import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
+import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -86,9 +88,9 @@ class BuildStepPresenterTest : DescribeSpec({
                 val output = mockk<BuildOutputClient> {
                     val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(byteArrayOf(secondArg<Long>().toByte()))
+                        Observable.just(RawOutputChunk(byteArrayOf(secondArg<Long>().toByte())))
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(byteArrayOf(100))
+                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(RawOutputChunk(byteArrayOf(100)))
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
@@ -157,6 +159,60 @@ class BuildStepPresenterTest : DescribeSpec({
                 verify(exactly = 1) { view.showStep(finishedStep) }
                 presenter.logLoadFailed.value shouldBe false
                 presenter.logString.value shouldBe (if (outputFails) "<br>[Some output could not be loaded.]<br>" else "done")
+            } finally {
+                scope?.destroy()
+                RxAndroidPlugins.reset()
+                RxJavaPlugins.reset()
+            }
+        }
+    }
+
+    listOf(false, true).forEach { outputFails ->
+        it("preserves earlier live output when the final read fails: $outputFails") {
+            val scheduler = TestScheduler()
+            val runningStep = BuildStep("Run tests", listOf(action(5, null)))
+            val finishedStep = BuildStep("Run tests", listOf(action(5, Date())))
+            val runningBuild = build("running", listOf(runningStep))
+            val finishedBuild = build("finished", listOf(finishedStep))
+            val api = mockk<CircleCIAPIClientV1_1> {
+                every { getBuild("github", "owner", "repo", 42) } returnsMany
+                    listOf(Observable.just(runningBuild), Observable.just(runningBuild), Observable.just(finishedBuild))
+            }
+            val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
+            val output = mockk<BuildOutputClient> {
+                every { fetchRawOutput(url, 0L) } returns Observable.just(RawOutputChunk("first".toByteArray()))
+                every { fetchRawOutput(url, 5L) } returns Observable.just(RawOutputChunk(byteArrayOf()))
+                every { fetchFinalRawOutput(url, 5L, any()) } returns if (outputFails) {
+                    Observable.error(IOException("Final output unavailable"))
+                } else {
+                    Observable.just(RawOutputChunk(" last".toByteArray(), limitReached = true))
+                }
+            }
+            val presenter = BuildStepPresenter { output }.apply {
+                di = DI {
+                    bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                    bind<BuildStepId>() with singleton { BuildStepId(5) }
+                    bind<SessionService>() with singleton { testSession(api) }
+                }
+            }
+            val view = mockk<BuildStepView>(relaxUnitFun = true)
+            var scope: MortarScope? = null
+
+            try {
+                RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+                RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+                RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+
+                scope = presenter.attachToTestScope(view)
+                verify(exactly = 1) { view.showStep(runningStep) }
+                presenter.logString.value shouldBe "first"
+                scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, SECONDS)
+
+                verify(exactly = 1) { output.fetchFinalRawOutput(url, 5L, any()) }
+                presenter.logLoadFailed.value shouldBe outputFails
+                val expected = if (outputFails) "first" else "first last" + OUTPUT_LIMIT_MESSAGE.replace("\n", "<br>")
+                presenter.logString.value shouldBe expected
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
