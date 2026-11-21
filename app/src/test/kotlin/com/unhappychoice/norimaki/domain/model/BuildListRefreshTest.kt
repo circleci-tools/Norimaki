@@ -8,6 +8,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.schedulers.TestScheduler
+import io.reactivex.subjects.PublishSubject
 import java.util.concurrent.TimeUnit
 
 class BuildListRefreshTest : DescribeSpec({
@@ -20,15 +21,25 @@ class BuildListRefreshTest : DescribeSpec({
             verifyPolling(initiallyOnFirstPage = true)
         }
 
-        it("refreshes other missing builds when a detail request fails") {
-            val unavailable = build(1, "running")
-            val running = build(2, "running")
-            val finished = build(2, "finished", "success")
-            val latest = listOf(build(3, "running"))
+        it("publishes the latest page before details finish and batches successes around a failure") {
+            val running = (1..3).map { build(it, "running") }
+            val firstFinished = build(1, "finished", "success")
+            val lastFinished = build(3, "finished", "success")
+            val latest = listOf(build(4, "running"))
+            val pending = PublishSubject.create<Build>()
 
-            refreshBuildList(listOf(unavailable, running), latest, null) {
-                if (it == unavailable) Observable.error(IllegalStateException()) else Observable.just(finished)
-            }.test().assertResult(latest, listOf(finished))
+            val updates = refreshBuildList(running, latest, null) {
+                when (it.buildNum) {
+                    1 -> Observable.just(firstFinished)
+                    2 -> Observable.error(IllegalStateException())
+                    else -> pending
+                }
+            }.test()
+
+            updates.assertValues(latest).assertNotComplete()
+            pending.onNext(lastFinished)
+            pending.onComplete()
+            updates.assertResult(latest, listOf(firstFinished, lastFinished))
         }
     }
 })
