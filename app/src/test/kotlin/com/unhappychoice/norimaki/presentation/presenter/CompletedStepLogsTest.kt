@@ -48,21 +48,31 @@ class CompletedStepLogsTest {
             }
         }
         val previousIo = RxJavaPlugins.getIoSchedulerHandler()
+        val previousComputation = RxJavaPlugins.getComputationSchedulerHandler()
         val previousMain = RxAndroidPlugins.getOnMainThreadSchedulerHandler()
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+        RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
         var scope: MortarScope? = null
         try {
             scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))
 
+            val log = presenter.log
             assertEquals(
-                "first output<br>[Some output could not be loaded.]<br>" +
-                    "accepted<br>[Action output limit reached.]<br>last output",
-                presenter.logString.value
+                listOf(
+                    "first output",
+                    "[Some output could not be loaded.]",
+                    "accepted",
+                    "[Action output limit reached.]",
+                    "last output"
+                ),
+                (0 until log.lineCount).map { line -> log[line].joinToString("") { it.text } }
             )
+            assertEquals(false, presenter.logLoadFailed.value)
         } finally {
             scope?.destroy()
             RxAndroidPlugins.setMainThreadSchedulerHandler(previousMain)
+            RxJavaPlugins.setComputationSchedulerHandler(previousComputation)
             RxJavaPlugins.setIoSchedulerHandler(previousIo)
         }
     }

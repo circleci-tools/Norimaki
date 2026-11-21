@@ -7,10 +7,14 @@ import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
-import com.unhappychoice.norimaki.extension.*
+import com.unhappychoice.norimaki.extension.Utf8StreamDecoder
+import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.polling
+import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
+import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
@@ -32,7 +36,7 @@ class BuildStepPresenter internal constructor(
     private val buildId: BuildId by instance()
     private val stepId: BuildStepId by instance()
 
-    val logString: Variable<String> = Variable("")
+    internal val log = BuildLog()
 
     val logLoadFailed = Variable(false)
 
@@ -48,7 +52,7 @@ class BuildStepPresenter internal constructor(
         val verified = account ?: return
         val client = verified.client
         val outputClient = createOutputClient(verified.token)
-        logString.value = ""
+        log.clear()
         logLoadFailed.value = false
         canRetryStepLoad.value = false
         pollBuildStep(stepId) { buildId.load(client) }
@@ -69,10 +73,7 @@ class BuildStepPresenter internal constructor(
 
     private fun getActions(buildStep: BuildStep, outputClient: BuildOutputClient) {
         val actions = buildStep.actions.mapNotNull { it.outputUrl }
-        completedActionLogs(actions, outputClient::fetchOutput)
-            .subscribeOnIoObserveOnUI()
-            .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
-            .addTo(bag)
+        completedActionLogs(actions, outputClient::fetchOutput).renderLog()
     }
 
     internal fun runningOutput(
@@ -96,14 +97,7 @@ class BuildStepPresenter internal constructor(
         client: CircleCIAPIClientV1_1,
         outputClient: BuildOutputClient
     ) {
-        runningOutput(build, buildStep, client, outputClient)
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread(), true)
-            .subscribeBy(
-                onNext = { appendLog(it) },
-                onError = { logLoadFailed.value = true }
-            )
-            .addTo(bag)
+        runningOutput(build, buildStep, client, outputClient).renderLog()
     }
 
     private fun actionSnapshots(client: CircleCIAPIClientV1_1): Observable<ActionSnapshot> =
@@ -117,8 +111,10 @@ class BuildStepPresenter internal constructor(
             )
         }
 
-    private fun appendLog(log: String) {
-        logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
+    private fun Observable<String>.renderLog() {
+        val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation(), true)
+        log.render(chunks, AndroidSchedulers.mainThread(), onError = { logLoadFailed.value = true })
+            .addTo(bag)
     }
 
     companion object {

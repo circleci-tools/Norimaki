@@ -167,11 +167,12 @@ class BuildStepPresenterTest : DescribeSpec({
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
             scope = presenter.attachToTestScope(view)
 
-            presenter.logString.value shouldBe "first"
+            scheduler.triggerActions()
+            presenter.logLines() shouldBe listOf("first")
             scheduler.advanceTimeTo(6, SECONDS)
-            presenter.logString.value shouldBe "first second"
+            presenter.logLines() shouldBe listOf("first second")
             scheduler.advanceTimeTo(10, SECONDS)
-            presenter.logString.value shouldBe "first second done third"
+            presenter.logLines() shouldBe listOf("first second done third")
             presenter.logLoadFailed.value shouldBe false
             verify(exactly = 1) { view.showStep(initialStep) }
             verify(exactly = 4) { api.getBuild("github", "owner", "repo", 42) }
@@ -212,6 +213,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
             try {
                 RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
                 RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
                 RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
@@ -219,7 +221,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 verify(exactly = 1) { view.showStep(finishedStep) }
                 presenter.logLoadFailed.value shouldBe false
-                presenter.logString.value shouldBe (if (outputFails) "<br>[Some output could not be loaded.]<br>" else "done")
+                presenter.logLines() shouldBe if (outputFails) listOf("", "[Some output could not be loaded.]", "") else listOf("done")
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
@@ -267,13 +269,14 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 scope = presenter.attachToTestScope(view)
                 verify(exactly = 1) { view.showStep(runningStep) }
-                presenter.logString.value shouldBe "first"
+                scheduler.triggerActions()
+                presenter.logLines() shouldBe listOf("first")
                 scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, SECONDS)
 
                 verify(exactly = 1) { output.fetchFinalRawOutput(url, 5L, any()) }
                 presenter.logLoadFailed.value shouldBe outputFails
-                val expected = if (outputFails) "first" else "first last" + OUTPUT_LIMIT_MESSAGE.replace("\n", "<br>")
-                presenter.logString.value shouldBe expected
+                val expected = if (outputFails) "first" else "first last" + OUTPUT_LIMIT_MESSAGE
+                presenter.logLines() shouldBe expected.split('\n')
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
@@ -330,7 +333,8 @@ class BuildStepPresenterTest : DescribeSpec({
             verify(exactly = 1) { view.showStep(selectedStep) }
             failures.assertValues(false, true, false)
             presenter.canRetryStepLoad.value shouldBe false
-            presenter.logString.value shouldBe "Selected step output"
+            scheduler.triggerActions()
+            presenter.logLines() shouldBe listOf("Selected step output")
         } finally {
             scope?.destroy()
             failures.dispose()
@@ -339,3 +343,6 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 })
+
+private fun BuildStepPresenter.logLines(): List<String> =
+    (0 until log.lineCount).map { line -> log[line].joinToString("") { it.text } }
