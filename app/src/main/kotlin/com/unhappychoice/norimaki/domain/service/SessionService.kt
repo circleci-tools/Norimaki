@@ -1,19 +1,40 @@
 package com.unhappychoice.norimaki.domain.service
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
+import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.User
 import com.gojuno.koptional.None
 import com.gojuno.koptional.Optional
 import com.gojuno.koptional.Some
+import com.unhappychoice.norimaki.domain.model.BuildId
 import io.reactivex.Observable
 import io.reactivex.Single
+import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 class VerifiedSession(
     val token: String,
     val user: User,
     val client: CircleCIAPIClientV1_1
-)
+) {
+    internal fun startRebuild(buildId: BuildId, clearCache: Boolean, cancel: Observable<*>): Observable<Build>? {
+        if (!pendingRebuilds.add(buildId)) return null
+        val release: () -> Unit = { pendingRebuilds.remove(buildId) }
+        if (clearCache) return client.rebuildWithoutCache(buildId, cancel = cancel, onFinished = release)
+
+        return Observable.defer {
+            client.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
+        }
+            .subscribeOn(Schedulers.io())
+            .takeUntil(cancel)
+            .doOnError { it.printStackTrace() }
+            .doFinally(release)
+    }
+
+    private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
+}
 
 class SessionService(
     private val readToken: () -> String,

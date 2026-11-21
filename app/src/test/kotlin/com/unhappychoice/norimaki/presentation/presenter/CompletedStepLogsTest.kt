@@ -34,8 +34,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class CompletedStepLogsTest {
     @Test
-    fun displaysSuccessfulDownloadsAroundAnHttpFailure() {
-        val step = BuildStep("Run tests", listOf(action("first"), action("failed"), action("last")))
+    fun displaysSuccessfulDownloadsWithFailureAndLimitNotices() {
+        val step = BuildStep("Run tests", listOf(action("first"), action("failed"), action("capped"), action("last")))
         val build = mockk<Build> { every { steps } returns listOf(step) }
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
@@ -59,7 +59,13 @@ class CompletedStepLogsTest {
 
             val log = presenter.log
             assertEquals(
-                listOf("first output", "[Some output could not be loaded.]", "last output"),
+                listOf(
+                    "first output",
+                    "[Some output could not be loaded.]",
+                    "accepted",
+                    "[Action output limit reached.]",
+                    "last output"
+                ),
                 (0 until log.lineCount).map { line -> log[line].joinToString("") { it.text } }
             )
             assertEquals(false, presenter.logLoadFailed.value)
@@ -92,6 +98,7 @@ class CompletedStepLogsTest {
             val action = request.url.pathSegments.single()
             val (status, body) = when (action) {
                 "failed" -> 503 to "Service Unavailable"
+                "capped" -> 200 to """[{"message":"accepted"},{"message":"${"x".repeat(100)}"}]"""
                 else -> 200 to """[{"message":"$action "},{"message":"output"}]"""
             }
             Response.Builder()
@@ -102,6 +109,6 @@ class CompletedStepLogsTest {
                 .body(body.toResponseBody())
                 .build()
         }.build()
-        return BuildOutputClient(token, client)
+        return BuildOutputClient(token, client, outputByteLimit = 64)
     }
 }
