@@ -6,7 +6,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
 import com.unhappychoice.norimaki.domain.model.BuildId
-import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.refreshBuildList
 import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
@@ -19,7 +18,6 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.Single
@@ -32,17 +30,13 @@ import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.CompletableSubject
 import io.reactivex.subjects.PublishSubject
 import org.kodein.di.instance
-import org.kodein.di.instanceOrNull
 import java.util.concurrent.TimeUnit
 
 class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
-    val canRetryPage = Variable(false)
     val projectName: String by instance()
-    private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
-    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     private val history = Variable(BuildHistory())
     private var initialLoadSettled = CompletableSubject.create()
     private var lastPollIds = emptySet<String>()
@@ -62,7 +56,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         lastPollIds = emptySet()
         buildPolling = BuildListPolling(::getBuildsAPI)
         hasStartedPolling = false
-        canRetryPage.value = false
         isLoading.value = false
         history.value = BuildHistory()
         hasMore.value = true
@@ -73,10 +66,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
         loadPage()
             .subscribeNext(incomingPages::onNext)
             .addTo(bag)
-    }
-
-    fun getBuildsIfUnderfilled(canScroll: Boolean) {
-        if (isWorkflow && !canScroll && !canRetryPage.value) getBuilds()
     }
 
     override fun onViewDropped() {
@@ -121,14 +110,12 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     private fun loadPage(): Observable<IncomingPage> {
         if (account == null || isLoading.value || !hasMore.value) return Observable.empty()
         isLoading.value = true
-        canRetryPage.value = false
         return getBuildsAPI(offset = page.value * BUILD_LIST_PAGE_SIZE)
             .singleOrError()
             .toObservable()
             .subscribeOnIoObserveOnUI()
             .doOnError {
                 isLoading.value = false
-                canRetryPage.value = isWorkflow
                 initialLoadSettled.onComplete()
             }
             .doOnDispose { isLoading.value = false }
@@ -156,7 +143,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
                     .subscribeOnIoObserveOnUI()
                     .concatMap { latest ->
                         val pollIds = latest.mapTo(hashSetOf()) { it.uniqueId() }
-                        refreshBuildList(history.value.builds, latest, workflowId, ::getBuildDetails)
+                        refreshBuildList(history.value.builds, latest, ::getBuildDetails)
                             .map { IncomingPage(it, paginated = false, pollIds = pollIds) }
                     }
             }
@@ -172,8 +159,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
 
     private fun observePages() = incomingPages.concatMapSingle { page ->
         val current = history.value
-        val filter = workflowId.takeIf { page.paginated }
-        Single.fromCallable { current.merge(page.builds.inWorkflow(filter)) ?: current }
+        Single.fromCallable { current.merge(page.builds) ?: current }
             .subscribeOn(Schedulers.computation())
             .observeOn(AndroidSchedulers.mainThread())
             .map { updated -> page to updated }

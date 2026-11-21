@@ -6,12 +6,10 @@ import androidx.lifecycle.LifecycleRegistry
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.User
-import com.github.unhappychoice.circleci.v1.response.Workflow
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
@@ -33,6 +31,7 @@ import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
+import java.util.Date
 import java.util.concurrent.TimeUnit
 
 class BuildListPresenterTest : DescribeSpec({
@@ -59,7 +58,6 @@ class BuildListPresenterTest : DescribeSpec({
 
     fun presenter(
         api: CircleCIAPIClientV1_1,
-        workflowId: String? = "target",
         session: SessionService = testSession(api),
         view: BuildListView = mockk()
     ) = BuildListPresenter().apply {
@@ -67,9 +65,6 @@ class BuildListPresenterTest : DescribeSpec({
             bind<SessionService>() with singleton { session }
             bind<MainActivity>() with singleton { activity }
             bind<String>() with singleton { "github/owner/repo" }
-            workflowId?.let { id ->
-                bind<String>(tag = WorkflowScreen.WORKFLOW_ID_TAG) with singleton { id }
-            }
         }
         scope = attachToTestScope(view)
     }
@@ -81,17 +76,13 @@ class BuildListPresenterTest : DescribeSpec({
         scheduler.triggerActions()
     }
 
-    fun build(id: String?, number: Int, state: String = "finished"): Build {
-        val workflow = id?.let { mockk<Workflow> { every { workflowId } returns it } }
-        return mockk {
-            every { workflows } returns workflow
-            every { vcsUrl } returns "https://github.com/owner/repo"
-            every { username } returns "owner"
-            every { reponame } returns "repo"
-            every { buildNum } returns number
-            every { queuedAt } returns null
-            every { lifecycle } returns state
-        }
+    fun build(number: Int, state: String = "finished"): Build = mockk {
+        every { vcsUrl } returns "https://github.com/owner/repo"
+        every { username } returns "owner"
+        every { reponame } returns "repo"
+        every { buildNum } returns number
+        every { queuedAt } returns Date(number.toLong())
+        every { lifecycle } returns state
     }
 
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
@@ -137,9 +128,9 @@ class BuildListPresenterTest : DescribeSpec({
         it("refetches older builds when polling resumes before the pending results are applied") {
             val owner = PollingLifecycleOwner()
             val api = mockk<CircleCIAPIClientV1_1>()
-            val known = build("target", 1)
-            val missed = build("target", 2)
-            val firstPage = (22 downTo 3).map { build("other", it) }
+            val known = build(1)
+            val missed = build(2)
+            val firstPage = (22 downTo 3).map { build(it) }
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.just(listOf(known)),
                 Observable.just(firstPage)
@@ -162,7 +153,7 @@ class BuildListPresenterTest : DescribeSpec({
             verify(exactly = 2) { api.pageAt(20) }
 
             mergeScheduler.triggerActions()
-            builds.assertValues(emptyList(), listOf(known), listOf(missed, known))
+            builds.assertValues(emptyList(), listOf(known), firstPage + listOf(missed, known))
             builds.dispose()
         }
 
@@ -209,14 +200,13 @@ class BuildListPresenterTest : DescribeSpec({
             val owner = PollingLifecycleOwner()
             val api = mockk<CircleCIAPIClientV1_1>()
             val retry = PublishSubject.create<List<Build>>()
-            val build = build("target", 1)
+            val build = build(1)
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.error(IllegalStateException("Initial page unavailable")),
                 retry,
                 Observable.just(listOf(build))
             )
             val presenter = presenter(api)
-            presenter.canRetryPage.value shouldBe true
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
             presenter.observePolling(owner.lifecycle)
             advanceRefresh()
@@ -232,14 +222,13 @@ class BuildListPresenterTest : DescribeSpec({
             scheduler.triggerActions()
             presenter.builds.take(1).test().assertResult(listOf(build))
             presenter.page.value shouldBe 1
-            presenter.canRetryPage.value shouldBe false
         }
 
-        it("shares a delayed full page with polling even when workflow filtering hides it") {
+        it("waits for a delayed initial page before polling") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val initialResponse = PublishSubject.create<List<Build>>()
-            val firstPage = (40 downTo 21).map { build("other", it) }
-            val olderPage = (20 downTo 1).map { build("other", it) }
+            val firstPage = (40 downTo 21).map { build(it) }
+            val olderPage = (20 downTo 1).map { build(it) }
             every { api.pageAt(0) } returnsMany listOf(initialResponse, Observable.just(firstPage))
             every { api.pageAt(20) } returns Observable.just(olderPage)
             every { api.pageAt(40) } returns Observable.just(emptyList())
@@ -267,8 +256,8 @@ class BuildListPresenterTest : DescribeSpec({
 
         it("retries page zero after an initial failure and resumes refreshing") {
             val api = mockk<CircleCIAPIClientV1_1>()
-            val known = build("target", 1)
-            val latest = build("target", 2)
+            val known = build(1)
+            val latest = build(2)
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.error(IllegalStateException("Initial page unavailable")),
                 Observable.just(listOf(known)),
@@ -278,13 +267,11 @@ class BuildListPresenterTest : DescribeSpec({
             val builds = presenter.builds.test()
             presenter.isLoading.value shouldBe false
             presenter.page.value shouldBe 0
-            presenter.canRetryPage.value shouldBe true
             verify(exactly = 1) { api.pageAt(0) }
 
             startPolling(presenter)
             advanceRefresh()
             presenter.page.value shouldBe 1
-            presenter.canRetryPage.value shouldBe false
             builds.assertValues(emptyList(), listOf(known))
             advanceRefresh()
             builds.assertValues(emptyList(), listOf(known), listOf(latest, known))
@@ -300,11 +287,11 @@ class BuildListPresenterTest : DescribeSpec({
             every { api.pageAt(0) } returns Observable.just(emptyList())
             val session = testSession(api)
             val presenter = presenter(api, session = session)
-            val valid = build("target", 42)
+            val valid = build(42)
             val incomplete = listOf(
-                build("target", 43).apply { every { username } returns null },
-                build("target", 44).apply { every { reponame } returns null },
-                build("target", 45).apply { every { buildNum } returns null }
+                build(43).apply { every { username } returns null },
+                build(44).apply { every { reponame } returns null },
+                build(45).apply { every { buildNum } returns null }
             )
             val flow = mockk<Flow>(relaxed = true)
 
@@ -324,11 +311,11 @@ class BuildListPresenterTest : DescribeSpec({
         }
     }
 
-    describe("build list polling") {
+    describe("project build polling") {
         it("does not fetch build details when the session ends before subscription") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val session = testSession(api)
-            val running = build("target", 1, state = "running")
+            val running = build(1, state = "running")
             every { api.pageAt(0) } returns Observable.just(listOf(running))
             val presenter = presenter(api, session = session)
             scheduler.triggerActions()
@@ -341,12 +328,12 @@ class BuildListPresenterTest : DescribeSpec({
             verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
         }
 
-        it("updates a paginated workflow build from its details without advancing pagination") {
+        it("updates a paginated build from its details without advancing pagination") {
             val api = mockk<CircleCIAPIClientV1_1>()
-            val newest = build("target", 3)
-            val running = build("target", 1, state = "running")
-            val finished = build(null, 1)
-            every { api.pageAt(0) } returns Observable.just(listOf(newest, build("other", 2)))
+            val newest = build(3)
+            val running = build(1, state = "running")
+            val finished = build(1)
+            every { api.pageAt(0) } returns Observable.just(listOf(newest))
             every { api.pageAt(20) } returns Observable.just(listOf(running))
             every { api.getBuild("github", "owner", "repo", 1) } returns Observable.just(finished)
             val presenter = presenter(api)
@@ -356,11 +343,11 @@ class BuildListPresenterTest : DescribeSpec({
                 scheduler.triggerActions()
                 presenter.getBuilds()
                 scheduler.triggerActions()
-                builds.assertValues(emptyList(), listOf(newest), listOf(running, newest))
+                builds.assertValues(emptyList(), listOf(newest), listOf(newest, running))
 
                 startPolling(presenter)
                 advanceRefresh()
-                builds.assertValueAt(3, listOf(finished, newest))
+                builds.assertValueAt(3, listOf(newest, finished))
                 advanceRefresh()
 
                 builds.assertValueCount(4)
@@ -371,16 +358,13 @@ class BuildListPresenterTest : DescribeSpec({
                 builds.dispose()
             }
         }
-    }
 
-    describe("workflow polling") {
         it("uses the latest project page IDs without reading older build IDs") {
             val api = mockk<CircleCIAPIClientV1_1>()
-            val known = build("target", 21)
-            val added = build("target", 41)
-            val older = build("target", 1)
-            var projectBuilds = (40 downTo 22).map { build("other", it) } + known +
-                (20 downTo 2).map { build("other", it) } + older
+            val added = build(41)
+            val firstPage = (40 downTo 21).map { build(it) }
+            val olderPage = (20 downTo 1).map { build(it) }
+            var projectBuilds = firstPage + olderPage
             val offsets = mutableListOf<Int>()
             every { api.pageAt(any()) } answers {
                 val offset = arg<Int>(3)
@@ -392,31 +376,30 @@ class BuildListPresenterTest : DescribeSpec({
             scheduler.triggerActions()
             startPolling(presenter)
             offsets shouldBe listOf(0)
-            builds.assertValues(emptyList(), listOf(known))
+            builds.assertValues(emptyList(), firstPage)
 
             presenter.getBuilds()
             scheduler.triggerActions()
-            clearMocks(older, answers = false)
+            clearMocks(olderPage.last(), answers = false)
             offsets.clear()
             scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
             offsets shouldBe listOf(0)
-            builds.assertValues(emptyList(), listOf(known), listOf(older, known))
-            verify(exactly = 0) { older.buildNum }
+            builds.assertValues(emptyList(), firstPage, firstPage + olderPage)
+            verify(exactly = 0) { olderPage.last().buildNum }
 
             projectBuilds = listOf(added) + projectBuilds
             offsets.clear()
             scheduler.advanceTimeBy(2 * BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
             offsets shouldBe listOf(0, 0)
-            builds.assertValues(emptyList(), listOf(known), listOf(older, known), listOf(added, older, known))
+            builds.assertValues(emptyList(), firstPage, firstPage + olderPage, projectBuilds)
             builds.dispose()
         }
 
-        it("shows fetched workflow builds and fills the gap when polling resumes") {
+        it("shows fetched project builds and fills the gap when polling resumes") {
             val api = mockk<CircleCIAPIClientV1_1>()
-            val known = build("target", 1)
-            val missed = build("target", 2)
-            val newest = build("target", 22)
-            val firstPage = listOf(newest) + (21 downTo 3).map { build("other", it) }
+            val known = build(1)
+            val missed = build(2)
+            val firstPage = (22 downTo 3).map { build(it) }
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.just(listOf(known)),
                 Observable.just(firstPage),
@@ -443,13 +426,13 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.observePolling(owner.lifecycle)
             advanceRefresh()
 
-            builds.assertValues(emptyList(), listOf(known), listOf(newest, known))
+            builds.assertValues(emptyList(), listOf(known), firstPage + known)
 
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
             owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
             scheduler.triggerActions()
 
-            builds.assertValues(emptyList(), listOf(known), listOf(newest, known), listOf(newest, missed, known))
+            builds.assertValues(emptyList(), listOf(known), firstPage + known, firstPage + listOf(missed, known))
             verify(exactly = 3) { api.pageAt(20) }
             verify(exactly = 0) { api.pageAt(40) }
             presenter.page.value shouldBe 2
@@ -458,83 +441,34 @@ class BuildListPresenterTest : DescribeSpec({
         }
     }
 
-    describe("workflow pagination") {
-        it("retries a failed page from an empty workflow list at the same offset") {
+    describe("project build pagination") {
+        it("merges pages and stops requesting builds after an empty page") {
             val api = mockk<CircleCIAPIClientV1_1>()
-            val firstPage = (21 downTo 2).map { build("other", it) }
-            val matchingJob = build("target", 1)
-            every { api.pageAt(0) } returns Observable.just(firstPage)
-            every { api.pageAt(20) } returnsMany listOf(
-                Observable.error(IllegalStateException("Page request failed")),
-                Observable.just(listOf(matchingJob))
-            )
-            val presenter = presenter(api)
-            val builds = presenter.builds.test()
-            scheduler.triggerActions()
-
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.triggerActions()
-            presenter.canRetryPage.value shouldBe true
-            presenter.isLoading.value shouldBe false
-            presenter.hasMore.value shouldBe true
-            presenter.page.value shouldBe 1
-            builds.assertValue(emptyList())
-
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
-            verify(exactly = 1) { api.pageAt(20) }
-
-            presenter.getBuilds()
-            scheduler.triggerActions()
-            presenter.canRetryPage.value shouldBe false
-            presenter.page.value shouldBe 2
-            builds.assertValues(emptyList(), listOf(matchingJob))
-            verify(exactly = 2) { api.pageAt(20) }
-            verify(exactly = 0) { api.pageAt(40) }
-            builds.dispose()
-        }
-
-        it("loads through filtered-out pages and stops after an empty API page") {
-            val api = mockk<CircleCIAPIClientV1_1>()
-            val matchingJob = build("target", 1)
-            every { api.pageAt(0) } returns Observable.just(listOf(build("other", 3)))
-            every { api.pageAt(20) } returns Observable.just(listOf(build("other", 2)))
-            every { api.pageAt(40) } returns Observable.just(listOf(matchingJob))
-            every { api.pageAt(60) } returns Observable.just(listOf(matchingJob))
-            every { api.pageAt(80) } returns Observable.just(emptyList())
+            val latest = build(2)
+            val older = build(1)
+            every { api.pageAt(0) } returns Observable.just(listOf(latest))
+            every { api.pageAt(20) } returns Observable.just(listOf(older))
+            every { api.pageAt(40) } returns Observable.just(emptyList())
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
             scheduler.triggerActions()
-            builds.assertValue(emptyList())
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.triggerActions()
-            builds.assertValue(emptyList())
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.triggerActions()
-            builds.assertValues(emptyList(), listOf(matchingJob))
+            repeat(3) {
+                presenter.getBuilds()
+                scheduler.triggerActions()
+            }
 
-            presenter.getBuildsIfUnderfilled(canScroll = true)
-            verify(exactly = 0) { api.pageAt(60) }
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.triggerActions()
-            presenter.hasMore.value shouldBe true
-            presenter.page.value shouldBe 4
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.triggerActions()
+            builds.values().last().toSet() shouldBe setOf(latest, older)
             presenter.hasMore.value shouldBe false
-            presenter.getBuildsIfUnderfilled(canScroll = false)
-            scheduler.triggerActions()
-            verify(exactly = 0) { api.pageAt(100) }
-            builds.assertValues(emptyList(), listOf(matchingJob))
+            verify(exactly = 0) { api.pageAt(60) }
         }
 
         it("clears loaded builds and discards queued updates when the session changes") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val session = testSession(api)
-            val first = build("target", 2)
+            val first = build(2)
             every { api.pageAt(0) } returns Observable.just(listOf(first))
-            every { api.pageAt(20) } returns Observable.just(listOf(build("target", 1)))
+            every { api.pageAt(20) } returns Observable.just(listOf(build(1)))
             val presenter = presenter(api, session = session)
             val builds = presenter.builds.test()
             startPolling(presenter)
@@ -546,17 +480,9 @@ class BuildListPresenterTest : DescribeSpec({
             advanceRefresh()
 
             verify(exactly = 1) { api.pageAt(0) }
-
             builds.assertValues(emptyList(), listOf(first), emptyList())
             presenter.page.value shouldBe 0
             presenter.isLoading.value shouldBe false
-        }
-
-        it("does not auto-load pages for an unfiltered project") {
-            val api = mockk<CircleCIAPIClientV1_1>()
-            every { api.pageAt(0) } returns Observable.just(listOf(build("other", 3)))
-            presenter(api, workflowId = null).getBuildsIfUnderfilled(canScroll = false)
-            verify(exactly = 0) { api.pageAt(20) }
         }
     }
 })

@@ -19,8 +19,8 @@ import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
-import com.unhappychoice.norimaki.presentation.view.BuildListView
 import com.unhappychoice.norimaki.presentation.view.BuildView
+import com.unhappychoice.norimaki.presentation.view.WorkflowView
 import flow.Flow
 import io.mockk.every
 import io.mockk.mockk
@@ -88,7 +88,7 @@ class ToolbarTransitionTest {
             val container = activity.binding.containerView
             assertEquals(2, container.childCount)
             assertTrue(container.getChildAt(0) is BuildView)
-            assertTrue(container.getChildAt(1) is BuildListView)
+            assertTrue(container.getChildAt(1) is WorkflowView)
             dispatch(activity, changeToken)
             verify(exactly = 0) { api.retryBuild(any(), any(), any(), any()) }
 
