@@ -3,6 +3,8 @@ package com.unhappychoice.norimaki.presentation.view
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -15,15 +17,26 @@ import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.presentation.presenter.WorkflowPresenter
 import com.unhappychoice.norimaki.presentation.presenter.WorkflowState
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
+import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import io.reactivex.disposables.Disposable
 import org.kodein.di.instance
 
-class WorkflowView(context: Context, attr: AttributeSet) : BaseView<WorkflowView>(context, attr) {
+class WorkflowView(context: Context, attr: AttributeSet) : BaseView<WorkflowView>(context, attr), HasMenu {
     override val presenter: WorkflowPresenter by instance()
     private val binding by lazy { WorkflowViewBinding.bind(this) }
     private val adapter = JobsAdapter()
     private var updates: Disposable? = null
     private var confirmation: AlertDialog? = null
+
+    override fun onCreateOptionsMenu(menu: Menu?) {
+        menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem?) {
+        when (item?.itemId) {
+            MenuResource.LogOut.id -> presenter.changeAPIToken()
+        }
+    }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -75,6 +88,10 @@ class WorkflowView(context: Context, attr: AttributeSet) : BaseView<WorkflowView
         adapter.clear()
         adapter.addAll(state.jobs)
         adapter.notifyDataSetChanged()
+    }
+
+    private enum class MenuResource(val id: Int) {
+        LogOut(0)
     }
 
     private inner class JobsAdapter : ArrayAdapter<WorkflowJob>(context, android.R.layout.simple_list_item_2) {

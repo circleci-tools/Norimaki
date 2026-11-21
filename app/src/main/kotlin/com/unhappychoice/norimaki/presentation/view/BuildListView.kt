@@ -6,6 +6,7 @@ import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
+import androidx.core.view.children
 import androidx.recyclerview.widget.GridLayoutManager
 import com.jakewharton.rxbinding3.recyclerview.scrollEvents
 import com.unhappychoice.norimaki.R
@@ -22,6 +23,12 @@ import org.kodein.di.instance
 class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListView>(context, attr), HasMenu {
     override val presenter: BuildListPresenter by instance()
     private val adapter = BuildAdapter(context)
+    private val elapsedTimeRefresh = object : Runnable {
+        override fun run() {
+            refreshElapsedTimes()
+            postDelayed(this, 1_000L)
+        }
+    }
 
     private val binding by lazy {
         BuildListViewBinding.bind(this)
@@ -67,10 +74,20 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .addTo(bag)
 
         presenter.observePolling()
+        postDelayed(elapsedTimeRefresh, 1_000L)
     }
 
     override fun onDetachedFromWindow() {
+        removeCallbacks(elapsedTimeRefresh)
         presenter.dropView(this)
         super.onDetachedFromWindow()
+    }
+
+    private fun refreshElapsedTimes() {
+        val recycler = binding.buildsView
+        if (!recycler.isShown) return
+        recycler.children.forEach { row ->
+            (recycler.getChildViewHolder(row) as BuildAdapter.ViewHolder).refreshElapsedTime()
+        }
     }
 }

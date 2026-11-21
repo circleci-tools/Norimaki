@@ -9,6 +9,7 @@ import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowHttpException
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.WorkflowView
@@ -80,6 +81,10 @@ class WorkflowPresenter(
         val number = job.jobNumber ?: return
         val (vcs, owner, repo) = screen.projectName.split('/')
         goTo(activity, BuildScreen(BuildId(vcs, owner, repo, number)))
+    }
+
+    fun changeAPIToken() {
+        goTo(activity, APITokenScreen())
     }
 
     private fun <T : Any> runRequest(request: Single<T>, errorMessage: Int, onSuccess: (T) -> Unit) {

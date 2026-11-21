@@ -1,11 +1,9 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
@@ -15,7 +13,7 @@ class BuildStepOutputTest : DescribeSpec({
     describe("pollActionOutputs()") {
         it("loads both actions while running and appends each final line once") {
             val scheduler = TestScheduler()
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val logs = mapOf(
                 "first" to listOf("one\n", "one more\n", "one done\n"),
                 "second" to listOf("action two\n", "two more\n", "two done\n")
@@ -31,17 +29,17 @@ class BuildStepOutputTest : DescribeSpec({
             observer.assertValues("one\n", "action two\n", "one more\n", "two more\n")
 
             logs.forEach { (url, lines) -> available[url] = lines.joinToString("") }
-            finished.onNext(mockk<Build>())
+            finished.onNext(ActionSnapshot(emptyList(), finished = true))
             scheduler.advanceTimeBy(10, TimeUnit.SECONDS)
 
             observer.assertResult("one\n", "action two\n", "one more\n", "two more\n", "one done\n", "two done\n")
         }
 
-        it("shows the limit once and skips both polling and final reads for capped actions") {
+        it("discovers new actions after all known actions are capped and never reads capped actions again") {
             val scheduler = TestScheduler()
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val requests = mutableListOf<Pair<String, Long>>()
-            val observer = pollActionOutputs(listOf("capped", "other"), finished, { url, offset ->
+            val observer = pollActionOutputs(listOf("capped"), finished, { url, offset ->
                 requests += url to offset
                 val chunk = when {
                     url == "capped" -> RawOutputChunk("prefix".toByteArray(), limitReached = true)
@@ -54,15 +52,17 @@ class BuildStepOutputTest : DescribeSpec({
                 Observable.just(RawOutputChunk(" done".toByteArray()))
             }).test()
 
-            scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
-            finished.onNext(mockk<Build>())
+            observer.assertValues("prefix" + OUTPUT_LIMIT_MESSAGE).assertNotComplete()
+            finished.onNext(ActionSnapshot(listOf("capped", "other"), finished = false))
+            scheduler.advanceTimeBy(2, TimeUnit.SECONDS)
+            finished.onNext(ActionSnapshot(emptyList(), finished = true))
 
             observer.assertResult("prefix" + OUTPUT_LIMIT_MESSAGE, "other", " done")
             requests shouldBe listOf("capped" to 0L, "other" to 0L, "other" to 5L, "other" to 5L)
         }
 
         it("flushes a capped final read once and still drains the next action") {
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val bytes = "é".toByteArray()
             val observer = pollActionOutputs(
                 listOf("capped", "other"),
@@ -79,13 +79,13 @@ class BuildStepOutputTest : DescribeSpec({
                 }
             ).test()
 
-            finished.onNext(mockk<Build>())
+            finished.onNext(ActionSnapshot(emptyList(), finished = true))
 
             observer.assertResult("\uFFFD" + OUTPUT_LIMIT_MESSAGE, "last line")
         }
 
         it("keeps split UTF-8 sequences separate and completes them during the final drain") {
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val first = "é".toByteArray()
             val second = "あ".toByteArray()
             val prefixes = mapOf("first" to first.take(1), "second" to second.take(2))
@@ -100,20 +100,20 @@ class BuildStepOutputTest : DescribeSpec({
             }).test()
 
             observer.assertNoValues().assertNotComplete()
-            finished.onNext(mockk<Build>())
+            finished.onNext(ActionSnapshot(emptyList(), finished = true))
 
             observer.assertResult("é", "あ")
             finalOffsets shouldBe listOf("first" to 1L, "second" to 2L)
         }
 
         it("drains from the latest offset when completion arrives during a read") {
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val requestedOffsets = mutableListOf<Pair<String, Long>>()
             val finalOffsets = mutableListOf<Pair<String, Long>>()
             val observer = pollActionOutputs(listOf("first", "second"), finished, { url, offset ->
                 Observable.fromCallable {
                     requestedOffsets += url to offset
-                    if (url == "first" && offset == 0L) finished.onNext(mockk<Build>())
+                    if (url == "first" && offset == 0L) finished.onNext(ActionSnapshot(emptyList(), finished = true))
                     RawOutputChunk("$url\n".toByteArray())
                 }
             }, TestScheduler(), fetchFinalOutput = { url, offset ->
@@ -128,7 +128,7 @@ class BuildStepOutputTest : DescribeSpec({
 
         it("starts the final read as soon as a slow batch settles") {
             val scheduler = TestScheduler()
-            val finished = PublishSubject.create<Build>()
+            val finished = PublishSubject.create<ActionSnapshot>()
             val log = "abcdefghijklmnopqrstuvwxyz0123456789"
             val requestedOffsets = mutableListOf<Long>()
             val finalOffsets = mutableListOf<Long>()
@@ -142,7 +142,7 @@ class BuildStepOutputTest : DescribeSpec({
             }).test()
 
             scheduler.advanceTimeTo(61, TimeUnit.SECONDS)
-            finished.onNext(mockk<Build>())
+            finished.onNext(ActionSnapshot(emptyList(), finished = true))
             observer.assertNotComplete()
             finalOffsets shouldBe emptyList()
 

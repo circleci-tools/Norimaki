@@ -34,20 +34,43 @@ class BuildOutputClient(
         }
 
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<RawOutputChunk> =
-        Observable.defer {
-            val url = rawOutputUrl.toHttpUrl()
-            require(url.isCircleCiOrigin()) { "Raw log requests require the CircleCI HTTPS origin" }
-            val remaining = (outputByteLimit - offset).coerceAtLeast(0)
-            if (remaining == 0L) Observable.just(RawOutputChunk(ByteArray(0), limitReached = true))
-            else fetchRawOutput(url, offset, remaining, 0)
-        }.subscribeOn(ioScheduler)
+        fetchRawResponse(rawOutputUrl, offset).map { it.chunk }
 
     fun fetchFinalRawOutput(
         rawOutputUrl: String,
         offset: Long,
         scheduler: Scheduler = Schedulers.io()
-    ): Observable<RawOutputChunk> =
-        fetchRawOutput(rawOutputUrl, offset).retryWhen { errors ->
+    ): Observable<RawOutputChunk> = Observable.defer {
+        var nextOffset = offset
+        var totalLength = offset
+        var complete = false
+        Observable.defer {
+            fetchRawResponse(rawOutputUrl, nextOffset).map { (chunk, responseLength) ->
+                totalLength = maxOf(totalLength, responseLength ?: 0L)
+                if (chunk.bytes.isEmpty() && !chunk.limitReached && nextOffset < totalLength) {
+                    throw IOException("Raw log response ended before byte $totalLength")
+                }
+                nextOffset += chunk.bytes.size
+                complete = chunk.limitReached || nextOffset >= totalLength
+                chunk
+            }.retryFinalRead(scheduler)
+        }.repeatUntil { complete }
+    }
+
+    private fun fetchRawResponse(rawOutputUrl: String, offset: Long): Observable<RawOutputResponse> =
+        Observable.defer {
+            val url = rawOutputUrl.toHttpUrl()
+            require(url.isCircleCiOrigin()) { "Raw log requests require the CircleCI HTTPS origin" }
+            val remaining = (outputByteLimit - offset).coerceAtLeast(0)
+            if (remaining == 0L) {
+                Observable.just(RawOutputResponse(RawOutputChunk(ByteArray(0), limitReached = true)))
+            } else {
+                fetchRawOutput(url, offset, remaining, 0)
+            }
+        }.subscribeOn(ioScheduler)
+
+    private fun <T : Any> Observable<T>.retryFinalRead(scheduler: Scheduler): Observable<T> =
+        retryWhen { errors ->
             errors.zipWith(Observable.range(1, FINAL_RETRIES + 1)) { error, attempt -> error to attempt }
                 .flatMap { (error, attempt) ->
                     if (attempt <= FINAL_RETRIES && isRetryable(error)) {
@@ -82,11 +105,11 @@ class BuildOutputClient(
         offset: Long,
         remaining: Long,
         redirects: Int
-    ): Observable<RawOutputChunk> =
+    ): Observable<RawOutputResponse> =
         execute({ rawClient.newCall(rawOutputRequest(url, offset)) }) { response ->
             val target = response.rawRedirectTarget()
             when {
-                target == null -> Observable.just(rawOutputChunk(response, offset, remaining))
+                target == null -> Observable.just(readRawResponse(response, offset, remaining))
                 !target.isCircleCiOrigin() || redirects == MAX_RAW_REDIRECTS ->
                     throw RawOutputHttpException(response.code)
                 else -> fetchRawOutput(target, offset, remaining, redirects + 1)
@@ -105,23 +128,32 @@ class BuildOutputClient(
             .header("Range", "bytes=$offset-")
             .build()
 
-    private fun rawOutputChunk(response: Response, offset: Long, remaining: Long): RawOutputChunk {
+    private fun readRawResponse(response: Response, offset: Long, remaining: Long): RawOutputResponse {
+        if (response.code == 206) return readPartialOutput(response, offset, remaining)
         val bytes = when {
-            response.code == 206 -> {
-                validatePartialOutput(response, offset)
-                response.body.readPrefix(remaining)
-            }
             response.isSuccessful -> response.body.readPrefix(remaining, offset)
             response.code == 416 && response.header("Content-Range") == "bytes */$offset" -> ByteArray(0)
             else -> throw RawOutputHttpException(response.code)
         }
-        return RawOutputChunk(bytes, limitReached = bytes.size.toLong() == remaining)
+        return RawOutputResponse(RawOutputChunk(bytes, limitReached = bytes.size.toLong() == remaining))
     }
 
-    private fun validatePartialOutput(response: Response, offset: Long) {
+    private fun readPartialOutput(response: Response, offset: Long, remaining: Long): RawOutputResponse {
         val range = response.header("Content-Range").orEmpty()
-        val start = CONTENT_RANGE.matchEntire(range)?.groupValues?.get(1)?.toLongOrNull()
-        if (start != offset) throw IOException("Invalid Content-Range for raw log offset $offset: $range")
+        val values = CONTENT_RANGE.matchEntire(range)?.groupValues
+        val start = values?.get(1)?.toLongOrNull()
+        val end = values?.get(2)?.toLongOrNull()
+        val total = values?.get(3)?.toLongOrNull()
+        if (start != offset || end == null || end < offset || end == Long.MAX_VALUE ||
+            (values[3] != "*" && (total == null || total <= end))
+        ) {
+            throw IOException("Invalid Content-Range for raw log offset $offset: $range")
+        }
+        val bytes = response.body.readPrefix(remaining)
+        if (bytes.size.toLong() != minOf(remaining, end - offset + 1)) {
+            throw IOException("Invalid raw log body length for Content-Range: $range")
+        }
+        return RawOutputResponse(RawOutputChunk(bytes, limitReached = bytes.size.toLong() == remaining), total)
     }
 
     private fun isRetryable(error: Throwable): Boolean = when (error) {
@@ -151,9 +183,11 @@ class BuildOutputClient(
         const val FINAL_RETRIES = 2
         const val MAX_RAW_REDIRECTS = 20
         val RAW_REDIRECT_CODES = setOf(300, 301, 302, 303, 307, 308)
-        val CONTENT_RANGE = Regex("""bytes ([0-9]+)-[0-9]+/(?:[0-9]+|\*)""", RegexOption.IGNORE_CASE)
+        val CONTENT_RANGE = Regex("""bytes ([0-9]+)-([0-9]+)/([0-9]+|\*)""", RegexOption.IGNORE_CASE)
     }
 }
+
+private data class RawOutputResponse(val chunk: RawOutputChunk, val totalLength: Long? = null)
 
 internal class RawOutputHttpException(val status: Int) : IOException("Raw log request failed with HTTP $status")
 

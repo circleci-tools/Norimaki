@@ -339,21 +339,24 @@ class BuildListPresenterTest : DescribeSpec({
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
-            scheduler.triggerActions()
-            presenter.getBuilds()
-            scheduler.triggerActions()
-            builds.assertValues(emptyList(), listOf(newest), listOf(newest, running))
+            try {
+                scheduler.triggerActions()
+                presenter.getBuilds()
+                scheduler.triggerActions()
+                builds.assertValues(emptyList(), listOf(newest), listOf(newest, running))
 
-            startPolling(presenter)
-            advanceRefresh()
-            builds.assertValueAt(3, listOf(newest, finished))
-            advanceRefresh()
+                startPolling(presenter)
+                advanceRefresh()
+                builds.assertValueAt(3, listOf(newest, finished))
+                advanceRefresh()
 
-            builds.assertValueCount(4)
-            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
-            presenter.page.value shouldBe 2
-            presenter.hasMore.value shouldBe true
-            builds.dispose()
+                builds.assertValueCount(4)
+                verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
+                presenter.page.value shouldBe 2
+                presenter.hasMore.value shouldBe true
+            } finally {
+                builds.dispose()
+            }
         }
 
         it("uses the latest project page IDs without reading older build IDs") {
@@ -392,18 +395,19 @@ class BuildListPresenterTest : DescribeSpec({
             builds.dispose()
         }
 
-        it("recovers builds beyond the first page after pagination ends") {
+        it("shows fetched project builds and fills the gap when polling resumes") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val known = build(1)
             val missed = build(2)
             val firstPage = (22 downTo 3).map { build(it) }
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.just(listOf(known)),
-                Observable.just(listOf(known)),
+                Observable.just(firstPage),
                 Observable.just(firstPage)
             )
             every { api.pageAt(20) } returnsMany listOf(
                 Observable.just(emptyList()),
+                Observable.error(IllegalStateException("Backfill request failed")),
                 Observable.just(listOf(missed, known))
             )
             val presenter = presenter(api)
@@ -417,13 +421,19 @@ class BuildListPresenterTest : DescribeSpec({
             scheduler.triggerActions()
             presenter.hasMore.value shouldBe false
 
-            startPolling(presenter)
-            advanceRefresh()
-            advanceRefresh()
+            val owner = PollingLifecycleOwner()
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            presenter.observePolling(owner.lifecycle)
             advanceRefresh()
 
-            builds.assertValues(emptyList(), listOf(known), firstPage + listOf(missed, known))
-            verify(exactly = 2) { api.pageAt(20) }
+            builds.assertValues(emptyList(), listOf(known), firstPage + known)
+
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+            owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            scheduler.triggerActions()
+
+            builds.assertValues(emptyList(), listOf(known), firstPage + known, firstPage + listOf(missed, known))
+            verify(exactly = 3) { api.pageAt(20) }
             verify(exactly = 0) { api.pageAt(40) }
             presenter.page.value shouldBe 2
             presenter.hasMore.value shouldBe false

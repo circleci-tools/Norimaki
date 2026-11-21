@@ -22,6 +22,7 @@ import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class BuildStepPresenter internal constructor(
     private val createOutputClient: (String) -> BuildOutputClient
@@ -35,12 +36,21 @@ class BuildStepPresenter internal constructor(
 
     val logLoadFailed = Variable(false)
 
-    override fun onAuthenticated() {
+    val canRetryStepLoad = Variable(false)
+
+    fun retryStepLoad() {
+        if (canRetryStepLoad.value) loadStep()
+    }
+
+    override fun onAuthenticated() = loadStep()
+
+    private fun loadStep() {
         val verified = account ?: return
         val client = verified.client
         val outputClient = createOutputClient(verified.token)
         logString.value = ""
         logLoadFailed.value = false
+        canRetryStepLoad.value = false
         pollBuildStep(stepId) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
             .subscribeBy(
@@ -49,7 +59,10 @@ class BuildStepPresenter internal constructor(
                     if (step.isFinished()) getActions(step, outputClient)
                     else pollRunningActions(build, step, client, outputClient)
                 },
-                onError = { logLoadFailed.value = true }
+                onError = {
+                    canRetryStepLoad.value = true
+                    logLoadFailed.value = true
+                }
             )
             .addTo(bag)
     }
@@ -71,7 +84,7 @@ class BuildStepPresenter internal constructor(
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
             outputUrls,
-            stepFinished(client),
+            actionSnapshots(client),
             outputClient::fetchRawOutput,
             fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
         )
@@ -93,10 +106,16 @@ class BuildStepPresenter internal constructor(
             .addTo(bag)
     }
 
-    private fun stepFinished(client: CircleCIAPIClientV1_1): Observable<Build> =
+    private fun actionSnapshots(client: CircleCIAPIClientV1_1): Observable<ActionSnapshot> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             buildId.load(client)
-        }.filter { it.isFinished() || stepId.resolve(it.steps)?.isFinished() == true }
+        }.map { build ->
+            val step = stepId.resolve(build.steps)
+            ActionSnapshot(
+                step?.actions.orEmpty().map { build.rawOutputUrl(it) },
+                build.isFinished() || step?.isFinished() == true
+            )
+        }
 
     private fun appendLog(log: String) {
         logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
@@ -136,30 +155,35 @@ internal fun completedActionLogs(
             .onErrorReturnItem("\n[Some output could not be loaded.]\n")
     }
 
+internal data class ActionSnapshot(val outputUrls: List<String>, val finished: Boolean)
+
 internal fun pollActionOutputs(
     outputUrls: List<String>,
-    stepFinished: Observable<Build>,
+    snapshots: Observable<ActionSnapshot>,
     fetchOutput: (String, Long) -> Observable<RawOutputChunk>,
     scheduler: Scheduler = Schedulers.computation(),
     fetchFinalOutput: (String, Long) -> Observable<RawOutputChunk> = fetchOutput
 ): Observable<String> = Observable.defer {
-    val urls = outputUrls.distinct()
-    val decoders = urls.associateWith { Utf8StreamDecoder() }
+    val urls = AtomicReference(outputUrls.toSet())
+    val decoders = mutableMapOf<String, Utf8StreamDecoder>()
     val limitedUrls = mutableSetOf<String>()
     val offsets = mutableMapOf<String, Long>()
     val reading = AtomicBoolean()
+    val stepFinished = snapshots
+        .doOnNext { snapshot -> urls.set(urls.get() + snapshot.outputUrls) }
+        .filter { it.finished }
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
         .filter { reading.compareAndSet(false, true) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = urls.filterNot(limitedUrls::contains).map { url ->
+            val reads = urls.get().filterNot(limitedUrls::contains).map { url ->
                 val read = Observable.defer {
-                    val decoder = decoders.getValue(url)
+                    val decoder = decoders.getOrPut(url) { Utf8StreamDecoder() }
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
                     val chunks = fetch(url, offset).map { chunk ->
-                        offsets[url] = offset + chunk.bytes.size
+                        offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
                         val log = decoder.decode(chunk.bytes)
                         if (chunk.limitReached) {
                             limitedUrls.add(url)
@@ -177,5 +201,4 @@ internal fun pollActionOutputs(
             val batch = Observable.concatDelayError(reads).filter { it.isNotEmpty() }
             if (finishing) batch else batch.doOnComplete { reading.set(false) }
         }
-        .takeUntil { limitedUrls.size == urls.size }
 }
