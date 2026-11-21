@@ -10,6 +10,7 @@ import com.unhappychoice.norimaki.domain.model.projectName
 import com.unhappychoice.norimaki.domain.service.rebuildWithoutCache
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
@@ -60,6 +61,11 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     fun goToBuildStepScreen(stepId: BuildStepId) {
         if (account == null) return
         goTo(activity, BuildStepScreen(buildId, stepId))
+    }
+
+    fun goToArtifactsScreen() {
+        if (account == null) return
+        goTo(activity, ArtifactsScreen(buildId))
     }
 
     fun hasWorkflow(): Boolean = build?.nonBlankWorkflowId != null
