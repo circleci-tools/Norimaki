@@ -20,3 +20,9 @@ for notes_file in "$notes_directory/$track.txt" "$notes_directory/production.txt
         exit 1
     fi
 done
+
+listing_title=$(<app/src/main/play/listings/en-US/title.txt)
+if [[ "$listing_title" != *Norimaki* || ${#listing_title} -gt 30 ]]; then
+    echo "Expected the en-US Play title to contain Norimaki and be at most 30 characters." >&2
+    exit 1
+fi

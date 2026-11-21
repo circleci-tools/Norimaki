@@ -81,6 +81,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var projectNavigation: Disposable? = null
+    private var menuOwner: HasMenu? = null
+    private var screenMenuItems = emptyList<MenuItem>()
     private val session by lazy {
         val service: SessionService by module.instance()
         service
@@ -149,16 +151,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        (getCurrentView() as? HasMenu)?.onCreateOptionsMenu(menu)
+        val existingItems = menu?.children?.toList().orEmpty()
+        menuOwner?.onCreateOptionsMenu(menu)
+        screenMenuItems = menu?.children?.filter { item -> existingItems.none { it === item } }?.toList().orEmpty()
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            android.R.id.home -> goBackFromCurrentScreen()
+        if (item.itemId == android.R.id.home) {
+            goBackFromCurrentScreen()
+            return true
         }
-        (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
+        val owner = menuOwner ?: return super.onOptionsItemSelected(item)
+        if (screenMenuItems.none { it === item }) return super.onOptionsItemSelected(item)
+        owner.onOptionsItemSelected(item)
         return true
+    }
+
+    internal fun setMenuOwner(view: View) {
+        menuOwner = view as? HasMenu
+        screenMenuItems = emptyList()
+        invalidateOptionsMenu()
     }
 
     private fun savePickedArtifact() {

@@ -77,6 +77,39 @@ class BuildListRequestsTest : DescribeSpec({
             initialLoad.dispose()
         }
 
+        it("recovers a polling gap after publishing a partial refresh") {
+            val scheduler = TestScheduler()
+            val original = (20 downTo 1).map { build(it, "success") }
+            val latest = (41 downTo 21).map { build(it, "success") } + original
+            val offsets = mutableListOf<Int>()
+            var backfillFails = true
+            val requests = BuildListRequests(null, scheduler, scheduler, scheduler, { Observable.empty() }) { offset ->
+                offsets.add(offset)
+                when {
+                    offsets.size == 1 -> Observable.just(original)
+                    offset == 20 && backfillFails -> Observable.error(IllegalStateException("Backfill failed"))
+                    else -> Observable.just(latest.drop(offset).take(20))
+                }
+            }
+
+            val builds = requests.builds.test()
+            val initialLoad = requests.start()
+            val polling = requests.poll(10, resuming = false, clock = scheduler)
+            try {
+                scheduler.advanceTimeBy(10, SECONDS)
+                builds.values().last() shouldBe latest.take(20) + original
+
+                backfillFails = false
+                scheduler.advanceTimeBy(10, SECONDS)
+                builds.values().last() shouldBe latest
+                offsets shouldBe listOf(0, 0, 20, 0, 20)
+            } finally {
+                polling.dispose()
+                initialLoad.dispose()
+                builds.dispose()
+            }
+        }
+
         it("keeps a newer poll snapshot while adding unseen builds from a late page") {
             val scheduler = TestScheduler()
             val olderPage = PublishSubject.create<List<Build>>()

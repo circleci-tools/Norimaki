@@ -6,21 +6,28 @@ import io.reactivex.Observable
 
 internal const val BUILD_LIST_PAGE_SIZE = 20
 
-internal fun fetchLatestBuilds(
-    knownIds: Set<String>,
-    fetchPage: (Int) -> Observable<List<Build>>
-): Observable<List<Build>> = Observable.defer {
-    var offset = 0
-    var shouldStop = false
+internal class BuildListPolling(private val fetchPage: (Int) -> Observable<List<Build>>) {
+    private var backfillBoundary: Set<String>? = null
 
-    Observable.defer {
-        shouldStop = true
-        fetchPage(offset).doOnNext { page ->
-            shouldStop = page.size < BUILD_LIST_PAGE_SIZE || page.any { it.uniqueId() in knownIds }
-            offset += BUILD_LIST_PAGE_SIZE
-        }
-    }.repeatUntil { shouldStop }
-        .toList()
-        .map { it.flatten() }
-        .toObservable()
+    fun fetchLatestBuilds(knownIds: Set<String>): Observable<List<Build>> = Observable.defer {
+        val boundary = backfillBoundary ?: knownIds
+        var offset = 0
+        var shouldStop = false
+
+        Observable.defer {
+            shouldStop = true
+            fetchPage(offset).doOnNext { page ->
+                shouldStop = page.size < BUILD_LIST_PAGE_SIZE || page.any { it.uniqueId() in boundary }
+                // Retry from the head using the original boundary, since newer builds can shift offsets.
+                if (!shouldStop) backfillBoundary = boundary
+                offset += BUILD_LIST_PAGE_SIZE
+            }
+        }.repeatUntil { shouldStop }
+            .doOnComplete { backfillBoundary = null }
+            .onErrorResumeNext(Observable.empty<List<Build>>())
+            .toList()
+            .filter { it.isNotEmpty() }
+            .map { it.flatten() }
+            .toObservable()
+    }
 }

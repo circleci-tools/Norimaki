@@ -37,6 +37,7 @@ internal class BuildListRequests(
 
     private var initialLoadSettled = CompletableSubject.create()
     private var requestNumber = 0L
+    private var buildPolling = BuildListPolling(fetch)
     private var lastPollIds = emptySet<String>()
     private val latestRequestByBuild = mutableMapOf<String, Long>()
     private val incoming = PublishSubject.create<Response>().toSerialized()
@@ -63,6 +64,7 @@ internal class BuildListRequests(
     fun reset() {
         initialLoadSettled = CompletableSubject.create()
         canRetryPage.value = false
+        buildPolling = BuildListPolling(fetch)
         lastPollIds = emptySet()
         latestRequestByBuild.clear()
         page.value = 0
@@ -75,7 +77,7 @@ internal class BuildListRequests(
         if (page.value == 0) return if (isLoading.value) Observable.empty() else requestPage(0)
 
         var pollIds: Set<String>? = null
-        val refreshed = fetchLatestBuilds(lastPollIds, fetch)
+        val refreshed = buildPolling.fetchLatestBuilds(lastPollIds)
             .observeOn(ui)
             .doOnNext { latest -> pollIds = latest.mapTo(hashSetOf()) { it.uniqueId() } }
             .concatMap { latest ->

@@ -18,6 +18,7 @@ import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import com.unhappychoice.norimaki.presentation.view.NavigationView
@@ -91,6 +92,26 @@ class BuildPresenterTest : DescribeSpec({
     }
 
     describe("loading build details") {
+        it("should wait for build details before opening test results") {
+            val flow = mockk<Flow>(relaxed = true)
+            val screen = slot<TestResultsScreen>()
+            mockkStatic(Flow::class)
+            try {
+                every { Flow.get(activity) } returns flow
+                presenter.goToTestResultsScreen()
+                verify(exactly = 0) { flow.set(any()) }
+
+                val build = pollResult(step("https://example.com/output"), "finished")
+                initialBuild.onNext(build)
+                presenter.goToTestResultsScreen()
+
+                verify(exactly = 1) { flow.set(capture(screen)) }
+                screen.captured.build shouldBe build
+            } finally {
+                unmockkStatic(Flow::class)
+            }
+        }
+
         it("should expose the initial failure and reload the same build on retry") {
             val scheduler = TestScheduler()
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
