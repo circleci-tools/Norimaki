@@ -165,16 +165,26 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 
-    it("exposes the initial build load failure without retrying") {
+    it("loads the selected step and its logs when the user retries after HTTP 503") {
         val scheduler = TestScheduler()
-        val api = mockk<CircleCIAPIClientV1_1> {
-            every { getBuild("github", "owner", "repo", 123) } returns
-                Observable.error(IllegalStateException("Build load failed"))
+        val selectedUrl = "https://circleci.com/selected-output"
+        val selectedAction = action(5, Date()).apply {
+            every { outputUrl } returns selectedUrl
         }
-        val presenter = BuildStepPresenter().apply {
+        val otherStep = BuildStep("Run tests", listOf(action(2, Date())))
+        val selectedStep = BuildStep("Run tests", listOf(selectedAction))
+        val finishedBuild = build("finished", listOf(otherStep, selectedStep))
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } returnsMany
+                listOf(Observable.error(IOException("HTTP 503")), Observable.just(finishedBuild))
+        }
+        val output = mockk<BuildOutputClient> {
+            every { fetchOutput(selectedUrl) } returns Observable.just("Selected step output")
+        }
+        val presenter = BuildStepPresenter { output }.apply {
             di = DI {
-                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
-                bind<BuildStepId>() with singleton { BuildStepId(null, legacyName = "Run tests") }
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                bind<BuildStepId>() with singleton { BuildStepId(5) }
                 bind<SessionService>() with singleton { testSession(api) }
             }
         }
@@ -193,7 +203,17 @@ class BuildStepPresenterTest : DescribeSpec({
             failures.assertValues(false, true)
             verify(exactly = 0) { view.showStep(any()) }
             scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS * 3, SECONDS)
-            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+            presenter.canRetryStepLoad.value shouldBe true
+
+            presenter.retryStepLoad()
+            presenter.retryStepLoad()
+
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 1) { view.showStep(selectedStep) }
+            failures.assertValues(false, true, false)
+            presenter.canRetryStepLoad.value shouldBe false
+            presenter.logString.value shouldBe "Selected step output"
         } finally {
             scope?.destroy()
             failures.dispose()

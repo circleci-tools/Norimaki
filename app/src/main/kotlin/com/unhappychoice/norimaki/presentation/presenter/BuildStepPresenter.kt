@@ -33,12 +33,21 @@ class BuildStepPresenter internal constructor(
 
     val logLoadFailed = Variable(false)
 
-    override fun onAuthenticated() {
+    val canRetryStepLoad = Variable(false)
+
+    fun retryStepLoad() {
+        if (canRetryStepLoad.value) loadStep()
+    }
+
+    override fun onAuthenticated() = loadStep()
+
+    private fun loadStep() {
         val verified = account ?: return
         val client = verified.client
         val outputClient = createOutputClient(verified.token)
         logString.value = ""
         logLoadFailed.value = false
+        canRetryStepLoad.value = false
         pollBuildStep(stepId) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
             .subscribeBy(
@@ -47,7 +56,10 @@ class BuildStepPresenter internal constructor(
                     if (step.isFinished()) getActions(step, outputClient)
                     else pollRunningActions(build, step, client, outputClient)
                 },
-                onError = { logLoadFailed.value = true }
+                onError = {
+                    canRetryStepLoad.value = true
+                    logLoadFailed.value = true
+                }
             )
             .addTo(bag)
     }
