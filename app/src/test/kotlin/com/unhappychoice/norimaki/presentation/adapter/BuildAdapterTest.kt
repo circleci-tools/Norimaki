@@ -7,8 +7,10 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.R
+import de.hdodenhof.circleimageview.CircleImageView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -39,6 +41,7 @@ class BuildAdapterTest {
             val holder = adapter.createViewHolder(parent, adapter.getItemViewType(position))
             adapter.bindViewHolder(holder, position)
             assertEquals("owner / $repository", holder.itemView.findViewById<TextView>(R.id.repositoryTitle).text.toString())
+            assertNotNull(holder.itemView.findViewById<CircleImageView>(R.id.author).drawable)
         }
     }
 }

@@ -7,6 +7,7 @@ import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
 import androidx.core.view.doOnPreDraw
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.jakewharton.rxbinding3.recyclerview.scrollEvents
 import com.unhappychoice.norimaki.R
@@ -66,6 +67,11 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             }
             .addTo(bag)
 
+        binding.retryPage.setOnClickListener { presenter.getBuilds() }
+        presenter.canRetryPage.asObservable()
+            .subscribeNext { binding.retryPage.isVisible = it }
+            .addTo(bag)
+
         if (presenter.isWorkflow) {
             presenter.page.asObservable()
                 .subscribeNext {
@@ -84,6 +90,8 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
+
+        presenter.observePolling()
     }
 
     override fun onDetachedFromWindow() {
