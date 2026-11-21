@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.infrastructure.testresults
 
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.google.gson.JsonSyntaxException
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -82,6 +83,17 @@ class TestResultsClientTest : DescribeSpec({
         it("rejects a repeated pagination token") {
             client { 200 to """{"items":[],"next_page_token":"next"}""" }
                 .fetch(build()).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
+        }
+
+        it("fails without emitting partial results when a later page contains invalid JSON") {
+            client { request ->
+                val body = if (request.url.queryParameter("page-token") == "next") {
+                    """{"items":["""
+                } else {
+                    """{"items":[{"result":"failure","name":"asserts"}],"next_page_token":"next"}"""
+                }
+                200 to body
+            }.fetch(build()).test().awaitDone(5, SECONDS).assertFailure(JsonSyntaxException::class.java)
         }
     }
 })
