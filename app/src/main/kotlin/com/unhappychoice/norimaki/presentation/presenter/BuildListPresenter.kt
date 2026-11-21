@@ -1,5 +1,8 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.extension.goTo
@@ -12,6 +15,9 @@ import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.Disposable
+import io.reactivex.disposables.Disposables
+import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
@@ -26,6 +32,9 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
             ::getBuildDetails, ::getBuildsAPI
         )
     }
+    private var pollingRegistration: Disposable? = null
+    private var hasStartedPolling = false
+
     val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     val builds get() = buildList.builds
     override val isLoading get() = buildList.isLoading
@@ -34,10 +43,11 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     val canRetryPage get() = buildList.canRetryPage
 
     override fun onAuthenticated() {
-        buildList.poll(BUILD_LIST_POLLING_SECONDS).addTo(bag)
+        buildList.start().addTo(bag)
     }
 
     override fun onSessionEnded() {
+        hasStartedPolling = false
         buildList.reset()
     }
 
@@ -47,6 +57,37 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
 
     fun getBuildsIfUnderfilled(canScroll: Boolean) {
         if (isWorkflow && !canScroll && !canRetryPage.value) getBuilds()
+    }
+
+    override fun onViewDropped() {
+        pollingRegistration?.let(bag::remove)
+        pollingRegistration = null
+    }
+
+    internal fun observePolling(lifecycle: Lifecycle = activity.lifecycle) {
+        pollingRegistration?.let(bag::remove)
+        val pollingSubscription = SerialDisposable()
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                val resuming = hasStartedPolling
+                hasStartedPolling = true
+                pollingSubscription.set(
+                    buildList.poll(BUILD_LIST_POLLING_SECONDS, resuming, Schedulers.computation())
+                )
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+                pollingSubscription.set(null)
+            }
+        }
+        val registration = Disposables.fromAction {
+            lifecycle.removeObserver(observer)
+            pollingSubscription.dispose()
+        }
+        if (bag.add(registration)) {
+            pollingRegistration = registration
+            lifecycle.addObserver(observer)
+        }
     }
 
     fun goToBuildView(build: Build) {

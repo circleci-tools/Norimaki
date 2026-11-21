@@ -15,7 +15,8 @@ class BuildTest : DescribeSpec({
         number: Int = 1,
         queued: Date? = null,
         buildStatus: String? = null,
-        repositoryUrl: String = "https://github.com/circleci-tools/Norimaki"
+        repositoryUrl: String = "https://github.com/circleci-tools/Norimaki",
+        author: Map<String, String>? = mapOf("login" to "unhappychoice")
     ): Build = mockk {
         every { username } returns "circleci-tools"
         every { reponame } returns "Norimaki"
@@ -23,7 +24,7 @@ class BuildTest : DescribeSpec({
         every { buildNum } returns number
         every { vcsRevision } returns "abcdef123456"
         every { vcsUrl } returns repositoryUrl
-        every { user } returns mapOf("login" to "unhappychoice")
+        every { user } returns author
         every { queuedAt } returns queued
         every { status } returns buildStatus
     }
@@ -41,8 +42,38 @@ class BuildTest : DescribeSpec({
     }
 
     describe("Build.avatarUrl()") {
+        val bitbucketUrl = "https://bitbucket.org/team/repo"
+        val bitbucketAvatar = "https://bitbucket.org/account/alice/avatar/"
+
         it("should point to the GitHub avatar of the user") {
             build().avatarUrl() shouldBe "https://github.com/unhappychoice.png"
+        }
+
+        it("should use the avatar supplied for a Bitbucket build") {
+            val author = mapOf("login" to "alice", "vcs_type" to "bitbucket", "avatar_url" to bitbucketAvatar)
+            build(repositoryUrl = bitbucketUrl, author = author).avatarUrl() shouldBe bitbucketAvatar
+        }
+
+        it("should return no avatar for Bitbucket builds without a usable avatar URL") {
+            build(repositoryUrl = bitbucketUrl).avatarUrl() shouldBe null
+            listOf("", "invalid", "https://github.com/alice.png", "https://avatars.githubusercontent.com/u/1")
+                .forEach { avatar ->
+                    val author = mapOf("login" to "alice", "avatar_url" to avatar)
+                    build(repositoryUrl = bitbucketUrl, author = author).avatarUrl() shouldBe null
+                }
+        }
+
+        it("should return no avatar for a Bitbucket build with a GitHub author") {
+            val author = mapOf("login" to "alice", "vcs_type" to "github", "avatar_url" to bitbucketAvatar)
+            build(repositoryUrl = bitbucketUrl, author = author).avatarUrl() shouldBe null
+        }
+
+        it("should return no avatar when the author or login is missing or blank") {
+            listOf(null, emptyMap(), mapOf("login" to "  ")).forEach { author ->
+                build(author = author).avatarUrl() shouldBe null
+            }
+            val author = mapOf("avatar_url" to bitbucketAvatar)
+            build(repositoryUrl = bitbucketUrl, author = author).avatarUrl() shouldBe null
         }
     }
 

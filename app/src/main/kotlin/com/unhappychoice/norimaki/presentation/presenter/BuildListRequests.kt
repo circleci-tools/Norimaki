@@ -16,7 +16,9 @@ import io.reactivex.Single
 import io.reactivex.SingleEmitter
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
+import io.reactivex.subjects.CompletableSubject
 import io.reactivex.subjects.PublishSubject
+import java.util.concurrent.TimeUnit.SECONDS
 
 internal class BuildListRequests(
     private val workflowId: String?,
@@ -33,16 +35,25 @@ internal class BuildListRequests(
     private val history = Variable(BuildHistory())
     val builds = history.asObservable().map { it.builds }
 
+    private var initialLoadSettled = CompletableSubject.create()
     private var requestNumber = 0L
     private var lastPollIds = emptySet<String>()
     private val latestRequestByBuild = mutableMapOf<String, Long>()
     private val incoming = PublishSubject.create<Response>().toSerialized()
 
-    fun poll(period: Long): Disposable = CompositeDisposable(
+    fun start(): Disposable = CompositeDisposable(
         incoming.concatMapSingle(::merge).subscribeNext(::publish),
-        polling(period, scheduler = ui, fetch = ::pollLatest)
-            .subscribeNext {}
+        requestPage(0).doOnTerminate { initialLoadSettled.onComplete() }.subscribeNext {}
     )
+
+    fun poll(period: Long, resuming: Boolean, clock: Scheduler): Disposable =
+        initialLoadSettled.andThen(Observable.timer(if (resuming) 0L else period, SECONDS, clock))
+            .flatMap {
+                polling(period, scheduler = clock) {
+                    Observable.just(Unit).observeOn(ui).flatMap { pollLatest() }
+                }
+            }
+            .subscribeNext {}
 
     fun loadNextPage(): Disposable? {
         if (isLoading.value || !hasMore.value || (page.value == 0 && !canRetryPage.value)) return null
@@ -50,6 +61,7 @@ internal class BuildListRequests(
     }
 
     fun reset() {
+        initialLoadSettled = CompletableSubject.create()
         canRetryPage.value = false
         lastPollIds = emptySet()
         latestRequestByBuild.clear()
@@ -62,28 +74,33 @@ internal class BuildListRequests(
     private fun pollLatest(): Observable<Unit> {
         if (page.value == 0) return if (isLoading.value) Observable.empty() else requestPage(0)
 
+        var pollIds: Set<String>? = null
         val refreshed = fetchLatestBuilds(lastPollIds, fetch)
             .observeOn(ui)
-            .doOnNext { latest -> lastPollIds = latest.mapTo(hashSetOf()) { it.uniqueId() } }
+            .doOnNext { latest -> pollIds = latest.mapTo(hashSetOf()) { it.uniqueId() } }
             .concatMap { latest ->
                 refreshBuildList(history.value.builds, latest, workflowId) { build ->
                     Observable.defer { fetchDetails(build) }.subscribeOn(io)
                 }
             }
-        return request(refreshed, paginated = false)
+        return request(refreshed, paginated = false) { pollIds }
     }
 
     private fun requestPage(offset: Int): Observable<Unit> =
         request(Observable.defer { fetch(offset) }.singleOrError().toObservable(), paginated = true)
 
-    private fun request(source: Observable<List<Build>>, paginated: Boolean): Observable<Unit> {
+    private fun request(
+        source: Observable<List<Build>>,
+        paginated: Boolean,
+        pollIds: () -> Set<String>? = { null }
+    ): Observable<Unit> {
         val number = ++requestNumber
         val response = source
             .subscribeOn(io)
             .observeOn(ui)
             .concatMapSingle { builds ->
                 Single.create<Unit> { completion ->
-                    incoming.onNext(Response(number, builds, paginated, completion))
+                    incoming.onNext(Response(number, builds, paginated, pollIds(), completion))
                 }
             }
         if (!paginated) return response
@@ -115,6 +132,7 @@ internal class BuildListRequests(
         if (response.completion.isDisposed) return
         update.builds.forEach { latestRequestByBuild[it.uniqueId()] = response.number }
         if (update.history !== history.value) history.value = update.history
+        response.pollIds?.let { lastPollIds = it }
         if (response.paginated) {
             if (page.value == 0) lastPollIds = response.builds.mapTo(hashSetOf()) { it.uniqueId() }
             hasMore.value = response.builds.isNotEmpty()
@@ -128,6 +146,7 @@ internal class BuildListRequests(
         val number: Long,
         val builds: List<Build>,
         val paginated: Boolean,
+        val pollIds: Set<String>?,
         val completion: SingleEmitter<Unit>
     )
 

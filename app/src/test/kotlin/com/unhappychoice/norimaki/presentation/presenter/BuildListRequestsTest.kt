@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit.SECONDS
 
 class BuildListRequestsTest : DescribeSpec({
     describe("Build list requests") {
-        it("uses the first poll as page zero and advances pagination from it") {
+        it("loads page zero once while polling waits for it to settle") {
             val scheduler = TestScheduler()
             val initialPage = PublishSubject.create<List<Build>>()
             val offsets = mutableListOf<Int>()
@@ -22,7 +22,8 @@ class BuildListRequestsTest : DescribeSpec({
                 if (offset == 0) initialPage else Observable.just(emptyList<Build>())
             }
 
-            val polling = requests.poll(10)
+            val initialLoad = requests.start()
+            val polling = requests.poll(10, resuming = false, clock = scheduler)
             scheduler.triggerActions()
             requests.loadNextPage() shouldBe null
             scheduler.advanceTimeBy(10, SECONDS)
@@ -35,6 +36,7 @@ class BuildListRequestsTest : DescribeSpec({
             scheduler.triggerActions()
             offsets shouldBe listOf(0, 20)
             polling.dispose()
+            initialLoad.dispose()
         }
 
         it("retries the same offset after a page is disposed during the background merge") {
@@ -49,7 +51,8 @@ class BuildListRequestsTest : DescribeSpec({
             }
 
             val builds = requests.builds.test()
-            val polling = requests.poll(10)
+            val initialLoad = requests.start()
+            val polling = requests.poll(10, resuming = false, clock = scheduler)
             scheduler.triggerActions()
             computation.triggerActions()
             scheduler.triggerActions()
@@ -71,6 +74,7 @@ class BuildListRequestsTest : DescribeSpec({
             offsets shouldBe listOf(0, 20, 20)
             builds.assertValues(emptyList(), listOf(first), listOf(first, next))
             polling.dispose()
+            initialLoad.dispose()
         }
 
         it("keeps a newer poll snapshot while adding unseen builds from a late page") {
@@ -90,7 +94,8 @@ class BuildListRequestsTest : DescribeSpec({
             }
 
             val builds = requests.builds.test()
-            val polling = requests.poll(10)
+            val initialLoad = requests.start()
+            val polling = requests.poll(10, resuming = false, clock = scheduler)
             scheduler.triggerActions()
             requests.loadNextPage()
             scheduler.triggerActions()
@@ -104,6 +109,7 @@ class BuildListRequestsTest : DescribeSpec({
             builds.values().last().map { it.buildNum to it.status } shouldBe
                 listOf(42 to "success", 41 to "success")
             polling.dispose()
+            initialLoad.dispose()
         }
     }
 })
