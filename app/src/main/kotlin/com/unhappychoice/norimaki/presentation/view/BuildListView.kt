@@ -65,6 +65,8 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
+
+        presenter.observePolling()
     }
 
     override fun onDetachedFromWindow() {
