@@ -352,21 +352,24 @@ class BuildListPresenterTest : DescribeSpec({
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
-            scheduler.triggerActions()
-            presenter.getBuilds()
-            scheduler.triggerActions()
-            builds.assertValues(emptyList(), listOf(newest), listOf(running, newest))
+            try {
+                scheduler.triggerActions()
+                presenter.getBuilds()
+                scheduler.triggerActions()
+                builds.assertValues(emptyList(), listOf(newest), listOf(running, newest))
 
-            startPolling(presenter)
-            advanceRefresh()
-            builds.assertValueAt(3, listOf(finished, newest))
-            advanceRefresh()
+                startPolling(presenter)
+                advanceRefresh()
+                builds.assertValueAt(3, listOf(finished, newest))
+                advanceRefresh()
 
-            builds.assertValueCount(4)
-            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
-            presenter.page.value shouldBe 2
-            presenter.hasMore.value shouldBe true
-            builds.dispose()
+                builds.assertValueCount(4)
+                verify(exactly = 1) { api.getBuild("github", "owner", "repo", 1) }
+                presenter.page.value shouldBe 2
+                presenter.hasMore.value shouldBe true
+            } finally {
+                builds.dispose()
+            }
         }
     }
 

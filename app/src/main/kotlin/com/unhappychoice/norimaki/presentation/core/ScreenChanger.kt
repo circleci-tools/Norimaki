@@ -32,7 +32,7 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         val screen = incomingState.getScreen() ?: return callback.onTraversalCompleted()
         if (screen !is APITokenScreen) (outgoingView as? APITokenView)?.onScreenLeft()
         val incomingView = screen.inflateView().also { inject(screen, it) }
-        val onCompleted = { completeTraversal(screen, callback) }
+        val onCompleted = { completeTraversal(screen, incomingView, callback) }
 
         outgoingView?.let { showWithTransition(it, incomingView, incomingState, direction, onCompleted) }
             ?: show(incomingView, incomingState, onCompleted)
@@ -60,18 +60,18 @@ class ScreenChanger(val activity: MainActivity) : KeyChanger {
         }
     }
 
-    private fun completeTraversal(screen: Screen, callback: TraversalCallback) {
+    private fun completeTraversal(screen: Screen, view: View, callback: TraversalCallback) {
+        activity.setMenuOwner(view)
         callback.onTraversalCompleted()
-        updateActionBar(screen)
+        updateActionBar(screen, view)
     }
 
-    private fun updateActionBar(screen: Screen) {
+    private fun updateActionBar(screen: Screen, view: View) {
         activity.drawerToggle.isDrawerIndicatorEnabled = showsDrawerIndicator(screen)
         activity.supportActionBar?.setHomeButtonEnabled(true)
         activity.supportActionBar?.setDisplayHomeAsUpEnabled(hasScreens())
         activity.supportActionBar?.setDisplayShowHomeEnabled(false)
-        activity.supportActionBar?.title = (contentView as? BaseView<*>)?.screenTitle ?: screen.getTitle()
-        activity.invalidateOptionsMenu()
+        activity.supportActionBar?.title = (view as? BaseView<*>)?.screenTitle ?: screen.getTitle()
 
         if (showsDrawerIndicator(screen)) { activity.drawerToggle.syncState() }
     }
