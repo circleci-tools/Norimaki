@@ -49,6 +49,14 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
 
+    fun createPresenter(number: Int = 123) = BuildPresenter().apply {
+        di = DI {
+            bind<MainActivity>() with singleton { activity }
+            bind<BuildId>() with singleton { BuildId("github", "owner", "repo", number) }
+            bind<SessionService>() with singleton { session }
+        }
+    }
+
     beforeEach {
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
@@ -64,13 +72,7 @@ class BuildPresenterTest : DescribeSpec({
         }
         session = testSession(api)
         activity = mockk()
-        presenter = BuildPresenter().apply {
-            di = DI {
-                bind<MainActivity>() with singleton { activity }
-                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 123) }
-                bind<SessionService>() with singleton { session }
-            }
-        }
+        presenter = createPresenter()
         view = mockk(relaxUnitFun = true)
         scope = presenter.attachToTestScope(view)
     }
@@ -79,6 +81,14 @@ class BuildPresenterTest : DescribeSpec({
         scope.destroy()
         RxAndroidPlugins.reset()
         RxJavaPlugins.reset()
+    }
+
+    it("ignores artifact navigation after the verified session ends") {
+        session.replace("replacement-token").test().assertComplete()
+
+        presenter.goToArtifactsScreen()
+
+        verify { activity wasNot Called }
     }
 
     describe("loading build details") {
@@ -258,6 +268,48 @@ class BuildPresenterTest : DescribeSpec({
             presenter.rebuild()
             presenter.rebuildFailed.value shouldBe false
             verify(exactly = 2) { api.retryBuild(any(), any(), any(), any()) }
+        }
+
+        listOf(false, true).forEach { fails ->
+            val outcome = if (fails) "failure" else "success"
+            it("blocks both actions after reopening a build until cache-free rebuild $outcome") {
+                every { api.getBuild("github", "owner", "repo", 124) } returns Observable.never()
+                every { api.retryBuild("github", "owner", "repo", 124) } returns Observable.empty()
+
+                presenter.rebuildWithoutCache()
+                presenter.dropView(view)
+                val reopened = createPresenter()
+                val reopenedScope = reopened.attachToTestScope(mockk(relaxUnitFun = true))
+                val other = createPresenter(124)
+                val otherScope = other.attachToTestScope(mockk(relaxUnitFun = true))
+                try {
+                    reopened.rebuild()
+                    reopened.rebuildWithoutCache()
+                    other.rebuild()
+                    verify(exactly = 1) { api.deleteCache(any(), any(), any()) }
+                    verify(exactly = 0) { api.retryBuild("github", "owner", "repo", 123) }
+                    verify(exactly = 1) { api.retryBuild("github", "owner", "repo", 124) }
+
+                    if (fails) {
+                        deleteCache.onError(IllegalStateException("Cache deletion failed"))
+                    } else {
+                        deleteCache.onNext(Unit)
+                        reopened.rebuild()
+                        reopened.rebuildWithoutCache()
+                        verify(exactly = 1) { api.retryBuild("github", "owner", "repo", 123) }
+                        verify(exactly = 1) { api.deleteCache(any(), any(), any()) }
+                        retry.onNext(mockk())
+                        retry.onComplete()
+                    }
+
+                    verify { activity wasNot Called }
+                    reopened.rebuild()
+                    verify(exactly = if (fails) 1 else 2) { api.retryBuild("github", "owner", "repo", 123) }
+                } finally {
+                    otherScope.destroy()
+                    reopenedScope.destroy()
+                }
+            }
         }
 
         it("should complete the cache-free rebuild after detachment") {

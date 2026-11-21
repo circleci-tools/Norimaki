@@ -34,6 +34,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     override fun onCreateOptionsMenu(menu: Menu?) {
         menu?.add(Menu.NONE, MenuResource.Rebuild.id, Menu.NONE, "Rebuild")
         menu?.add(Menu.NONE, MenuResource.RebuildWithoutCache.id, Menu.NONE, R.string.clear_project_cache_and_rebuild)
+        menu?.add(Menu.NONE, MenuResource.Artifacts.id, Menu.NONE, R.string.artifacts)
         if (presenter.hasWorkflow()) menu?.add(Menu.NONE, MenuResource.Workflow.id, Menu.NONE, "Show workflow jobs")
     }
 
@@ -41,12 +42,13 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         when (item?.itemId) {
             MenuResource.Rebuild.id -> presenter.rebuild()
             MenuResource.RebuildWithoutCache.id -> confirmCacheClearAndRebuild()
+            MenuResource.Artifacts.id -> presenter.goToArtifactsScreen()
             MenuResource.Workflow.id -> presenter.goToWorkflowScreen()
         }
     }
 
     private enum class MenuResource(val id: Int) {
-        Rebuild(0), RebuildWithoutCache(1), Workflow(2)
+        Rebuild(0), RebuildWithoutCache(1), Workflow(2), Artifacts(3)
     }
 
     override fun onAttachedToWindow() {

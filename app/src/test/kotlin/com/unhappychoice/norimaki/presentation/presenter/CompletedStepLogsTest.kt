@@ -34,8 +34,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class CompletedStepLogsTest {
     @Test
-    fun displaysSuccessfulDownloadsAroundAnHttpFailure() {
-        val step = BuildStep("Run tests", listOf(action("first"), action("failed"), action("last")))
+    fun displaysSuccessfulDownloadsWithFailureAndLimitNotices() {
+        val step = BuildStep("Run tests", listOf(action("first"), action("failed"), action("capped"), action("last")))
         val build = mockk<Build> { every { steps } returns listOf(step) }
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
@@ -55,7 +55,11 @@ class CompletedStepLogsTest {
         try {
             scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))
 
-            assertEquals("first output<br>[Some output could not be loaded.]<br>last output", presenter.logString.value)
+            assertEquals(
+                "first output<br>[Some output could not be loaded.]<br>" +
+                    "accepted<br>[Action output limit reached.]<br>last output",
+                presenter.logString.value
+            )
         } finally {
             scope?.destroy()
             RxAndroidPlugins.setMainThreadSchedulerHandler(previousMain)
@@ -84,6 +88,7 @@ class CompletedStepLogsTest {
             val action = request.url.pathSegments.single()
             val (status, body) = when (action) {
                 "failed" -> 503 to "Service Unavailable"
+                "capped" -> 200 to """[{"message":"accepted"},{"message":"${"x".repeat(100)}"}]"""
                 else -> 200 to """[{"message":"$action "},{"message":"output"}]"""
             }
             Response.Builder()
@@ -94,6 +99,6 @@ class CompletedStepLogsTest {
                 .body(body.toResponseBody())
                 .build()
         }.build()
-        return BuildOutputClient(token, client)
+        return BuildOutputClient(token, client, outputByteLimit = 64)
     }
 }

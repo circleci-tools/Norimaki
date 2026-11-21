@@ -30,7 +30,7 @@ abstract class BaseView<Self: BaseView<Self>>(
     protected val bag = CompositeDisposable()
 
     override fun onDetachedFromWindow() {
-        bag.dispose()
+        bag.clear()
         super.onDetachedFromWindow()
     }
 }
