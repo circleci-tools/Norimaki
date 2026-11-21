@@ -15,7 +15,17 @@ fun Build.statusColor(): Int = when (status) {
     else -> Color.rgb(92, 211, 228)
 }
 
-fun Build.avatarUrl(): String = "https://github.com/${user?.get("login")}.png"
+fun Build.avatarUrl(): String? {
+    val author = user ?: return null
+    val login = (author["login"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val provider = vcsType()
+    if (provider == "github") return "https://github.com/$login.png"
+    if (author["vcs_type"]?.let { it != provider } == true) return null
+
+    return (author["avatar_url"] as? String)?.toHttpUrlOrNull()
+        ?.takeUnless { url -> githubAvatarDomains.any { url.host == it || url.host.endsWith(".$it") } }
+        ?.toString()
+}
 
 fun Build.repositoryWithWorkflowString(): String =
     listOfNotNull(repositoryString(), workflowString()).joinToString("  ·  ")
@@ -43,3 +53,5 @@ fun List<Build>.addDistinctByNumber(builds: List<Build>) = (builds + this).disti
 fun List<Build>.sortByQueuedAt() = this.sortedByDescending { it.queuedAt }
 fun List<Build>.inWorkflow(workflowId: String?) =
     if (workflowId.isNullOrBlank()) this else filter { it.workflows?.workflowId == workflowId }
+
+private val githubAvatarDomains = listOf("github.com", "githubusercontent.com")

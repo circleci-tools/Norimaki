@@ -8,11 +8,17 @@ import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
+import okhttp3.MediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import okio.Source
+import okio.Timeout
+import okio.buffer
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -24,7 +30,93 @@ class BuildOutputClientTest : DescribeSpec({
     val url = "https://circleci.com/log"
     val offset = 42L
 
+    listOf(true, false).forEach { declaredLength ->
+        describe("log reads with declared length = $declaredLength") {
+            it("keeps complete messages from an oversized completed log and stops at the byte limit") {
+                val prefix = """[{"message":"first line"},{"message":"partial"""
+                val body = TrackedBody(prefix + """ message"}]""", declaredLength)
+                val client = outputClient(prefix.toByteArray().size) { request ->
+                    response(request, 200).newBuilder().body(body).build()
+                }
+
+                client.fetchOutput(url).test().assertResult("first line" + OUTPUT_LIMIT_MESSAGE)
+                body.bytesRead shouldBe prefix.toByteArray().size.toLong()
+                body.closed shouldBe true
+            }
+
+            it("keeps live bytes up to the remaining budget and closes the response") {
+                val bodies = List(2) { TrackedBody("é and more", declaredLength) }
+                val pending = bodies.iterator()
+                val client = outputClient(5) { request ->
+                    request.header("Range") shouldBe "bytes=3-"
+                    response(request, 206, contentRange = "bytes 3-13/*").newBuilder().body(pending.next()).build()
+                }
+
+                listOf(client.fetchRawOutput(url, 3), client.fetchFinalRawOutput(url, 3, TestScheduler()))
+                    .forEach { output ->
+                        output.test()
+                            .assertValue { it.bytes.decodeToString() == "é" && it.limitReached }
+                            .assertComplete().assertNoErrors()
+                    }
+                bodies.forEach { body ->
+                    body.bytesRead shouldBe 2L
+                    body.closed shouldBe true
+                }
+                client.fetchRawOutput(url, 5).test()
+                    .assertValue { it.bytes.isEmpty() && it.limitReached }
+                    .assertComplete().assertNoErrors()
+            }
+
+            it("skips previously read bytes when a full response exceeds the remaining budget") {
+                val body = TrackedBody("猫log and more", declaredLength)
+                val client = outputClient(6) { request ->
+                    response(request, 200).newBuilder().body(body).build()
+                }
+
+                client.fetchRawOutput(url, 3).test()
+                    .assertValue { it.bytes.decodeToString() == "log" && it.limitReached }
+                    .assertComplete().assertNoErrors()
+                body.bytesRead shouldBe 6L
+                body.closed shouldBe true
+            }
+
+            it("returns normal completed and live logs without a limit status") {
+                val completed = TrackedBody("""[{"message":"one"},{"message":"two"}]""", declaredLength)
+                val live = TrackedBody("live", declaredLength)
+                val client = outputClient(64) { request ->
+                    val body = if (request.header("Range") == null) completed else live
+                    response(request, 200).newBuilder().body(body).build()
+                }
+
+                client.fetchOutput(url).test().assertResult("onetwo")
+                client.fetchRawOutput(url, 0).test()
+                    .assertValue { it.bytes.decodeToString() == "live" && !it.limitReached }
+                    .assertComplete().assertNoErrors()
+            }
+        }
+    }
+
     describe("fetchOutput()") {
+        it("returns the whole completed log when its declared length matches the byte limit") {
+            val body = """[{"message":"complete"}]"""
+            val client = outputClient(body.toByteArray().size) { response(it, 200, body) }
+
+            client.fetchOutput(url).test().assertResult("complete")
+        }
+
+        it("reports an incomplete JSON response that ended below the byte limit") {
+            val client = outputClient { response(it, 200, """[{"message":"complete"}""") }
+
+            client.fetchOutput(url).test().assertFailure(IOException::class.java)
+        }
+
+        it("reads messages when action records contain extra metadata") {
+            val body = """[{"type":"out","message":"line","metadata":{"source":1}}]"""
+            val client = outputClient { response(it, 200, body) }
+
+            client.fetchOutput(url).test().assertResult("line")
+        }
+
         it("should report the HTTP status before parsing an error body") {
             val client = outputClient { response(it, 503, "Service Unavailable") }
 
@@ -35,19 +127,19 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("fetchFinalRawOutput()") {
-        listOf("HTTP 503", "I/O error").forEach { failure ->
-            it("should emit the remaining bytes once at the same offset after an initial $failure") {
+        listOf(429, 503, null).forEach { status ->
+            it("should emit the remaining bytes once at the same offset after an initial failure with status $status") {
                 val scheduler = TestScheduler()
                 val ranges = mutableListOf<String?>()
                 val client = outputClient { request ->
                     ranges.add(request.header("Range"))
                     when {
                         ranges.size > 1 -> response(request, 206, "last lines", "bytes 42-51/52")
-                        failure == "HTTP 503" -> response(request, 503, "Unavailable")
+                        status != null -> response(request, status)
                         else -> throw IOException("Connection lost")
                     }
                 }
-                val observer = client.fetchFinalRawOutput(url, offset, scheduler).map { String(it) }.test()
+                val observer = client.fetchFinalRawOutput(url, offset, scheduler).map { String(it.bytes) }.test()
 
                 observer.assertEmpty()
                 scheduler.advanceTimeBy(5, SECONDS)
@@ -82,7 +174,7 @@ class BuildOutputClientTest : DescribeSpec({
         it("should accept an empty successful response") {
             val client = outputClient { response(it, 204) }
 
-            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.size }.test().assertResult(0)
+            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.bytes.size }.test().assertResult(0)
         }
 
         it("should accept a range response confirming that the entire log was already read") {
@@ -90,11 +182,19 @@ class BuildOutputClientTest : DescribeSpec({
                 response(it, 416).newBuilder().header("Content-Range", "bytes */42").build()
             }
 
-            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.size }.test().assertResult(0)
+            client.fetchFinalRawOutput(url, offset, TestScheduler()).map { it.bytes.size }.test().assertResult(0)
         }
     }
 
     describe("fetchRawOutput()") {
+        it("returns no new bytes when a full response ends before the requested offset") {
+            val client = outputClient { response(it, 200, "short") }
+
+            client.fetchRawOutput(url, offset).test()
+                .assertValue { it.bytes.isEmpty() && !it.limitReached }
+                .assertComplete().assertNoErrors()
+        }
+
         it("should send a token and range to CircleCI and return the partial response") {
             val client = outputClient { request ->
                 request.header("Circle-Token") shouldBe "token"
@@ -102,7 +202,7 @@ class BuildOutputClientTest : DescribeSpec({
                 response(request, 206, "log", "bytes 42-44/45")
             }
 
-            client.fetchRawOutput(url, offset).map { it.decodeToString() }.test().assertResult("log")
+            client.fetchRawOutput(url, offset).map { it.bytes.decodeToString() }.test().assertResult("log")
         }
 
         it("should reject an untrusted initial URL before making a request") {
@@ -135,7 +235,7 @@ class BuildOutputClientTest : DescribeSpec({
         it("should interpret the full response offset as bytes") {
             val client = outputClient { response(it, 200, "猫log") }
 
-            client.fetchRawOutput(url, 3L).map { it.decodeToString() }.test().assertResult("log")
+            client.fetchRawOutput(url, 3L).map { it.bytes.decodeToString() }.test().assertResult("log")
         }
 
         listOf(null, "invalid", "bytes 41-43/44", "bytes 43-45/46").forEach { range ->
@@ -152,9 +252,9 @@ class BuildOutputClientTest : DescribeSpec({
     }
 
     describe("raw output redirects") {
-        it("should preserve the token and range for a relative redirect within CircleCI") {
+        it("should preserve the token, range, and byte limit for a relative redirect within CircleCI") {
             val requests = mutableListOf<Request>()
-            val client = outputClient { request ->
+            val client = outputClient(44) { request ->
                 requests.add(request)
                 when (request.url.encodedPath) {
                     "/log" -> redirect(request, "/next")
@@ -162,7 +262,9 @@ class BuildOutputClientTest : DescribeSpec({
                 }
             }
 
-            client.fetchRawOutput(url, offset).map { it.decodeToString() }.test().assertResult("log")
+            client.fetchRawOutput(url, offset).test()
+                .assertValue { it.bytes.decodeToString() == "lo" && it.limitReached }
+                .assertComplete().assertNoErrors()
             requests.map { it.url.toString() } shouldBe listOf(url, "https://circleci.com/next")
             requests.map { it.header("Circle-Token") } shouldBe listOf("token", "token")
             requests.map { it.header("Range") } shouldBe listOf("bytes=42-", "bytes=42-")
@@ -241,7 +343,7 @@ private fun verifyRawOutputPolling() {
     val observer = polling(5, SECONDS, timer, fetch)
         .takeUntil(finished)
         .concatWith(Observable.defer { client.fetchFinalRawOutput(url, offset, timer) })
-        .doOnNext { offset += it.size }
+        .doOnNext { offset += it.bytes.size }
         .test()
 
     try {
@@ -279,11 +381,12 @@ private fun verifyRawOutputPolling() {
     }
 }
 
-private fun outputClient(respond: (Request) -> Response): BuildOutputClient =
+private fun outputClient(limit: Int = 1024 * 1024, respond: (Request) -> Response): BuildOutputClient =
     BuildOutputClient(
         "token",
         OkHttpClient.Builder().addInterceptor { respond(it.request()) }.build(),
-        Schedulers.trampoline()
+        Schedulers.trampoline(),
+        limit
     )
 
 private fun redirect(request: Request, location: String): Response =
@@ -298,3 +401,29 @@ private fun response(request: Request, status: Int, body: String = "", contentRa
         .body(body.toResponseBody())
         .apply { contentRange?.let { header("Content-Range", it) } }
         .build()
+
+
+private class TrackedBody(text: String, declaredLength: Boolean) : ResponseBody() {
+    private val buffer = Buffer().writeUtf8(text)
+    private val length = if (declaredLength) buffer.size else -1L
+    var bytesRead = 0L
+        private set
+    var closed = false
+        private set
+
+    private val trackedSource = object : Source {
+        override fun read(sink: Buffer, byteCount: Long): Long =
+            buffer.read(sink, minOf(byteCount, 1)).also { if (it > 0) bytesRead += it }
+
+        override fun timeout(): Timeout = Timeout.NONE
+
+        override fun close() {
+            closed = true
+            buffer.close()
+        }
+    }.buffer()
+
+    override fun contentType(): MediaType? = null
+    override fun contentLength(): Long = length
+    override fun source() = trackedSource
+}
