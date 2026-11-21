@@ -183,7 +183,7 @@ internal fun pollActionOutputs(
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
                     val chunks = fetch(url, offset).map { chunk ->
-                        offsets[url] = offset + chunk.bytes.size
+                        offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
                         val log = decoder.decode(chunk.bytes)
                         if (chunk.limitReached) {
                             limitedUrls.add(url)
