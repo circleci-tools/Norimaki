@@ -6,7 +6,9 @@ import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
+import androidx.core.view.children
 import androidx.core.view.doOnPreDraw
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.jakewharton.rxbinding3.recyclerview.scrollEvents
 import com.unhappychoice.norimaki.R
@@ -25,6 +27,12 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
     private val adapter = BuildAdapter(context)
     private var listPending = false
     private var underfillPending = false
+    private val elapsedTimeRefresh = object : Runnable {
+        override fun run() {
+            refreshElapsedTimes()
+            postDelayed(this, 1_000L)
+        }
+    }
 
     private val binding by lazy {
         BuildListViewBinding.bind(this)
@@ -66,6 +74,11 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             }
             .addTo(bag)
 
+        binding.retryPage.setOnClickListener { presenter.getBuilds() }
+        presenter.canRetryPage.asObservable()
+            .subscribeNext { binding.retryPage.isVisible = it }
+            .addTo(bag)
+
         if (presenter.isWorkflow) {
             presenter.page.asObservable()
                 .subscribeNext {
@@ -84,11 +97,23 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
+
+        presenter.observePolling()
+        postDelayed(elapsedTimeRefresh, 1_000L)
     }
 
     override fun onDetachedFromWindow() {
+        removeCallbacks(elapsedTimeRefresh)
         presenter.dropView(this)
         super.onDetachedFromWindow()
+    }
+
+    private fun refreshElapsedTimes() {
+        val recycler = binding.buildsView
+        if (!recycler.isShown) return
+        recycler.children.forEach { row ->
+            (recycler.getChildViewHolder(row) as BuildAdapter.ViewHolder).refreshElapsedTime()
+        }
     }
 
     private fun checkUnderfill() {

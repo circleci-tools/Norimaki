@@ -1,17 +1,23 @@
 package com.unhappychoice.norimaki
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.di.activityModule
 import com.unhappychoice.norimaki.domain.service.EventBusService
@@ -20,8 +26,10 @@ import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.core.goBackFromScreen
 import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
+import com.unhappychoice.norimaki.presentation.presenter.ArtifactSelection
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
+import com.unhappychoice.norimaki.presentation.view.ArtifactsView
 import com.unhappychoice.norimaki.presentation.view.core.HasMenu
 import flow.Flow
 import flow.KeyDispatcher
@@ -48,7 +56,33 @@ class MainActivity : AppCompatActivity() {
         ActivityMainBinding.inflate(layoutInflater)
     }
 
+    private val artifactPickerState by lazy { ViewModelProvider(this)[ArtifactPickerState::class.java] }
+    private var artifactResult: Pair<ArtifactSelection, Uri>? = null
+    private val artifactPicker = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { destination ->
+        val selection = artifactPickerState.selection
+        artifactPickerState.selection = null
+        if (destination != null && selection != null) {
+            artifactResult = selection to destination
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) savePickedArtifact()
+        }
+    }
+
+    internal fun pickArtifactDestination(selection: ArtifactSelection) {
+        if (artifactPickerState.selection != null) return
+        artifactPickerState.selection = selection
+        try {
+            artifactPicker.launch(selection.filename)
+        } catch (_: ActivityNotFoundException) {
+            artifactPickerState.selection = null
+            (getCurrentView() as? ArtifactsView)?.showMessage(R.string.artifact_save_failed)
+        }
+    }
+
     private var projectNavigation: Disposable? = null
+    private var menuOwner: HasMenu? = null
+    private var screenMenuItems = emptyList<MenuItem>()
     private val session by lazy {
         val service: SessionService by module.instance()
         service
@@ -84,11 +118,16 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
+        if (artifactPickerState.selection == null) {
+            artifactPickerState.selection = savedInstanceState?.getBundle(ARTIFACT_SELECTION)
+                ?.let(ArtifactSelection::restore)
+        }
         setupView()
     }
 
     override fun onPostResume() {
         super.onPostResume()
+        savePickedArtifact()
         if (projectNavigation != null) return
         val eventBus: EventBusService by module.instance()
         projectNavigation = Flow.get(this).subscribeToProjectNavigation(eventBus, ::isTokenScreenVisible)
@@ -106,21 +145,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        artifactPickerState.selection?.let { outState.putBundle(ARTIFACT_SELECTION, it.toBundle()) }
         BundleServiceRunner.getBundleServiceRunner(this).onSaveInstanceState(outState)
         super.onSaveInstanceState(outState)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        (getCurrentView() as? HasMenu)?.onCreateOptionsMenu(menu)
+        val existingItems = menu?.children?.toList().orEmpty()
+        menuOwner?.onCreateOptionsMenu(menu)
+        screenMenuItems = menu?.children?.filter { item -> existingItems.none { it === item } }?.toList().orEmpty()
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            android.R.id.home -> goBackFromCurrentScreen()
+        if (item.itemId == android.R.id.home) {
+            goBackFromCurrentScreen()
+            return true
         }
-        (getCurrentView() as? HasMenu)?.onOptionsItemSelected(item)
+        val owner = menuOwner ?: return super.onOptionsItemSelected(item)
+        if (screenMenuItems.none { it === item }) return super.onOptionsItemSelected(item)
+        owner.onOptionsItemSelected(item)
         return true
+    }
+
+    internal fun setMenuOwner(view: View) {
+        menuOwner = view as? HasMenu
+        screenMenuItems = emptyList()
+        invalidateOptionsMenu()
+    }
+
+    private fun savePickedArtifact() {
+        val (selection, destination) = artifactResult ?: return
+        artifactResult = null
+        (getCurrentView() as? ArtifactsView)?.presenter?.save(selection, destination)
     }
 
     private fun setupView() {
@@ -166,4 +223,12 @@ class MainActivity : AppCompatActivity() {
             .install()
 
     private fun getCurrentView(): View? = binding.containerView.getChildAt(0)
+
+    private companion object {
+        const val ARTIFACT_SELECTION = "artifact_selection"
+    }
+}
+
+internal class ArtifactPickerState : ViewModel() {
+    var selection: ArtifactSelection? = null
 }
