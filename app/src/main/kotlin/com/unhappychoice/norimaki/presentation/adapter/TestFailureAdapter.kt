@@ -8,8 +8,9 @@ import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.TestFailureRowBinding
 import com.unhappychoice.norimaki.infrastructure.testresults.TestFailure
 
-internal class TestFailureAdapter(private val failures: List<TestFailure>) :
+internal class TestFailureAdapter(initialFailures: List<TestFailure> = emptyList()) :
     RecyclerView.Adapter<TestFailureAdapter.Holder>() {
+    private val failures = initialFailures.toMutableList()
     private val expanded = mutableSetOf<Int>()
 
     override fun getItemCount(): Int = failures.size
@@ -22,6 +23,12 @@ internal class TestFailureAdapter(private val failures: List<TestFailure>) :
             if (!expanded.add(position)) expanded.remove(position)
             position in expanded
         }
+    }
+
+    fun append(newFailures: List<TestFailure>) {
+        val start = failures.size
+        failures.addAll(newFailures)
+        notifyItemRangeInserted(start, newFailures.size)
     }
 
     class Holder(private val binding: TestFailureRowBinding) : RecyclerView.ViewHolder(binding.root) {

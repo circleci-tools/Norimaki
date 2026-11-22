@@ -7,8 +7,6 @@ import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
 import androidx.core.view.children
-import androidx.core.view.doOnPreDraw
-import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.jakewharton.rxbinding3.recyclerview.scrollEvents
 import com.unhappychoice.norimaki.R
@@ -25,8 +23,6 @@ import org.kodein.di.instance
 class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListView>(context, attr), HasMenu {
     override val presenter: BuildListPresenter by instance()
     private val adapter = BuildAdapter(context)
-    private var listPending = false
-    private var underfillPending = false
     private val elapsedTimeRefresh = object : Runnable {
         override fun run() {
             refreshElapsedTimes()
@@ -65,35 +61,14 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         binding.buildsView.layoutManager = GridLayoutManager(context, resources.getInteger(R.integer.build_list_columns))
 
         presenter.builds
-            .subscribeNext { builds ->
-                listPending = true
-                adapter.submitList(builds) {
-                    listPending = false
-                    checkUnderfill()
-                }
-            }
+            .subscribeNext { adapter.submitList(it) }
             .addTo(bag)
-
-        binding.retryPage.setOnClickListener { presenter.getBuilds() }
-        presenter.canRetryPage.asObservable()
-            .subscribeNext { binding.retryPage.isVisible = it }
-            .addTo(bag)
-
-        if (presenter.isWorkflow) {
-            presenter.page.asObservable()
-                .subscribeNext {
-                    underfillPending = true
-                    checkUnderfill()
-                }
-                .addTo(bag)
-        }
 
         adapter.onClickItem
             .subscribeNext { presenter.goToBuildView(it) }
             .addTo(bag)
 
         binding.buildsView.scrollEvents()
-            .filter { !presenter.isWorkflow || it.dy != 0 }
             .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
@@ -114,21 +89,5 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
         recycler.children.forEach { row ->
             (recycler.getChildViewHolder(row) as BuildAdapter.ViewHolder).refreshElapsedTime()
         }
-    }
-
-    private fun checkUnderfill() {
-        if (!underfillPending || listPending || !isAttachedToWindow) return
-        underfillPending = false
-        val recycler = binding.buildsView
-        recycler.doOnPreDraw {
-            if (listPending) {
-                underfillPending = true
-                return@doOnPreDraw
-            }
-            presenter.getBuildsIfUnderfilled(
-                canScroll = recycler.canScrollVertically(-1) || recycler.canScrollVertically(1)
-            )
-        }
-        recycler.invalidate()
     }
 }
