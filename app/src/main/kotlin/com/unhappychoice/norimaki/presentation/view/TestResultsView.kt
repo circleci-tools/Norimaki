@@ -15,6 +15,7 @@ import org.kodein.di.instance
 class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResultsView>(context, attr) {
     override val presenter: TestResultsPresenter by instance()
     private val binding by lazy { TestResultsViewBinding.bind(this) }
+    private var receivedPage = false
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -29,23 +30,33 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
         super.onDetachedFromWindow()
     }
 
-    internal fun showLoading() = showStatus(R.string.test_results_loading)
+    internal fun showLoading() {
+        receivedPage = false
+        binding.failures.adapter = null
+        showStatus(R.string.test_results_loading)
+    }
 
     internal fun showUnavailable() = showStatus(R.string.test_results_unavailable)
 
-    internal fun showLoadError() = showStatus(R.string.test_results_load_error, retry = true)
+    internal fun showLoadError() {
+        val message = if (receivedPage) R.string.test_results_incomplete else R.string.test_results_load_error
+        showStatus(message, retry = true)
+    }
 
-    internal fun showFailures(failures: List<TestFailure>) {
-        if (failures.isEmpty()) {
-            showStatus(R.string.test_results_no_failures)
-            return
-        }
-        binding.status.isVisible = false
-        binding.failures.adapter = TestFailureAdapter(failures)
+    internal fun appendFailures(failures: List<TestFailure>) {
+        receivedPage = true
+        if (failures.isEmpty()) return
+        val adapter = binding.failures.adapter as? TestFailureAdapter
+            ?: TestFailureAdapter().also { binding.failures.adapter = it }
+        adapter.append(failures)
+    }
+
+    internal fun finishLoading() {
+        if (binding.failures.adapter == null) showStatus(R.string.test_results_no_failures)
+        else binding.status.isVisible = false
     }
 
     private fun showStatus(message: Int, retry: Boolean = false) {
-        binding.failures.adapter = null
         binding.status.setText(message)
         binding.status.isVisible = true
         binding.retry.isVisible = retry

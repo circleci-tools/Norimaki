@@ -42,7 +42,7 @@ class ProjectAdapterTest {
         projects.forEachIndexed { position, project ->
             val row = checkNotNull(picker.findViewHolderForAdapterPosition(position)).itemView
             val name = row.findViewById<TextView>(R.id.projectNameView).text.toString()
-            assertEquals("example/${project.reponame}", name)
+            assertEquals("GitHub · example/${project.reponame}", name)
             assertTrue(row.performClick())
         }
         selections.assertValues(projects[0], projects[1])
