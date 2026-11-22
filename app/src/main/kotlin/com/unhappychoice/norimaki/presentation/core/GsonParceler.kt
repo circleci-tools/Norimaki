@@ -13,6 +13,7 @@ import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.core.Screen
 import flow.KeyParceler
 import java.io.StringReader
@@ -53,7 +54,7 @@ class GsonParceler : KeyParceler {
             reader.beginObject()
             val type = Class.forName(reader.nextName()).asSubclass(Screen::class.java)
             return when (type) {
-                BuildScreen::class.java, BuildStepScreen::class.java ->
+                BuildScreen::class.java, BuildStepScreen::class.java, TestResultsScreen::class.java ->
                     decodeBuildScreen(gson.fromJson(reader, JsonObject::class.java), type)
                 else -> gson.fromJson(reader, type)
             }
@@ -66,9 +67,15 @@ class GsonParceler : KeyParceler {
         if (!json.has("build")) return gson.fromJson(json, type)
         val build = gson.fromJson(json.get("build"), Build::class.java)
         val buildId = BuildId.from(build) ?: return BuildListScreen("")
-        val step = gson.fromJson(json.get("buildStep"), BuildStep::class.java)
-            ?: return BuildScreen(buildId)
-        return BuildStepScreen(buildId, BuildStepId.from(step, build.steps.orEmpty().indexOf(step)))
+        return when (type) {
+            TestResultsScreen::class.java -> TestResultsScreen(buildId)
+            BuildStepScreen::class.java -> {
+                val step = gson.fromJson(json.get("buildStep"), BuildStep::class.java)
+                    ?: return BuildScreen(buildId)
+                BuildStepScreen(buildId, BuildStepId.from(step, build.steps.orEmpty().indexOf(step)))
+            }
+            else -> BuildScreen(buildId)
+        }
     }
 
     private val gson = Gson()

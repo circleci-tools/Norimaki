@@ -105,7 +105,7 @@ class BuildPresenterTest : DescribeSpec({
                 presenter.goToTestResultsScreen()
 
                 verify(exactly = 1) { flow.set(capture(screen)) }
-                screen.captured.build shouldBe build
+                screen.captured.buildId shouldBe BuildId("github", "owner", "repo", 123)
             } finally {
                 unmockkStatic(Flow::class)
             }
