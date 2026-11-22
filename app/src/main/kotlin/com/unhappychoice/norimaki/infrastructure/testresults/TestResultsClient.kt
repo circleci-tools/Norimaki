@@ -1,9 +1,8 @@
 package com.unhappychoice.norimaki.infrastructure.testresults
 
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.unhappychoice.norimaki.domain.model.vcsType
+import com.unhappychoice.norimaki.domain.model.BuildId
 import io.reactivex.Single
 import io.reactivex.SingleEmitter
 import io.reactivex.schedulers.Schedulers
@@ -17,9 +16,9 @@ internal class TestResultsClient(
     private val token: String,
     private val client: OkHttpClient = OkHttpClient()
 ) {
-    fun fetch(build: Build): Single<TestResults> = Single.create<TestResults> { emitter ->
+    fun fetch(buildId: BuildId): Single<TestResults> = Single.create<TestResults> { emitter ->
         try {
-            val url = build.testResultsUrl()
+            val url = buildId.testResultsUrl()
             if (url == null) emitter.onSuccess(TestResults.Unavailable)
             else fetchPages(url, emitter)
         } catch (error: Exception) {
@@ -72,16 +71,14 @@ internal sealed interface TestResults {
 
 internal data class TestFailure(val name: String, val className: String?, val message: String?)
 
-private fun Build.testResultsUrl(): HttpUrl? {
-    val owner = username?.takeIf { it.isNotBlank() } ?: return null
-    val repository = reponame?.takeIf { it.isNotBlank() } ?: return null
-    val job = buildNum ?: return null
-    val vcs = if (vcsType() == "bitbucket") "bb" else "gh"
+private fun BuildId.testResultsUrl(): HttpUrl? {
+    if (owner.isBlank() || repository.isBlank()) return null
+    val vcs = if (vcsType == "bitbucket") "bb" else "gh"
     return "https://circleci.com/api/v2/project/".toHttpUrl().newBuilder()
         .addPathSegment(vcs)
         .addPathSegment(owner)
         .addPathSegment(repository)
-        .addPathSegment(job.toString())
+        .addPathSegment(number.toString())
         .addPathSegment("tests")
         .build()
 }

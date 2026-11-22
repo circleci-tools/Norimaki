@@ -11,6 +11,7 @@ import com.unhappychoice.norimaki.presentation.core.GsonParceler
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -27,13 +28,14 @@ class BuildNavigationHistoryTest : DescribeSpec({
 
             val savedRoutes = routes(large).map(::parcelJson)
             savedRoutes shouldBe routes(small).map(::parcelJson)
-            (savedRoutes.sumOf { it.length } < 512) shouldBe true
+            (savedRoutes.sumOf { it.length } < 768) shouldBe true
         }
 
         it("restores the selected step by number and goes back to the same build") {
             val build = buildFixture(2, 1)
-            val keys = routes(build)
-            val history = History.emptyBuilder().pushAll(keys.map { restore(it, parcelJson(it)) }).build()
+            val (details, step) = routes(build)
+            val keys = listOf(details, step).map { restore(it, parcelJson(it)) }
+            val history = History.emptyBuilder().pushAll(keys).build()
             val flow = Flow(KeyManager(emptyList()), history)
             flow.setDispatcher { _, callback -> callback.onTraversalCompleted() }
 
@@ -47,6 +49,26 @@ class BuildNavigationHistoryTest : DescribeSpec({
             }.blockingFirst() shouldBe 1
             flow.goBack() shouldBe true
             flow.history.top<BuildScreen>() shouldBe BuildScreen(stepScreen.buildId)
+        }
+
+        it("restores current and legacy test results keys and goes back to the same build") {
+            val build = buildFixture(2, 1)
+            val buildId = BuildId("bitbucket", "team", "repo", 123)
+            val details = BuildScreen(buildId)
+            val results = TestResultsScreen(buildId)
+            val legacyJson = """{"${TestResultsScreen::class.java.name}":{"build":${Gson().toJson(build)}}}"""
+
+            listOf(parcelJson(results), legacyJson).forEach { json ->
+                val restored = restore(results, json)
+                val history = History.emptyBuilder().push(restore(details, parcelJson(details))).push(restored).build()
+                val flow = Flow(KeyManager(emptyList()), history)
+                flow.setDispatcher { _, callback -> callback.onTraversalCompleted() }
+
+                flow.history.top<TestResultsScreen>() shouldBe results
+                parcelJson(restored) shouldBe parcelJson(results)
+                flow.goBack() shouldBe true
+                flow.history.top<BuildScreen>() shouldBe details
+            }
         }
 
         it("restores older history that contains embedded responses") {
@@ -99,7 +121,11 @@ private fun buildFixture(stepCount: Int, commandLength: Int): Build {
 private fun routes(build: Build): List<Any> {
     val buildId = BuildId.from(build)!!
     val steps = build.steps!!
-    return listOf(BuildScreen(buildId), BuildStepScreen(buildId, BuildStepId.from(steps[1], 1)))
+    return listOf(
+        BuildScreen(buildId),
+        BuildStepScreen(buildId, BuildStepId.from(steps[1], 1)),
+        TestResultsScreen(buildId)
+    )
 }
 
 private fun parcelJson(key: Any): String {
