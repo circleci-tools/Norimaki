@@ -459,6 +459,31 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("workflow pagination") {
+        it("disposes an in-flight page and ignores its late response after detach") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val newest = build("target", 2)
+            val older = build("target", 1)
+            val inFlight = PublishSubject.create<List<Build>>()
+            val view = mockk<BuildListView>()
+            every { api.pageAt(0) } returns Observable.just(listOf(newest))
+            every { api.pageAt(20) } returns inFlight
+            val presenter = presenter(api, view = view)
+            scheduler.triggerActions()
+
+            presenter.getBuilds()
+            inFlight.hasObservers() shouldBe true
+            presenter.page.value shouldBe 1
+
+            presenter.dropView(view)
+            inFlight.hasObservers() shouldBe false
+            inFlight.onNext(listOf(older))
+            inFlight.onComplete()
+            scheduler.triggerActions()
+
+            presenter.page.value shouldBe 1
+            presenter.builds.take(1).test().assertResult(listOf(newest))
+        }
+
         it("retries a failed page from an empty workflow list at the same offset") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val firstPage = (21 downTo 2).map { build("other", it) }

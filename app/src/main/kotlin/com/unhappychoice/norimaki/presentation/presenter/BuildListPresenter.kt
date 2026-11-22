@@ -80,7 +80,6 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
     }
 
     override fun onViewDropped() {
-        pollingRegistration?.let(bag::remove)
         pollingRegistration = null
     }
 
