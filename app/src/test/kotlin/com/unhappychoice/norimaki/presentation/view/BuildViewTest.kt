@@ -41,7 +41,23 @@ class BuildViewTest {
         every { hasWorkflow() } returns false
         every { steps } returns Variable(emptyList())
         every { projectName } returns "github/owner/repo"
+        every { rebuildFailed } returns Variable(false)
         every { buildLoadFailed } returns Variable(false)
+    }
+
+    @Test
+    fun routesOnlyTheArtifactsMenuItemToArtifactNavigation() = withBuildView { activity, view ->
+        view.onOptionsItemSelected(null)
+        val menu = PopupMenu(activity, view).menu
+        view.onCreateOptionsMenu(menu)
+        menu.add(0, 100, 0, "Unrelated item")
+        val items = (0 until menu.size()).map(menu::getItem)
+        val artifacts = items.single { it.title == activity.getString(R.string.artifacts) }
+        items.filter { it != artifacts }.forEach(view::onOptionsItemSelected)
+        verify(exactly = 0) { presenter.goToArtifactsScreen() }
+
+        view.onOptionsItemSelected(artifacts)
+        verify(exactly = 1) { presenter.goToArtifactsScreen() }
     }
 
     @Test
@@ -63,7 +79,7 @@ class BuildViewTest {
     }
 
     @Test
-    fun showsTheLoadedBuildTitleInTheActionBar() = withBuildView { _, view ->
+    fun showsTheLoadedBuildTitleAndEnablesTestResults() = withBuildView { _, view ->
         val actionBar = mockk<ActionBar>(relaxed = true)
         val host = mockk<MainActivity> { every { supportActionBar } returns actionBar }
         every { presenter.activity } returns host
@@ -73,7 +89,14 @@ class BuildViewTest {
             every { vcsRevision } returns "abcdef123"
         }
 
+        val testResults = view.findViewById<View>(R.id.testResults)
+        assertFalse(testResults.isEnabled)
+
         view.showBuild(build)
+
+        assertTrue(testResults.isEnabled)
+        assertTrue(testResults.performClick())
+        verify(exactly = 1) { presenter.goToTestResultsScreen() }
 
         assertEquals("main #42 (abcdef)", view.screenTitle)
         verify { actionBar.title = "main #42 (abcdef)" }

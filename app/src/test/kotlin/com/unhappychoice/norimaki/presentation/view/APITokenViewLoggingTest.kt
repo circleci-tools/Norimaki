@@ -2,15 +2,19 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Observer
+import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
 import com.unhappychoice.norimaki.presentation.viewmodel.APITokenViewModel
+import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import io.reactivex.Single
+import io.reactivex.subjects.SingleSubject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -32,19 +36,22 @@ class APITokenViewLoggingTest {
         val enteredToken = "dummy-entered-token"
         val editedToken = "dummy-edited-token"
         var savedToken = storedToken
+        val verification = SingleSubject.create<User>()
         val model = APITokenViewModel(SessionService(
             readToken = { savedToken },
             writeToken = { savedToken = it },
             createClient = { mockk() },
-            verify = { Single.just(mockk()) }
+            verify = { verification }
         ))
-        val presenter = mockk<APITokenPresenter>(relaxed = true) {
-            every { this@mockk.model } returns model
-            every { observeVerification(any()) } answers { model.verification.observeForever(firstArg()) }
-        }
-
-        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
             val activity = controller.get().apply { setTheme(R.style.AppTheme) }
+            val presenter = mockk<APITokenPresenter>(relaxed = true) {
+                every { this@mockk.model } returns model
+                every { observeVerification(any()) } answers {
+                    model.verification.observe(activity, firstArg<Observer<TokenVerification>>())
+                }
+                every { goToBuildList() } answers { model.reset() }
+            }
             val form = showForm(activity, presenter)
             val input = form.accessTokenTextView
             assertEquals(storedToken, input.text.toString())
@@ -56,11 +63,15 @@ class APITokenViewLoggingTest {
             assertEquals(editedToken, input.text.toString())
             assertEquals(storedToken, savedToken)
             form.submitButton.performClick()
-            assertEquals(editedToken, savedToken)
-            verify(exactly = 1) { presenter.goToBuildList() }
+            assertEquals(storedToken, savedToken)
+            verify(exactly = 0) { presenter.goToBuildList() }
 
             val reopened = showForm(activity, presenter)
             assertEquals(editedToken, reopened.accessTokenTextView.text.toString())
+
+            verification.onSuccess(mockk())
+            assertEquals(editedToken, savedToken)
+            verify(exactly = 1) { presenter.goToBuildList() }
 
             val dummyTokens = listOf(storedToken, enteredToken, editedToken)
             val tokenWasLogged = ShadowLog.getLogs().any { entry -> dummyTokens.any { it in entry.msg.orEmpty() } }

@@ -1,16 +1,16 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.projectName
-import com.unhappychoice.norimaki.domain.service.rebuildWithoutCache
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
+import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
@@ -19,7 +19,6 @@ import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import java.util.concurrent.TimeUnit
 import org.kodein.di.instance
-import java.util.concurrent.atomic.AtomicBoolean
 
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private val buildId: BuildId by instance()
@@ -28,7 +27,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         get() = with(buildId) { "$vcsType/$owner/$repository" }
     val steps = Variable<List<BuildStep>>(listOf())
     val buildLoadFailed = Variable(false)
-    private val rebuildInFlight = AtomicBoolean()
+    val rebuildFailed = Variable(false)
 
     override fun onAuthenticated() = pollBuild()
 
@@ -61,6 +60,16 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         goTo(activity, BuildStepScreen(buildId, stepId))
     }
 
+    fun goToTestResultsScreen() {
+        val loadedBuild = build ?: return
+        goTo(activity, TestResultsScreen(loadedBuild))
+    }
+
+    fun goToArtifactsScreen() {
+        if (account == null) return
+        goTo(activity, ArtifactsScreen(buildId))
+    }
+
     fun hasWorkflow(): Boolean = build?.nonBlankWorkflowId != null
 
     fun goToWorkflowScreen() {
@@ -69,37 +78,27 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
-    fun rebuild() {
-        val client = account?.client ?: return
-        if (!rebuildInFlight.compareAndSet(false, true)) return
+    fun rebuild() = submitRebuild(clearCache = false)
 
-        Observable.defer { retryBuild(client) }
-            .subscribeOnIoObserveOnUI()
-            .doFinally { rebuildInFlight.set(false) }
-            .subscribeNext { goBack(activity) }
-            .addTo(bag)
-    }
+    fun rebuildWithoutCache() = submitRebuild(clearCache = true)
 
-    fun rebuildWithoutCache() {
+    private fun submitRebuild(clearCache: Boolean) {
         val verified = account ?: return
         val origin = view
-        if (!rebuildInFlight.compareAndSet(false, true)) return
+        val result = verified.startRebuild(buildId, clearCache, sessionEnded(verified)) ?: return
+        rebuildFailed.value = false
 
-        verified.client.rebuildWithoutCache(
-            buildId,
-            cancel = sessionEnded(verified),
-            onFinished = { rebuildInFlight.set(false) }
-        )
+        result
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribeBy(onError = {}, onNext = { origin?.let(::goBackFrom) })
+            .subscribeBy(
+                onError = { rebuildFailed.value = true },
+                onNext = { origin?.let(::goBackFrom) }
+            )
             .addTo(bag)
     }
 
     private val Build.nonBlankWorkflowId: String?
         get() = workflows?.workflowId?.takeUnless { it.isBlank() }
-
-    private fun retryBuild(client: CircleCIAPIClientV1_1): Observable<Build> =
-        client.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
 
     private fun goBackFrom(origin: BuildView) {
         val container = activity.binding.containerView

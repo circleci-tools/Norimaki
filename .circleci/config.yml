@@ -5,7 +5,7 @@ commands:
     steps:
       - restore_cache:
           keys:
-            - jars-{{ checksum "build.gradle" }}-{{ checksum  "app/build.gradle" }}
+            - &gradle_cache_key gradle-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "settings.gradle" }}-{{ checksum "build.gradle" }}-{{ checksum "app/build.gradle" }}-{{ checksum "app/gradle.lockfile" }}
             - builds-{{ .Revision }}
             - app-builds-{{ .Revision }}
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - save_cache:
           paths:
             - ~/.gradle
-          key: jars-{{ checksum "build.gradle" }}-{{ checksum  "app/build.gradle" }}
+          key: *gradle_cache_key
       - save_cache:
           paths:
             - ~/norimaki/build
@@ -49,6 +49,13 @@ jobs:
       - checkout
       - restore_gradle_cache
       - run:
+          name: Install Android SDK Build Tools
+          command: |
+            sdkmanager "build-tools;37.0.0"
+            test -x "$ANDROID_HOME/build-tools/37.0.0/aapt2"
+          max_auto_reruns: 2
+          auto_rerun_delay: 10s
+      - run:
           name: Run Tests
           command: ./gradlew jacoco
       - run:
@@ -60,6 +67,9 @@ jobs:
       - run:
           name: Test coverage upload script
           command: bash scripts/ci/test-send-coverage-info.sh
+      - run:
+          name: Test release credential cleanup
+          command: bash scripts/ci/test-release-credentials.sh
       - run:
           name: Test tagged Play deployment
           command: bash scripts/ci/test-play-deploy.sh

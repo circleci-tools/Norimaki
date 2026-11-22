@@ -5,6 +5,14 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
+    <Button
+        android:id="@+id/testResults"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:enabled="false"
+        android:text="@string/test_results_title" />
+
     <LinearLayout
         android:id="@+id/buildLoadError"
         android:layout_width="match_parent"
@@ -24,6 +32,15 @@
             android:layout_height="wrap_content"
             android:text="@string/build_load_retry" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/rebuildError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:padding="@dimen/horizontal_margin"
+        android:text="@string/build_rebuild_error"
+        android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/stepsView"
