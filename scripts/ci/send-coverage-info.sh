@@ -1,8 +1,11 @@
-#! /bin/bash
-set -eu
+#!/bin/bash
 set +x
+set -eu
 
-: "${CODECOV_TOKEN:?Set CODECOV_TOKEN in the CircleCI environment}"
+if [[ -z "${CODECOV_TOKEN:-}" ]]; then
+    echo 'Skipping coverage upload. Set CODECOV_TOKEN in CircleCI project environment variables to enable it.' >&2
+    exit 0
+fi
 
 uploader_dir=$(mktemp -d)
 trap 'rm -rf "$uploader_dir"' EXIT
