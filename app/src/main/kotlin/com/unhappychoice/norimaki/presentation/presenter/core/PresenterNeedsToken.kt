@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter.core
 
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -26,14 +27,15 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     @Volatile protected var account: VerifiedSession? = null
         private set
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onLoad(savedInstanceState: Bundle?) {
+        super.onLoad(savedInstanceState)
         session.restore()
             .subscribe(::useAccount, { goToAPITokenView() })
             .addTo(lifecycle)
     }
 
     final override fun dropView(view: T) {
+        if (view !== getView()) return
         account = null
         lifecycle.clear()
         bag.clear()

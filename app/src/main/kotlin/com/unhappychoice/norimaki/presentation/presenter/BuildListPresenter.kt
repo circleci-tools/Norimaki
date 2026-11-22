@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import android.os.Bundle
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -42,13 +43,17 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     override val hasMore get() = buildList.hasMore
     val canRetryPage get() = buildList.canRetryPage
 
+    override fun onLoad(savedInstanceState: Bundle?) {
+        resetRequests()
+        super.onLoad(savedInstanceState)
+    }
+
     override fun onAuthenticated() {
         buildList.start().addTo(bag)
     }
 
     override fun onSessionEnded() {
-        hasStartedPolling = false
-        buildList.reset()
+        resetRequests()
     }
 
     fun getBuilds() {
@@ -105,6 +110,11 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
             val client = account?.client ?: return@defer Observable.empty<Build>()
             buildId.load(client)
         }
+    }
+
+    private fun resetRequests() {
+        hasStartedPolling = false
+        buildList.reset()
     }
 
     private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
