@@ -98,6 +98,18 @@ class TestResultsViewTest {
     }
 
     @Test
+    fun showsIncompleteWhenALaterPageFailsWithoutAnyTestFailures() {
+        val pages = PublishSubject.create<TestResults>()
+        withResults(pages) { view ->
+            pages.onNext(TestResults.FailurePage(emptyList()))
+            pages.onError(IOException("Second page failed"))
+            shadowOf(Looper.getMainLooper()).idle()
+
+            assertStatus(view, R.string.test_results_incomplete)
+        }
+    }
+
+    @Test
     fun showsNoFailuresOnlyAfterTheFinalPassingPage() {
         withPendingSecondPage("""{"result":"success"}""", """{"items":[{"result":"success"}]}""") { view, finish ->
             assertStatus(view, R.string.test_results_loading)

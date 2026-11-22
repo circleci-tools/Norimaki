@@ -15,6 +15,7 @@ import org.kodein.di.singleton
 
 class BackTestApplication : NorimakiApplication() {
     var projects: Observable<List<Project>> = Observable.never()
+    val projectBuildRequests = mutableListOf<Triple<String, String, String>>()
     val verifiedTokens = mutableListOf<String>()
     val rejection: SingleSubject<User> = SingleSubject.create()
 
@@ -32,7 +33,10 @@ class BackTestApplication : NorimakiApplication() {
             mockk<CircleCIAPIClientV1_1> {
                 every { getProjects() } answers { projects }
                 every { getRecentBuilds(any(), any()) } returns Observable.never()
-                every { getProjectBuilds(any(), any(), any(), any(), any()) } returns Observable.never()
+                every { getProjectBuilds(any(), any(), any(), any(), any()) } answers {
+                    projectBuildRequests.add(Triple(firstArg(), secondArg(), thirdArg()))
+                    Observable.never()
+                }
             }
         }
         return SessionService({ savedToken }, { savedToken = it }, clients::getValue) { client ->

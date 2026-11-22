@@ -28,6 +28,7 @@ class TestResultsClientTest : DescribeSpec({
             }
 
             client.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(
+                TestResults.FailurePage(emptyList()),
                 TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>"))),
                 TestResults.FailurePage(listOf(TestFailure("throws", null, null))),
                 TestResults.Reported
@@ -73,12 +74,14 @@ class TestResultsClientTest : DescribeSpec({
             client { request ->
                 if (request.url.query == null) 200 to """{"items":[],"next_page_token":"next"}"""
                 else 404 to "{}"
-            }.fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
+            }.fetch(buildId).test().awaitDone(5, SECONDS)
+                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList()))
         }
 
         it("rejects a repeated pagination token") {
             client { 200 to """{"items":[],"next_page_token":"next"}""" }
-                .fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
+                .fetch(buildId).test().awaitDone(5, SECONDS)
+                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList()))
         }
 
         it("keeps emitted failures when a later page contains invalid JSON") {

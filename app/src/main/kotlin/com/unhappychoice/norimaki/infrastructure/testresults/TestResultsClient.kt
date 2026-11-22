@@ -41,11 +41,11 @@ internal class TestResultsClient(
             val items = page.getAsJsonArray("items")
             hasResults = hasResults || items.size() > 0
             val failures = items.mapNotNull { it.asJsonObject.toFailure() }
-            if (failures.isNotEmpty()) emitter.onNext(TestResults.FailurePage(failures))
             pageToken = page.stringOrNull("next_page_token")?.takeIf { it.isNotEmpty() }
             if (pageToken != null && !seenTokens.add(pageToken)) {
                 throw IOException("Repeated test results page token")
             }
+            if (failures.isNotEmpty() || pageToken != null) emitter.onNext(TestResults.FailurePage(failures))
         } while (pageToken != null)
         emitter.onNext(if (hasResults) TestResults.Reported else TestResults.Unavailable)
     }
