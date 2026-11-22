@@ -3,8 +3,8 @@ set +x
 set -eu
 
 if [[ -z "${CODECOV_TOKEN:-}" ]]; then
-    echo 'Skipping coverage upload. Set CODECOV_TOKEN in CircleCI project environment variables to enable it.' >&2
-    exit 0
+    echo 'Coverage upload requires CODECOV_TOKEN. Set it in CircleCI project environment variables.' >&2
+    exit 1
 fi
 
 uploader_dir=$(mktemp -d)
