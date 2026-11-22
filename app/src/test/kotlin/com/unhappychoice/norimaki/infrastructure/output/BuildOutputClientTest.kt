@@ -34,7 +34,7 @@ class BuildOutputClientTest : DescribeSpec({
     listOf(true, false).forEach { declaredLength ->
         describe("log reads with declared length = $declaredLength") {
             it("keeps complete messages from an oversized completed log and stops at the byte limit") {
-                val prefix = """[{"message":"first line"},{"message":"partial"""
+                val prefix = """[{"message":"first line\u001b]8;;https://example.test"},{"message":"partial"""
                 val body = TrackedBody(prefix + """ message"}]""", declaredLength)
                 val client = outputClient(prefix.toByteArray().size) { request ->
                     response(request, 200).newBuilder().body(body).build()
