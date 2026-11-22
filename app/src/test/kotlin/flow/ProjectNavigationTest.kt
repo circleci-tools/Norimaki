@@ -1,41 +1,49 @@
-package com.unhappychoice.norimaki.presentation.core
+package flow
 
 import com.github.unhappychoice.circleci.v1.response.Project
 import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
+import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.EventBusService
+import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
-import flow.Direction
-import flow.Flow
+import com.unhappychoice.norimaki.presentation.screen.BuildScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import io.kotest.core.spec.style.DescribeSpec
-import io.mockk.clearMocks
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import io.reactivex.disposables.Disposable
 
 class ProjectNavigationTest : DescribeSpec({
     describe("Flow.subscribeToProjectNavigation()") {
         val eventBus = EventBusService()
-        val flow = mockk<Flow>(relaxed = true)
+        val previousBuildId = BuildId("github", "team", "previous", 1)
+        val previousHistory = History.single(BuildListScreen("github/team/previous")).buildUpon()
+            .push(BuildScreen(previousBuildId))
+            .push(BuildStepScreen(previousBuildId, BuildStepId(0)))
+            .build()
+        lateinit var flow: Flow
         lateinit var subscription: Disposable
         var isTokenScreenVisible = false
 
         beforeEach {
-            clearMocks(flow)
+            flow = Flow(KeyManager(emptyList()), previousHistory)
+            flow.setDispatcher { _, callback -> callback.onTraversalCompleted() }
             isTokenScreenVisible = false
             subscription = flow.subscribeToProjectNavigation(eventBus) { isTokenScreenVisible }
         }
 
         afterEach { subscription.dispose() }
 
-        it("opens Recent Builds once without a build list presenter") {
+        it("resets step detail history to Recent Builds") {
             eventBus.selectProject.onNext(None)
 
-            verify(exactly = 1) { flow.replaceTop(BuildListScreen(""), Direction.REPLACE) }
+            flow.assertBuildReturnsTo(BuildListScreen(""), previousBuildId)
         }
 
-        it("opens the selected project once without a build list presenter") {
+        it("resets step detail history to the selected project") {
             val project = mockk<Project> {
                 every { vcsUrl } returns "https://bitbucket.org/team/repo"
                 every { username } returns "team"
@@ -44,16 +52,14 @@ class ProjectNavigationTest : DescribeSpec({
 
             eventBus.selectProject.onNext(Some(project))
 
-            verify(exactly = 1) {
-                flow.replaceTop(BuildListScreen("bitbucket/team/repo"), Direction.REPLACE)
-            }
+            flow.assertBuildReturnsTo(BuildListScreen("bitbucket/team/repo"), BuildId("bitbucket", "team", "repo", 2))
         }
 
         it("stops handling selections when the subscription is disposed") {
             subscription.dispose()
             eventBus.selectProject.onNext(None)
 
-            verify(exactly = 0) { flow.replaceTop(any(), any()) }
+            flow.history.toList() shouldBe previousHistory.toList()
         }
 
         it("ignores Recent Builds and project selections while the token screen is active") {
@@ -62,12 +68,21 @@ class ProjectNavigationTest : DescribeSpec({
             eventBus.selectProject.onNext(None)
             eventBus.selectProject.onNext(Some(mockk<Project>(relaxed = true)))
 
-            verify(exactly = 0) { flow.replaceTop(any(), any()) }
+            flow.history.toList() shouldBe previousHistory.toList()
 
             isTokenScreenVisible = false
             eventBus.selectProject.onNext(None)
 
-            verify(exactly = 1) { flow.replaceTop(BuildListScreen(""), Direction.REPLACE) }
+            flow.history.toList() shouldBe listOf(BuildListScreen(""))
         }
     }
 })
+
+private fun Flow.assertBuildReturnsTo(list: BuildListScreen, buildId: BuildId) {
+    history.toList() shouldBe listOf(list)
+    val build = BuildScreen(buildId)
+    set(build)
+    history.top<BuildScreen>() shouldBe build
+    goBack() shouldBe true
+    history.toList() shouldBe listOf(list)
+}

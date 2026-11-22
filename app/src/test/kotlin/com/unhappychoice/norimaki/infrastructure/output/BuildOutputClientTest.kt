@@ -157,7 +157,7 @@ class BuildOutputClientTest : DescribeSpec({
                 }.test()
 
                 observer.assertValues(live).assertNotComplete()
-                finished.onNext(ActionSnapshot(listOf(url), finished = true))
+                finished.onNext(ActionSnapshot(emptyList(), finished = true))
                 scheduler.advanceTimeBy(5, SECONDS)
 
                 if (finalStatus == 206) {
