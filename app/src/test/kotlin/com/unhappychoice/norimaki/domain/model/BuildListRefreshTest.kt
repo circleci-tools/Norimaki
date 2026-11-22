@@ -26,7 +26,7 @@ class BuildListRefreshTest : DescribeSpec({
             val finished = build(2, "finished", "success")
             val latest = listOf(build(3, "running"))
 
-            refreshBuildList(listOf(unavailable, running), latest, null) {
+            refreshBuildList(listOf(unavailable, running), latest) {
                 if (it == unavailable) Observable.error(IllegalStateException()) else Observable.just(finished)
             }.test().assertResult(latest, listOf(finished))
         }
@@ -44,7 +44,7 @@ private fun verifyPolling(initiallyOnFirstPage: Boolean) {
     val detailRequests = mutableListOf<Build>()
 
     val subscription = polling(10, scheduler = scheduler) {
-        refreshBuildList(displayed, latest, null) {
+        refreshBuildList(displayed, latest) {
             detailRequests.add(it)
             Observable.just(detailResponse)
         }
