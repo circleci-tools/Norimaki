@@ -26,12 +26,12 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
         show(ArtifactListState.Failed)
     }
 
-    fun observeDownloads() {
+    fun observeDownloads(artifacts: ArtifactsView) {
         val lifecycle = activity.lifecycle
         val subscription = SerialDisposable().apply { addTo(bag) }
         val observer = object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
-                subscription.set(activity.artifactDownloads.changes.subscribeNext(::renderDownload))
+                subscription.set(activity.artifactDownloads.changes.subscribeNext { renderDownload(artifacts, it) })
             }
 
             override fun onPause(owner: LifecycleOwner) {
@@ -63,8 +63,7 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
         activity.pickArtifactDestination(ArtifactSelection(buildId, artifact, verified))
     }
 
-    private fun renderDownload(state: ArtifactDownloadState.Transfer) {
-        val artifacts = view ?: return
+    private fun renderDownload(artifacts: ArtifactsView, state: ArtifactDownloadState.Transfer) {
         artifacts.setDownloading(state == ArtifactDownloadState.Transfer.Running(buildId))
         if (state is ArtifactDownloadState.Transfer.Finished && state.buildId == buildId &&
             activity.artifactDownloads.consume(state)
