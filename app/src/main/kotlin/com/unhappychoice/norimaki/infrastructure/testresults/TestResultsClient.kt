@@ -15,8 +15,10 @@ import java.io.IOException
 
 internal class TestResultsClient(
     private val token: String,
-    private val client: OkHttpClient = OkHttpClient()
+    client: OkHttpClient = OkHttpClient()
 ) {
+    private val client = client.newBuilder().followRedirects(false).build()
+
     fun fetch(build: Build): Single<TestResults> = Single.create<TestResults> { emitter ->
         try {
             val url = build.testResultsUrl()

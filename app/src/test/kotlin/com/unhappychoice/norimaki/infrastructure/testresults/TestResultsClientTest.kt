@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.infrastructure.testresults
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.JsonSyntaxException
+import com.sun.net.httpserver.HttpServer
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -12,6 +13,9 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit.SECONDS
 
 class TestResultsClientTest : DescribeSpec({
@@ -36,8 +40,18 @@ class TestResultsClientTest : DescribeSpec({
                 )
             )
             requests.map { it.url.encodedPath }.distinct() shouldBe listOf("/api/v2/project/gh/org/repo/123/tests")
+            requests.map { it.url.scheme to it.url.host }.distinct() shouldBe listOf("https" to "circleci.com")
+            requests.map { it.url.port }.distinct() shouldBe listOf(443)
             requests.map { it.header("Circle-Token") } shouldBe List(3) { "session-token" }
             requests.map { it.url.queryParameter("page-token") } shouldBe listOf(null, "a+/=", "last")
+        }
+
+        it("rejects an off-origin redirect on the first page") {
+            verifyRedirectRejected(redirectOnFirstPage = true)
+        }
+
+        it("rejects an off-origin redirect on a subsequent page") {
+            verifyRedirectRejected(redirectOnFirstPage = false)
         }
 
         it("distinguishes reported results with no failures from unavailable metadata") {
@@ -97,6 +111,44 @@ class TestResultsClientTest : DescribeSpec({
         }
     }
 })
+
+private fun verifyRedirectRejected(redirectOnFirstPage: Boolean) {
+    val requests = ConcurrentLinkedQueue<String>()
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    val port = server.address.port
+    server.createContext("/") { exchange ->
+        requests.add(exchange.requestURI.toString())
+        when {
+            exchange.requestURI.path == "/redirected" -> exchange.sendResponseHeaders(500, -1)
+            redirectOnFirstPage || exchange.requestURI.query != null -> {
+                exchange.responseHeaders.set("Location", "http://localhost:$port/redirected")
+                exchange.sendResponseHeaders(302, -1)
+            }
+            else -> {
+                val body = """{"items":[{"result":"success"}],"next_page_token":"next"}""".toByteArray()
+                exchange.sendResponseHeaders(200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+            }
+        }
+        exchange.close()
+    }
+    val httpClient = OkHttpClient.Builder().proxy(Proxy.NO_PROXY).addInterceptor { chain ->
+        val request = chain.request()
+        val localUrl = request.url.newBuilder().scheme("http").host("127.0.0.1").port(port).build()
+        chain.proceed(request.newBuilder().url(localUrl).build())
+    }.build()
+    server.start()
+    try {
+        TestResultsClient("session-token", httpClient).fetch(build()).test().awaitDone(5, SECONDS)
+            .assertFailure(IOException::class.java)
+            .assertError { it.message == "Test results request failed with HTTP 302" }
+        val path = "/api/v2/project/gh/org/repo/123/tests"
+        requests.toList() shouldBe if (redirectOnFirstPage) listOf(path) else listOf(path, "$path?page-token=next")
+    } finally {
+        server.stop(0)
+        httpClient.connectionPool.evictAll()
+    }
+}
 
 private fun build(
     url: String = "https://github.com/org/repo",
