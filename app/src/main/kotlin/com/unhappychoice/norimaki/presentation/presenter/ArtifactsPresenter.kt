@@ -1,42 +1,45 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import android.content.ContentResolver
-import android.net.Uri
-import android.provider.DocumentsContract
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.github.unhappychoice.circleci.v1.response.Artifact
-import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.ArtifactDownloadState
 import com.unhappychoice.norimaki.domain.model.BuildId
-import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
+import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.ArtifactsView
 import io.reactivex.Observable
-import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.Disposables
+import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
-import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
-import java.io.IOException
 
 class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
     private val buildId: BuildId by instance()
-    private val downloader: ArtifactDownloader by instance()
     private var state: ArtifactListState = ArtifactListState.Loading
-    private var downloading = false
-    private var pendingSave: Pair<ArtifactSelection, Uri>? = null
-
-    override fun onAuthenticated() {
-        val result = pendingSave
-        pendingSave = null
-        result?.let { (selection, destination) -> save(selection, destination) }
-        load()
-    }
+    override fun onAuthenticated() = load()
 
     override fun onSessionEnded() {
-        pendingSave = null
-        downloading = false
         view?.setDownloading(false)
         show(ArtifactListState.Failed)
+    }
+
+    fun observeDownloads(artifacts: ArtifactsView) {
+        val lifecycle = activity.lifecycle
+        val subscription = SerialDisposable().apply { addTo(bag) }
+        val observer = object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                subscription.set(activity.artifactDownloads.changes.subscribeNext { renderDownload(artifacts, it) })
+            }
+
+            override fun onPause(owner: LifecycleOwner) {
+                subscription.set(null)
+            }
+        }
+        lifecycle.addObserver(observer)
+        Disposables.fromAction { lifecycle.removeObserver(observer) }.addTo(bag)
     }
 
     fun render() {
@@ -57,41 +60,16 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
 
     fun chooseDestination(artifact: Artifact) {
         val verified = account ?: return
-        if (downloading) return
         activity.pickArtifactDestination(ArtifactSelection(buildId, artifact, verified))
     }
 
-    internal fun save(selection: ArtifactSelection, destination: Uri) {
-        if (selection.buildId != buildId || downloading) return
-        val verified = account
-        if (verified == null) {
-            if (selection.isRestored) pendingSave = selection to destination
-            return
+    private fun renderDownload(artifacts: ArtifactsView, state: ArtifactDownloadState.Transfer) {
+        artifacts.setDownloading(state == ArtifactDownloadState.Transfer.Running(buildId))
+        if (state is ArtifactDownloadState.Transfer.Finished && state.buildId == buildId &&
+            activity.artifactDownloads.consume(state)
+        ) {
+            artifacts.showMessage(state.message)
         }
-        if (!selection.matches(verified)) return
-        val resolver = activity.contentResolver
-        downloading = true
-        view?.setDownloading(true)
-        downloader.download(selection.url, verified.token, { deleteDocument(resolver, destination) }) {
-            resolver.openOutputStream(destination, "w") ?: throw IOException("Could not open destination")
-        }
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribeBy(
-                onSuccess = { finishDownload(R.string.artifact_saved) },
-                onError = { finishDownload(R.string.artifact_save_failed) }
-            )
-            .addTo(bag)
-    }
-
-    private fun deleteDocument(resolver: ContentResolver, destination: Uri) {
-        runCatching { DocumentsContract.deleteDocument(resolver, destination) }
-    }
-
-    private fun finishDownload(message: Int) {
-        downloading = false
-        view?.setDownloading(false)
-        view?.showMessage(message)
     }
 
     private fun show(next: ArtifactListState) {
