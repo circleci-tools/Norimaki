@@ -5,9 +5,9 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.testresults.TestFailure
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
@@ -105,11 +105,11 @@ class TestResultsViewTest {
         session: SessionService = testSession(mockk()),
         verify: (TestResultsView) -> Unit
     ) {
-        val build = mockk<Build>()
+        val buildId = BuildId("github", "owner", "repo", 123)
         val client = mockk<TestResultsClient> {
-            every { fetch(build) } returnsMany responses.toList()
+            every { fetch(buildId) } returnsMany responses.toList()
         }
-        val screen = TestResultsScreen(build)
+        val screen = TestResultsScreen(buildId)
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             val activity = controller.setup().get()
             val container = activity.binding.containerView
