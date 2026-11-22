@@ -108,20 +108,11 @@ class BuildListViewTest {
     }
 
     @Test
-    fun workflowListPaginatesOnlyForVerticalScrollNearTheEnd() {
-        withBuildList(isWorkflow = true) { presenter, scroll, _ ->
+    fun paginatesForScrollNotificationsNearTheEnd() {
+        withBuildList { presenter, scroll, _ ->
             scroll(0, 12, 3)
-            scroll(12, 0, 8)
             verify(exactly = 0) { presenter.getBuilds() }
 
-            scroll(0, 12, 8)
-            verify(exactly = 1) { presenter.getBuilds() }
-        }
-    }
-
-    @Test
-    fun regularListPaginatesForZeroDeltaNotificationNearTheEnd() {
-        withBuildList(isWorkflow = false) { presenter, scroll, _ ->
             scroll(0, 0, 8)
             verify(exactly = 1) { presenter.getBuilds() }
         }
@@ -129,7 +120,7 @@ class BuildListViewTest {
 
     @Test
     fun regularListShowsRetryAndWaitsForAUserActionAfterFailure() {
-        withBuildList(isWorkflow = false) { presenter, scroll, binding ->
+        withBuildList { presenter, scroll, binding ->
             assertEquals(View.GONE, binding.retryPage.visibility)
 
             presenter.canRetryPage.value = true
@@ -221,12 +212,9 @@ class BuildListViewTest {
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = 0, limit = 20)
 
     private fun withBuildList(
-        isWorkflow: Boolean,
         test: (BuildListPresenter, (dx: Int, dy: Int, lastVisible: Int) -> Unit, BuildListViewBinding) -> Unit
     ) {
         val presenter = mockk<BuildListPresenter>(relaxed = true)
-        every { presenter.isWorkflow } returns isWorkflow
-        every { presenter.page } returns Variable(0)
         every { presenter.canRetryPage } returns Variable(false)
         every { presenter.builds } returns Observable.empty()
 

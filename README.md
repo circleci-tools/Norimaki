@@ -33,6 +33,12 @@ Norimaki is a [CircleCI](https://circleci.com) client for Android.
 3. Open Norimaki, paste the token into the token field, and tap **Apply**.
 4. Tap a build in **Recent Builds** to see its details.
 
+## Configuration
+
+To replace your CircleCI personal API token, open the build list's overflow menu, select **Change API Token**, enter the new token, and tap **Apply**. Norimaki verifies the token with CircleCI before saving it on the device. If verification fails, check your connection and confirm that the token is still valid, then try again.
+
+Norimaki excludes the saved token from Android backups and device transfers. Enter your token again after restoring the app from a backup or moving to another device.
+
 ## Running tests
 
 With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 installed, run the full unit test suite from the repository root:
@@ -42,6 +48,8 @@ With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 insta
 ```
 
 Run `python3 scripts/test-gradle-wrapper.py` to verify that the Wrapper rejects a ZIP with a mismatched checksum. This test uses a local ZIP and requires a JDK and Python 3.
+
+Set `CODECOV_TOKEN` in the CircleCI project environment variables to enable coverage uploads. The test job logs a skip when the token is unset or empty.
 
 ## Release checklist
 
