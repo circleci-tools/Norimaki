@@ -71,8 +71,8 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun goToTestResultsScreen() {
-        val loadedBuild = build ?: return
-        goTo(activity, TestResultsScreen(loadedBuild))
+        if (build == null) return
+        goTo(activity, TestResultsScreen(buildId))
     }
 
     fun goToArtifactsScreen() {

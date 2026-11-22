@@ -1,6 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import com.github.unhappychoice.circleci.v1.response.Build
+import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
@@ -13,7 +13,7 @@ import org.kodein.di.factory
 import org.kodein.di.instance
 
 class TestResultsPresenter : Presenter<TestResultsView>() {
-    private val build: Build by instance()
+    private val buildId: BuildId by instance()
     private val session: SessionService by instance()
     private val createClient: (String) -> TestResultsClient by factory()
     private var request: Disposable? = null
@@ -21,16 +21,16 @@ class TestResultsPresenter : Presenter<TestResultsView>() {
     internal fun load(view: TestResultsView) {
         request?.dispose()
         request = session.restore().flatMapObservable { verified ->
-            createClient(verified.token).fetch(build)
-                .toObservable()
+            createClient(verified.token).fetch(buildId)
                 .takeUntil(session.changes.filter { it.toNullable() !== verified })
         }
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
                 onNext = { results ->
                     when (results) {
                         TestResults.Unavailable -> view.showUnavailable()
-                        is TestResults.Reported -> view.showFailures(results.failures)
+                        TestResults.Reported -> view.finishLoading()
+                        is TestResults.FailurePage -> view.appendFailures(results.failures)
                     }
                 },
                 onError = { view.showLoadError() }

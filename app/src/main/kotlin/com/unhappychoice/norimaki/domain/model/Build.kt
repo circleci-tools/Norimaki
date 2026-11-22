@@ -51,7 +51,5 @@ fun vcsTypeFromUrl(url: String?): String = when (url?.toHttpUrlOrNull()?.host) {
 
 fun List<Build>.addDistinctByNumber(builds: List<Build>) = (builds + this).distinctBy { it.uniqueId() }
 fun List<Build>.sortByQueuedAt() = this.sortedByDescending { it.queuedAt }
-fun List<Build>.inWorkflow(workflowId: String?) =
-    if (workflowId.isNullOrBlank()) this else filter { it.workflows?.workflowId == workflowId }
 
 private val githubAvatarDomains = listOf("github.com", "githubusercontent.com")

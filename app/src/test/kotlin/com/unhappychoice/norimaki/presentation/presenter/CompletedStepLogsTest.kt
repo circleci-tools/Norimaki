@@ -75,7 +75,7 @@ class CompletedStepLogsTest {
     fun returnsSuccessfulDownloadsAroundAnHttpFailure() {
         val urls = listOf("first", "failed", "last").map { "https://example.com/$it" }
 
-        completedActionLogs(urls, outputClient("token")::fetchOutput)
+        completedActionLogs(urls, fetchOutput = outputClient("token")::fetchOutput)
             .test()
             .assertResult("first output", "\n[Some output could not be loaded.]\n", "last output")
     }

@@ -17,7 +17,6 @@ import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.BuildListViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
-import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.getTimeAgo
 import com.unhappychoice.norimaki.presentation.adapter.BuildAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildListPresenter
@@ -107,20 +106,11 @@ class BuildListViewTest {
     }
 
     @Test
-    fun workflowListPaginatesOnlyForVerticalScrollNearTheEnd() {
-        withBuildList(isWorkflow = true) { presenter, scroll ->
+    fun paginatesForScrollNotificationsNearTheEnd() {
+        withBuildList { presenter, scroll ->
             scroll(0, 12, 3)
-            scroll(12, 0, 8)
             verify(exactly = 0) { presenter.getBuilds() }
 
-            scroll(0, 12, 8)
-            verify(exactly = 1) { presenter.getBuilds() }
-        }
-    }
-
-    @Test
-    fun regularListPaginatesForZeroDeltaNotificationNearTheEnd() {
-        withBuildList(isWorkflow = false) { presenter, scroll ->
             scroll(0, 0, 8)
             verify(exactly = 1) { presenter.getBuilds() }
         }
@@ -205,12 +195,9 @@ class BuildListViewTest {
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = 0, limit = 20)
 
     private fun withBuildList(
-        isWorkflow: Boolean,
         test: (BuildListPresenter, (dx: Int, dy: Int, lastVisible: Int) -> Unit) -> Unit
     ) {
         val presenter = mockk<BuildListPresenter>(relaxed = true)
-        every { presenter.isWorkflow } returns isWorkflow
-        every { presenter.page } returns Variable(0)
         every { presenter.builds } returns Observable.empty()
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->

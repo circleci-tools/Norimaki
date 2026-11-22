@@ -37,6 +37,8 @@ class BuildStepPresenter internal constructor(
 
     val logLoadFailed = Variable(false)
 
+    val logSearchAvailable = Variable(false)
+
     val canRetryStepLoad = Variable(false)
 
     private var stepPolling: StartedPolling? = null
@@ -49,6 +51,7 @@ class BuildStepPresenter internal constructor(
         val verified = account ?: return
         val output = StepOutputProgress()
         val outputClient = createOutputClient(verified.token)
+        logSearchAvailable.value = false
         logString.value = ""
         stepPolling = StartedPolling { loadStep(verified.client, outputClient, output) }
             .also { it.observe(activity.lifecycle, bag) }
@@ -61,6 +64,7 @@ class BuildStepPresenter internal constructor(
     ): Disposable {
         logLoadFailed.value = false
         canRetryStepLoad.value = false
+        if (!progress.complete) logSearchAvailable.value = false
         return pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
             .doOnError { canRetryStepLoad.value = true }
@@ -73,7 +77,14 @@ class BuildStepPresenter internal constructor(
                     else -> runningOutput(build, step, client, outputClient, progress.raw, AndroidSchedulers.mainThread())
                 }.doOnComplete { progress.complete = true }
             }
-            .subscribeBy(onNext = ::appendLog, onError = { logLoadFailed.value = true })
+            .subscribeBy(
+                onNext = ::appendLog,
+                onComplete = ::allowLogSearch,
+                onError = {
+                    logLoadFailed.value = true
+                    allowLogSearch()
+                }
+            )
     }
 
     private fun completedOutput(
@@ -81,9 +92,12 @@ class BuildStepPresenter internal constructor(
         outputClient: BuildOutputClient,
         progress: StepOutputProgress
     ): Observable<String> =
-        completedActionLogs(step.actions.mapNotNull { it.outputUrl }.drop(progress.completedActions)) { url ->
+        completedActionLogs(
+            step.actions.mapNotNull { it.outputUrl }.drop(progress.completedActions),
+            onActionOutput = { progress.completedActions++ }
+        ) { url ->
             Observable.defer { outputClient.fetchOutput(url) }.subscribeOnIoObserveOnUI()
-        }.doOnNext { progress.completedActions++ }
+        }
 
     internal fun runningOutput(
         build: Build,
@@ -121,8 +135,12 @@ class BuildStepPresenter internal constructor(
             )
         }
 
+    private fun allowLogSearch() {
+        logSearchAvailable.value = logString.value.isNotEmpty()
+    }
+
     private fun appendLog(log: String) {
-        logString.value = logString.value + log.removeAnsiEscapeCode().replaceAnsiColorCodeToHtml()
+        logString.value = logString.value + log.replaceAnsiColorCodeToHtml()
     }
 
     companion object {
@@ -154,11 +172,16 @@ internal fun pollBuildStep(
 
 internal fun completedActionLogs(
     outputUrls: List<String>,
+    onActionOutput: () -> Unit = {},
     fetchOutput: (String) -> Observable<String>
 ): Observable<String> =
     Observable.fromIterable(outputUrls).concatMap { url ->
+        val ansiStream = AnsiEscapeStream()
         Observable.defer { fetchOutput(url) }
+            .map(ansiStream::strip)
             .onErrorReturnItem("\n[Some output could not be loaded.]\n")
+            .doOnNext { onActionOutput() }
+            .filter { it.isNotEmpty() }
     }
 
 internal data class ActionSnapshot(val outputUrls: List<String>, val finished: Boolean)
@@ -173,6 +196,7 @@ private class StepOutputProgress {
 internal class RawOutputProgress {
     val urls = AtomicReference(emptySet<String>())
     val decoders = mutableMapOf<String, Utf8StreamDecoder>()
+    val ansiStreams = mutableMapOf<String, AnsiEscapeStream>()
     val finishedUrls = mutableSetOf<String>()
     val offsets = mutableMapOf<String, Long>()
     val started get() = urls.get().isNotEmpty()
@@ -191,6 +215,7 @@ internal fun pollActionOutputs(
     val urls = state.urls
     urls.set(urls.get() + outputUrls)
     val decoders = state.decoders
+    val ansiStreams = state.ansiStreams
     val finishedUrls = state.finishedUrls
     val offsets = state.offsets
     val reading = AtomicBoolean()
@@ -207,18 +232,19 @@ internal fun pollActionOutputs(
                     val decoder = decoders.getOrPut(url) { Utf8StreamDecoder() }
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
+                    val ansiStream = ansiStreams.getOrPut(url) { AnsiEscapeStream() }
                     val chunks = fetch(url, offset).map { chunk ->
                         offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
                         val log = decoder.decode(chunk.bytes)
                         if (chunk.limitReached) {
                             finishedUrls.add(url)
-                            log + decoder.finish() + OUTPUT_LIMIT_MESSAGE
+                            ansiStream.strip(log + decoder.finish()) + OUTPUT_LIMIT_MESSAGE
                         } else {
-                            log
+                            ansiStream.strip(log)
                         }
                     }
                     if (finishing) chunks.concatWith(Observable.fromCallable {
-                        if (finishedUrls.add(url)) decoder.finish() else ""
+                        if (finishedUrls.add(url)) ansiStream.strip(decoder.finish()) else ""
                     }) else chunks
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
