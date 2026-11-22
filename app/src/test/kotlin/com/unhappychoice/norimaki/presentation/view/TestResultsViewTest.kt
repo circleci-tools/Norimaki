@@ -16,6 +16,8 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
+import com.unhappychoice.norimaki.presentation.presenter.TestResultsPresenter
+import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
@@ -26,6 +28,7 @@ import io.reactivex.Single
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.SingleSubject
+import mortar.MortarScope
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -154,6 +157,41 @@ class TestResultsViewTest {
             assertTrue(pending.hasObservers())
             session.replace("new-token").blockingGet()
             assertFalse(pending.hasObservers())
+        }
+    }
+
+    @Test
+    fun ignoresRetryAfterTheSessionChanges() {
+        val session = testSession(mockk())
+        val failure = Single.error<TestResults>(IOException("HTTP 500"))
+        withResults(failure, session = session) { view ->
+            assertStatus(view, R.string.test_results_load_error)
+            session.replace("new-token").blockingGet()
+
+            assertTrue(view.findViewById<Button>(R.id.retry).performClick())
+            assertStatus(view, R.string.test_results_load_error)
+        }
+    }
+
+    @Test
+    fun skipsFetchingWhenAuthenticationFinishesBeforeAViewAttaches() {
+        val session = testSession(mockk())
+        val errors = mutableListOf<Throwable>()
+        RxJavaPlugins.setErrorHandler { errors.add(it) }
+        val presenter = TestResultsPresenter().apply {
+            di = DI { bind<SessionService>() with singleton { session } }
+        }
+        val scope = MortarScope.buildRootScope().build("test-results")
+        try {
+            PresenterNeedsToken::class.java.getDeclaredMethod("onEnterScope", MortarScope::class.java)
+                .apply { isAccessible = true }
+                .invoke(presenter, scope)
+            assertTrue(session.hasVerifiedSession)
+            assertTrue(errors.toString(), errors.isEmpty())
+        } finally {
+            PresenterNeedsToken::class.java.getDeclaredMethod("onExitScope")
+                .apply { isAccessible = true }
+                .invoke(presenter)
         }
     }
 
