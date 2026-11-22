@@ -6,6 +6,15 @@
     android:orientation="vertical">
 
     <Button
+        android:id="@+id/branchFilter"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAllCaps="false"
+        android:visibility="gone"/>
+
+    <Button
         android:id="@+id/retryPage"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -2,12 +2,15 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import android.content.DialogInterface
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View.MeasureSpec
+import android.widget.AutoCompleteTextView
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.GridLayoutManager
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
@@ -44,6 +47,7 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 import org.robolectric.shadows.ShadowSystem
 import org.robolectric.util.ReflectionHelpers
 import org.robolectric.util.ReflectionHelpers.ClassParameter
@@ -103,6 +107,43 @@ class BuildListViewTest {
         } finally {
             scope.destroy()
             RxJavaPlugins.reset()
+        }
+    }
+
+    @Test
+    fun projectBranchFilterOffersSuggestionsAndAppliesExactNames() {
+        val presenter = mockk<BuildListPresenter>(relaxed = true)
+        val selected = Variable("")
+        every { presenter.canFilterByBranch } returns true
+        every { presenter.selectedBranch } returns selected.asObservable()
+        every { presenter.recentBranches } returns listOf("main", "release/Next")
+        every { presenter.builds } returns Observable.empty()
+
+        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
+            val binding = BuildListViewBinding.inflate(activity.layoutInflater)
+            binding.root.di = DI { bind<BuildListPresenter>() with singleton { presenter } }
+            activity.setContentView(binding.root)
+
+            assertTrue(binding.branchFilter.isShown)
+            assertEquals("Branch: All branches", binding.branchFilter.text.toString())
+            binding.branchFilter.performClick()
+            val dialog = ShadowDialog.getLatestDialog() as AlertDialog
+            val input = checkNotNull(dialog.findViewById<AutoCompleteTextView>(R.id.branchName))
+            val apply = dialog.getButton(DialogInterface.BUTTON_POSITIVE)
+            assertEquals("release/Next", input.adapter.getItem(1))
+            assertFalse(apply.isEnabled)
+            input.setText("feature/Exact")
+            apply.performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            verify(exactly = 1) { presenter.selectBranch("feature/Exact") }
+
+            selected.value = "feature/Exact"
+            assertEquals("Branch: feature/Exact", binding.branchFilter.text.toString())
+            binding.branchFilter.performClick()
+            (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            verify(exactly = 1) { presenter.selectBranch(null) }
         }
     }
 
@@ -219,6 +260,7 @@ class BuildListViewTest {
             binding.root.di = DI { bind<BuildListPresenter>() with singleton { presenter } }
             activity.setContentView(binding.root)
 
+            assertFalse(binding.branchFilter.isShown)
             val recycler = binding.buildsView
             val layout = object : GridLayoutManager(activity, 1) {
                 var lastVisible = 0
