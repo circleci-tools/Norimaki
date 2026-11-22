@@ -22,15 +22,15 @@ class TestResultsPresenter : Presenter<TestResultsView>() {
         request?.dispose()
         request = session.restore().flatMapObservable { verified ->
             createClient(verified.token).fetch(buildId)
-                .toObservable()
                 .takeUntil(session.changes.filter { it.toNullable() !== verified })
         }
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(AndroidSchedulers.mainThread(), true)
             .subscribeBy(
                 onNext = { results ->
                     when (results) {
                         TestResults.Unavailable -> view.showUnavailable()
-                        is TestResults.Reported -> view.showFailures(results.failures)
+                        TestResults.Reported -> view.finishLoading()
+                        is TestResults.FailurePage -> view.appendFailures(results.failures)
                     }
                 },
                 onError = { view.showLoadError() }
