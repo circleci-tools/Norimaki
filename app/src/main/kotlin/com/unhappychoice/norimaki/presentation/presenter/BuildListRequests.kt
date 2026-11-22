@@ -29,6 +29,7 @@ internal class BuildListRequests(
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
+    val canRetryPage = Variable(false)
     private val history = Variable(BuildHistory())
     val builds = history.asObservable().map { it.builds }
 
@@ -65,6 +66,7 @@ internal class BuildListRequests(
         latestRequestByBuild.clear()
         page.value = 0
         hasMore.value = true
+        canRetryPage.value = false
         isLoading.value = false
         if (history.value.builds.isNotEmpty()) history.value = BuildHistory()
     }
@@ -105,7 +107,10 @@ internal class BuildListRequests(
 
         isLoading.value = true
         return response
-            .doOnError { isLoading.value = false }
+            .doOnError {
+                canRetryPage.value = true
+                isLoading.value = false
+            }
             .doOnDispose { isLoading.value = false }
     }
 
@@ -129,8 +134,9 @@ internal class BuildListRequests(
         if (response.paginated) {
             if (page.value == 0) lastPollIds = response.builds.mapTo(hashSetOf()) { it.uniqueId() }
             hasMore.value = response.builds.isNotEmpty()
-            isLoading.value = false
             page.value += 1
+            canRetryPage.value = false
+            isLoading.value = false
         }
         response.completion.onSuccess(Unit)
     }

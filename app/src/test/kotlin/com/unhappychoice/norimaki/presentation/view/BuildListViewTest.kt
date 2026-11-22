@@ -8,6 +8,7 @@ import android.view.View.MeasureSpec
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
@@ -117,6 +118,81 @@ class BuildListViewTest {
     }
 
     @Test
+    fun retriesFailedRecentBuildsPageWithoutScrolling() {
+        assertPageRetry("")
+    }
+
+    @Test
+    fun retriesFailedProjectHistoryPageWithoutScrolling() {
+        assertPageRetry("github/owner/repo")
+    }
+
+    private fun assertPageRetry(project: String) {
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create()
+        val builds = (21 downTo 1).map { number ->
+            gson.fromJson(
+                """{"build_num":$number,"username":"owner","reponame":"repo","status":"success"}""",
+                Build::class.java
+            ).copy(queuedAt = Date(number.toLong()))
+        }
+        val firstPage = builds.take(20)
+        val api = mockk<CircleCIAPIClientV1_1>()
+        every { api.historyPage(project, 0) } returns Observable.just(firstPage)
+        every { api.historyPage(project, 20) } returnsMany listOf(
+            Observable.error(IllegalStateException("Page fetch failed")),
+            Observable.just(builds.drop(20))
+        )
+        val scheduler = TestScheduler()
+        val scope = MortarScope.buildRootScope()
+            .withService(BundleServiceRunner.SERVICE_NAME, BundleServiceRunner())
+            .build("test")
+
+        RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+        RxJavaPlugins.setIoSchedulerHandler { scheduler }
+        try {
+            Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
+                val activity = controller.get()
+                val view = buildListForReattachment(activity, scope, api, project)
+                activity.setContentView(view)
+                val binding = BuildListViewBinding.bind(view)
+                val adapter = binding.buildsView.adapter as BuildAdapter
+                adapter.submitList(null)
+                val history = view.presenter.builds.test()
+                drainRequests(scheduler)
+                assertEquals(firstPage, adapter.currentList)
+                assertFalse(binding.retryBuildPage.isVisible)
+
+                val layout = object : GridLayoutManager(activity, 1) {
+                    var lastVisible = firstPage.lastIndex
+                    override fun findLastVisibleItemPosition() = lastVisible
+                }
+                binding.buildsView.layoutManager = layout
+                dispatchScroll(binding, 0, 12)
+                drainRequests(scheduler)
+                assertTrue(binding.retryBuildPage.isVisible)
+                assertEquals(firstPage, adapter.currentList)
+                dispatchScroll(binding, 0, 0)
+                scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, SECONDS)
+                drainRequests(scheduler)
+                verify(exactly = 2) { api.historyPage(project, 0) }
+                verify(exactly = 1) { api.historyPage(project, 20) }
+                assertTrue(binding.retryBuildPage.isVisible)
+
+                layout.lastVisible = 0
+                assertTrue(binding.retryBuildPage.performClick())
+                drainRequests(scheduler)
+                verify(exactly = 2) { api.historyPage(project, 20) }
+                history.assertValues(emptyList(), firstPage, builds)
+                assertFalse(binding.retryBuildPage.isVisible)
+                history.dispose()
+            }
+        } finally {
+            scope.destroy()
+            RxJavaPlugins.reset()
+        }
+    }
+
+    @Test
     fun reattachingBuildListStartsOneImmediateFetchAndOneFetchEveryTenSeconds() {
         val api = mockk<CircleCIAPIClientV1_1>()
         every { api.firstBuildPage() } returns Observable.just(emptyList())
@@ -174,13 +250,14 @@ class BuildListViewTest {
     private fun buildListForReattachment(
         activity: ComponentActivity,
         scope: MortarScope,
-        api: CircleCIAPIClientV1_1
+        api: CircleCIAPIClientV1_1,
+        project: String = "github/owner/repo"
     ): BuildListView {
         val context = scope.createContext(activity)
         val presenter = BuildListPresenter().apply {
             di = DI {
                 bind<SessionService>() with singleton { testSession(api) }
-                bind<String>() with singleton { "github/owner/repo" }
+                bind<String>() with singleton { project }
                 bind<MainActivity>() with singleton {
                     mockk { every { lifecycle } returns activity.lifecycle }
                 }
@@ -194,11 +271,24 @@ class BuildListViewTest {
     private fun CircleCIAPIClientV1_1.firstBuildPage() =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = 0, limit = 20)
 
+    private fun CircleCIAPIClientV1_1.historyPage(project: String, offset: Int) =
+        if (project.isEmpty()) getRecentBuilds(offset = offset, limit = 20)
+        else getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
+
+    private fun dispatchScroll(binding: BuildListViewBinding, dx: Int, dy: Int) {
+        ReflectionHelpers.callInstanceMethod<Unit>(
+            binding.buildsView, "dispatchOnScrolled",
+            ClassParameter.from(Integer.TYPE, dx),
+            ClassParameter.from(Integer.TYPE, dy)
+        )
+    }
+
     private fun withBuildList(
         test: (BuildListPresenter, (dx: Int, dy: Int, lastVisible: Int) -> Unit) -> Unit
     ) {
         val presenter = mockk<BuildListPresenter>(relaxed = true)
         every { presenter.builds } returns Observable.empty()
+        every { presenter.canRetryPage } returns Observable.just(false)
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
             val activity = controller.get()
@@ -217,11 +307,7 @@ class BuildListViewTest {
 
             test(presenter) { dx, dy, lastVisible ->
                 layout.lastVisible = lastVisible
-                ReflectionHelpers.callInstanceMethod<Unit>(
-                    recycler, "dispatchOnScrolled",
-                    ClassParameter.from(Integer.TYPE, dx),
-                    ClassParameter.from(Integer.TYPE, dy)
-                )
+                dispatchScroll(binding, dx, dy)
             }
         }
     }
