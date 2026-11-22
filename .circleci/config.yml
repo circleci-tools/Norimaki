@@ -12,7 +12,7 @@ jobs:
   build:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:2026.02.1
+      - image: &android_image cimg/android:2026.11.4
     environment:
       JVM_OPTS: -Xmx3200m
     steps:
@@ -40,7 +40,7 @@ jobs:
   test:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:2026.02.1
+      - image: *android_image
     resource_class: large
     environment:
       JVM_OPTS: -Xmx3200m
@@ -48,13 +48,6 @@ jobs:
     steps:
       - checkout
       - restore_gradle_cache
-      - run:
-          name: Install Android SDK Build Tools
-          command: |
-            sdkmanager "build-tools;37.0.0"
-            test -x "$ANDROID_HOME/build-tools/37.0.0/aapt2"
-          max_auto_reruns: 2
-          auto_rerun_delay: 10s
       - run:
           name: Run Tests
           command: ./gradlew jacoco
@@ -79,7 +72,7 @@ jobs:
   deploy:
     working_directory: ~/norimaki
     docker:
-      - image: cimg/android:2026.02.1
+      - image: *android_image
     resource_class: large
     environment:
       JVM_OPTS: -Xmx6g
