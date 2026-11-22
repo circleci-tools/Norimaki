@@ -31,24 +31,30 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
 
     internal fun showUnavailable() = showStatus(R.string.test_results_unavailable)
 
-    internal fun showLoadError() = showStatus(R.string.test_results_load_error, retry = true)
+    internal fun showLoadError() {
+        val message = if (binding.failures.adapter == null) R.string.test_results_load_error
+        else R.string.test_results_incomplete
+        showStatus(message, retry = true)
+    }
 
-    internal fun showFailures(failures: List<TestFailure>) {
-        if (failures.isEmpty()) {
-            showStatus(R.string.test_results_no_failures)
-            return
-        }
-        binding.status.isVisible = false
-        binding.failures.adapter = TestFailureAdapter(failures)
+    internal fun appendFailures(failures: List<TestFailure>) {
+        val adapter = binding.failures.adapter as? TestFailureAdapter
+            ?: TestFailureAdapter().also { binding.failures.adapter = it }
+        adapter.append(failures)
+    }
+
+    internal fun finishLoading() {
+        if (binding.failures.adapter == null) showStatus(R.string.test_results_no_failures)
+        else binding.status.isVisible = false
     }
 
     private fun load() {
+        binding.failures.adapter = null
         showStatus(R.string.test_results_loading)
         presenter.load(this)
     }
 
     private fun showStatus(message: Int, retry: Boolean = false) {
-        binding.failures.adapter = null
         binding.status.setText(message)
         binding.status.isVisible = true
         binding.retry.isVisible = retry

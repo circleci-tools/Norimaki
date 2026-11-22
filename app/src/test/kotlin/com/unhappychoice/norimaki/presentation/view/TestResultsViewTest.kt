@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -16,10 +17,15 @@ import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import io.mockk.every
 import io.mockk.mockk
-import io.reactivex.Single
+import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
-import io.reactivex.subjects.SingleSubject
+import io.reactivex.subjects.PublishSubject
+import okhttp3.Call
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,13 +42,18 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit.SECONDS
+import kotlin.concurrent.thread
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TestResultsViewTest {
+    private val buildId = BuildId("github", "owner", "repo", 123)
+    private val scheduler = TestScheduler()
+
     @Before
     fun pauseBackgroundRequests() {
-        val scheduler = TestScheduler()
         RxJavaPlugins.setIoSchedulerHandler { scheduler }
     }
 
@@ -53,9 +64,9 @@ class TestResultsViewTest {
 
     @Test
     fun displaysFailuresAfterRetryingARequestError() {
-        val pending = SingleSubject.create<TestResults>()
-        val reported = TestResults.Reported(listOf(TestFailure("asserts", "Example", "Expected a value")))
-        withResults(pending, Single.just(reported)) { view ->
+        val pending = PublishSubject.create<TestResults>()
+        val firstPage = TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected a value")))
+        withResults(pending, Observable.just(firstPage, TestResults.Reported)) { view ->
             assertStatus(view, R.string.test_results_loading)
             pending.onError(IOException("Network unavailable"))
             shadowOf(Looper.getMainLooper()).idle()
@@ -73,25 +84,72 @@ class TestResultsViewTest {
     }
 
     @Test
+    fun keepsVisibleFailuresWhenALaterPageFails() {
+        val pages = PublishSubject.create<TestResults>()
+        withResults(pages) { view ->
+            pages.onNext(TestResults.FailurePage(listOf(TestFailure("asserts", null, null))))
+            pages.onError(IOException("Second page failed"))
+            shadowOf(Looper.getMainLooper()).idle()
+
+            assertStatus(view, R.string.test_results_incomplete)
+            assertEquals(View.VISIBLE, view.findViewById<Button>(R.id.retry).visibility)
+            assertEquals(1, view.findViewById<RecyclerView>(R.id.failures).adapter?.itemCount)
+        }
+    }
+
+    @Test
+    fun showsNoFailuresOnlyAfterTheFinalPassingPage() {
+        withPendingSecondPage("""{"result":"success"}""", """{"items":[{"result":"success"}]}""") { view, finish ->
+            assertStatus(view, R.string.test_results_loading)
+            finish()
+            assertStatus(view, R.string.test_results_no_failures)
+        }
+    }
+
+    @Test
+    fun displaysFirstPageWhileSecondPageIsPendingAndAppendsLaterFailuresOnce() {
+        withPendingSecondPage(
+            """{"result":"failure","name":"first"}""",
+            """{"items":[{"result":"failure","name":"second"}]}"""
+        ) { view, finish ->
+            val list = view.findViewById<RecyclerView>(R.id.failures)
+            val adapter = requireNotNull(list.adapter)
+            assertEquals(1, adapter.itemCount)
+            assertStatus(view, R.string.test_results_loading)
+            finish()
+            assertEquals(adapter, list.adapter)
+            assertEquals(2, adapter.itemCount)
+            assertEquals(View.GONE, view.findViewById<TextView>(R.id.status).visibility)
+        }
+    }
+
+    @Test
+    fun cancelsThePendingSecondPageWhenTheViewDetaches() {
+        withPendingSecondPage("""{"result":"failure","name":"first"}""", """{"items":[]}""", cancel = true) { view, _ ->
+            (view.parent as ViewGroup).removeView(view)
+        }
+    }
+
+    @Test
     fun distinguishesUnavailableResultsFromReportedResultsWithNoFailures() {
-        withResults(Single.just(TestResults.Unavailable)) { view ->
+        withResults(Observable.just(TestResults.Unavailable)) { view ->
             assertStatus(view, R.string.test_results_unavailable)
         }
-        withResults(Single.just(TestResults.Reported(emptyList()))) { view ->
+        withResults(Observable.just(TestResults.Reported)) { view ->
             assertStatus(view, R.string.test_results_no_failures)
         }
     }
 
     @Test
     fun disposesPendingRequestWhenTheViewDetaches() {
-        val pending = SingleSubject.create<TestResults>()
+        val pending = PublishSubject.create<TestResults>()
         withResults(pending) { assertTrue(pending.hasObservers()) }
         assertFalse(pending.hasObservers())
     }
 
     @Test
     fun disposesPendingRequestWhenTheSessionChanges() {
-        val pending = SingleSubject.create<TestResults>()
+        val pending = PublishSubject.create<TestResults>()
         val session = testSession(mockk())
         withResults(pending, session = session) {
             assertTrue(pending.hasObservers())
@@ -100,12 +158,53 @@ class TestResultsViewTest {
         }
     }
 
+    private fun withPendingSecondPage(
+        firstItem: String,
+        secondBody: String,
+        cancel: Boolean = false,
+        verify: (TestResultsView, () -> Unit) -> Unit
+    ) {
+        val secondRequested = CountDownLatch(1)
+        val releaseSecond = CountDownLatch(1)
+        lateinit var secondCall: Call
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            val body = if (request.url.queryParameter("page-token") == null) {
+                """{"items":[$firstItem],"next_page_token":"next"}"""
+            } else {
+                secondCall = chain.call()
+                secondRequested.countDown()
+                if (!releaseSecond.await(10, SECONDS)) throw IOException("Timed out waiting for second page release")
+                secondBody
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(body.toResponseBody()).build()
+        }.build()
+        val client = TestResultsClient("test-token", http)
+        withResults(client.fetch(buildId)) { view ->
+            val worker = thread(isDaemon = true) { scheduler.triggerActions() }
+            try {
+                assertTrue(secondRequested.await(5, SECONDS))
+                shadowOf(Looper.getMainLooper()).idle()
+                verify(view) {
+                    releaseSecond.countDown()
+                    worker.join(5000)
+                    assertFalse(worker.isAlive)
+                    shadowOf(Looper.getMainLooper()).idle()
+                }
+                if (cancel) assertTrue(secondCall.isCanceled())
+            } finally {
+                releaseSecond.countDown()
+                worker.join(5000)
+            }
+        }
+    }
+
     private fun withResults(
-        vararg responses: Single<TestResults>,
+        vararg responses: Observable<TestResults>,
         session: SessionService = testSession(mockk()),
         verify: (TestResultsView) -> Unit
     ) {
-        val buildId = BuildId("github", "owner", "repo", 123)
         val client = mockk<TestResultsClient> {
             every { fetch(buildId) } returnsMany responses.toList()
         }

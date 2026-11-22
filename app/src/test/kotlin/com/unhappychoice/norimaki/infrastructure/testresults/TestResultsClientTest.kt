@@ -28,10 +28,9 @@ class TestResultsClientTest : DescribeSpec({
             }
 
             client.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(
-                TestResults.Reported(
-                    listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>"),
-                        TestFailure("throws", null, null))
-                )
+                TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>"))),
+                TestResults.FailurePage(listOf(TestFailure("throws", null, null))),
+                TestResults.Reported
             )
             requests.map { it.url.encodedPath }.distinct() shouldBe listOf("/api/v2/project/gh/org/repo/123/tests")
             requests.map { it.header("Circle-Token") } shouldBe List(3) { "session-token" }
@@ -44,7 +43,7 @@ class TestResultsClientTest : DescribeSpec({
                 200 to """{"items":[{"result":"success"},{"result":"skipped"}]}"""
             }
             passing.fetch(buildId.copy(vcsType = "bitbucket")).test().awaitDone(5, SECONDS)
-                .assertResult(TestResults.Reported(emptyList()))
+                .assertResult(TestResults.Reported)
 
             listOf(200 to """{"items":[]}""", 404 to "{}").forEach { response ->
                 client { response }.fetch(buildId).test().awaitDone(5, SECONDS)
@@ -63,7 +62,7 @@ class TestResultsClientTest : DescribeSpec({
             client { request ->
                 request.url.query shouldBe null
                 200 to """{"items":[{"result":"success"}],"next_page_token":""}"""
-            }.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported(emptyList()))
+            }.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported)
         }
 
         it("propagates request errors, including an unavailable subsequent page") {
@@ -82,7 +81,7 @@ class TestResultsClientTest : DescribeSpec({
                 .fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
         }
 
-        it("fails without emitting partial results when a later page contains invalid JSON") {
+        it("keeps emitted failures when a later page contains invalid JSON") {
             client { request ->
                 val body = if (request.url.queryParameter("page-token") == "next") {
                     """{"items":["""
@@ -90,7 +89,10 @@ class TestResultsClientTest : DescribeSpec({
                     """{"items":[{"result":"failure","name":"asserts"}],"next_page_token":"next"}"""
                 }
                 200 to body
-            }.fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(JsonSyntaxException::class.java)
+            }.fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(
+                JsonSyntaxException::class.java,
+                TestResults.FailurePage(listOf(TestFailure("asserts", null, null)))
+            )
         }
     }
 })

@@ -16,6 +16,7 @@
     <string name="test_results_unavailable">No test results are available for this job.</string>
     <string name="test_results_no_failures">No test failures reported.</string>
     <string name="test_results_load_error">Could not load test results.</string>
+    <string name="test_results_incomplete">Could not load all test results. The failures shown are incomplete.</string>
     <string name="test_results_retry">Retry</string>
     <string name="test_results_show_message">Show failure message</string>
     <string name="test_results_hide_message">Hide failure message</string>
