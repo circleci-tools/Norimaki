@@ -239,7 +239,7 @@ class BuildStepViewTest {
             val parts = chunks.map { it.toByteArray() }
             val partsByOffset = parts.runningFold(0L) { offset, part -> offset + part.size }
                 .zip(parts).toMap()
-            val output = pollActionOutputs(listOf("action"), finished, { _, offset ->
+            val output = pollActionOutputs(mapOf("action" to false), finished, { _, offset ->
                 Observable.just(RawOutputChunk(partsByOffset.getValue(offset)))
             }, scheduler, fetchFinalOutput = { _, offset ->
                 assertEquals(parts.dropLast(1).sumOf { it.size.toLong() }, offset)
@@ -248,7 +248,7 @@ class BuildStepViewTest {
 
             scheduler.advanceTimeBy((parts.size - 2) * BuildStepPresenter.LOG_POLLING_SECONDS, SECONDS)
             output.assertNotComplete()
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
             output.assertComplete().assertNoErrors()
             output.values()
         }
