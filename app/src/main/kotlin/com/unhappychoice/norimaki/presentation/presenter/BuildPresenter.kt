@@ -8,12 +8,15 @@ import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.projectName
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.presenter.core.StartedPolling
 import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
+import io.reactivex.disposables.Disposable
+import io.reactivex.disposables.Disposables
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
@@ -29,12 +32,20 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val buildLoadFailed = Variable(false)
     val rebuildFailed = Variable(false)
 
-    override fun onAuthenticated() = pollBuild()
+    private var buildPolling: StartedPolling? = null
+
+    override fun onAuthenticated() {
+        buildPolling = StartedPolling(::subscribeToBuild).also { it.observe(activity.lifecycle, bag) }
+    }
 
     fun pollBuild() {
-        val client = account?.client ?: return
+        buildPolling?.refresh()
+    }
+
+    private fun subscribeToBuild(): Disposable {
+        val client = account?.client ?: return Disposables.disposed()
         buildLoadFailed.value = false
-        Observable.defer { buildId.load(client) }
+        return Observable.defer { buildId.load(client) }
             .concatWith(
                 Observable.timer(BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
                     .flatMap { polling(BUILD_POLLING_SECONDS) { buildId.load(client) } }
@@ -52,7 +63,6 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
                 },
                 onError = { buildLoadFailed.value = true }
             )
-            .addTo(bag)
     }
 
     fun goToBuildStepScreen(stepId: BuildStepId) {

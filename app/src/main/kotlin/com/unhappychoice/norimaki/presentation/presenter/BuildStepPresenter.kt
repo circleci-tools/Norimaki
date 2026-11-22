@@ -12,11 +12,12 @@ import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
+import com.unhappychoice.norimaki.presentation.presenter.core.StartedPolling
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.rxkotlin.addTo
+import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
@@ -38,72 +39,75 @@ class BuildStepPresenter internal constructor(
 
     val canRetryStepLoad = Variable(false)
 
+    private var stepPolling: StartedPolling? = null
+
     fun retryStepLoad() {
-        if (canRetryStepLoad.value) loadStep()
+        if (canRetryStepLoad.value) stepPolling?.refresh()
     }
 
-    override fun onAuthenticated() = loadStep()
-
-    private fun loadStep() {
+    override fun onAuthenticated() {
         val verified = account ?: return
-        val client = verified.client
+        val output = StepOutputProgress()
         val outputClient = createOutputClient(verified.token)
         logString.value = ""
-        logLoadFailed.value = false
-        canRetryStepLoad.value = false
-        pollBuildStep(stepId) { buildId.load(client) }
-            .subscribeOnIoObserveOnUI()
-            .subscribeBy(
-                onNext = { (build, step) ->
-                    view?.showStep(step)
-                    if (step.isFinished()) getActions(step, outputClient)
-                    else pollRunningActions(build, step, client, outputClient)
-                },
-                onError = {
-                    canRetryStepLoad.value = true
-                    logLoadFailed.value = true
-                }
-            )
-            .addTo(bag)
+        stepPolling = StartedPolling { loadStep(verified.client, outputClient, output) }
+            .also { it.observe(activity.lifecycle, bag) }
     }
 
-    private fun getActions(buildStep: BuildStep, outputClient: BuildOutputClient) {
-        val actions = buildStep.actions.mapNotNull { it.outputUrl }
-        completedActionLogs(actions, outputClient::fetchOutput)
+    private fun loadStep(
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient,
+        progress: StepOutputProgress
+    ): Disposable {
+        logLoadFailed.value = false
+        canRetryStepLoad.value = false
+        return pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
-            .subscribeBy(onNext = { appendLog(it) }, onError = { logLoadFailed.value = true })
-            .addTo(bag)
+            .doOnError { canRetryStepLoad.value = true }
+            .concatMap { (build, step) ->
+                view?.showStep(step)
+                progress.step = step
+                when {
+                    progress.complete -> Observable.empty()
+                    !progress.raw.started && step.isFinished() -> completedOutput(step, outputClient, progress)
+                    else -> runningOutput(build, step, client, outputClient, progress.raw, AndroidSchedulers.mainThread())
+                }.doOnComplete { progress.complete = true }
+            }
+            .subscribeBy(onNext = ::appendLog, onError = { logLoadFailed.value = true })
     }
+
+    private fun completedOutput(
+        step: BuildStep,
+        outputClient: BuildOutputClient,
+        progress: StepOutputProgress
+    ): Observable<String> =
+        completedActionLogs(step.actions.mapNotNull { it.outputUrl }.drop(progress.completedActions)) { url ->
+            Observable.defer { outputClient.fetchOutput(url) }.subscribeOnIoObserveOnUI()
+        }.doOnNext { progress.completedActions++ }
 
     internal fun runningOutput(
         build: Build,
         buildStep: BuildStep,
         client: CircleCIAPIClientV1_1,
-        outputClient: BuildOutputClient
+        outputClient: BuildOutputClient,
+        progress: RawOutputProgress? = null,
+        delivery: Scheduler = Schedulers.trampoline()
     ): Observable<String> {
         val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
+        val snapshots = if (build.isFinished() || buildStep.isFinished()) {
+            Observable.just(ActionSnapshot(outputUrls, finished = true))
+        } else {
+            actionSnapshots(client).observeOn(delivery)
+        }
+        // Deliver chunks on the same scheduler that commits their offsets and appends the log.
         return pollActionOutputs(
             outputUrls,
-            actionSnapshots(client),
-            outputClient::fetchRawOutput,
-            fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
+            snapshots,
+            { url, offset -> outputClient.fetchRawOutput(url, offset).observeOn(delivery, true) },
+            progress = progress,
+            delivery = delivery,
+            fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset).observeOn(delivery, true) }
         )
-    }
-
-    private fun pollRunningActions(
-        build: Build,
-        buildStep: BuildStep,
-        client: CircleCIAPIClientV1_1,
-        outputClient: BuildOutputClient
-    ) {
-        runningOutput(build, buildStep, client, outputClient)
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread(), true)
-            .subscribeBy(
-                onNext = { appendLog(it) },
-                onError = { logLoadFailed.value = true }
-            )
-            .addTo(bag)
     }
 
     private fun actionSnapshots(client: CircleCIAPIClientV1_1): Observable<ActionSnapshot> =
@@ -129,6 +133,7 @@ class BuildStepPresenter internal constructor(
 internal fun pollBuildStep(
     stepId: BuildStepId,
     scheduler: Scheduler = Schedulers.computation(),
+    previousStep: BuildStep? = null,
     fetchBuild: () -> Observable<Build>
 ): Observable<Pair<Build, BuildStep>> =
     Observable.defer(fetchBuild)
@@ -140,6 +145,7 @@ internal fun pollBuildStep(
             val step = stepId.resolve(build.steps)
             when {
                 step != null -> Observable.just(build to step)
+                build.isFinished() && previousStep != null -> Observable.just(build to previousStep)
                 build.isFinished() -> Observable.error(NoSuchElementException("Build step was not found"))
                 else -> Observable.empty()
             }
@@ -157,27 +163,46 @@ internal fun completedActionLogs(
 
 internal data class ActionSnapshot(val outputUrls: List<String>, val finished: Boolean)
 
+private class StepOutputProgress {
+    var step: BuildStep? = null
+    var complete = false
+    var completedActions = 0
+    val raw = RawOutputProgress()
+}
+
+internal class RawOutputProgress {
+    val urls = AtomicReference(emptySet<String>())
+    val decoders = mutableMapOf<String, Utf8StreamDecoder>()
+    val finishedUrls = mutableSetOf<String>()
+    val offsets = mutableMapOf<String, Long>()
+    val started get() = urls.get().isNotEmpty()
+}
+
 internal fun pollActionOutputs(
     outputUrls: List<String>,
     snapshots: Observable<ActionSnapshot>,
     fetchOutput: (String, Long) -> Observable<RawOutputChunk>,
     scheduler: Scheduler = Schedulers.computation(),
+    progress: RawOutputProgress? = null,
+    delivery: Scheduler = Schedulers.trampoline(),
     fetchFinalOutput: (String, Long) -> Observable<RawOutputChunk> = fetchOutput
 ): Observable<String> = Observable.defer {
-    val urls = AtomicReference(outputUrls.toSet())
-    val decoders = mutableMapOf<String, Utf8StreamDecoder>()
-    val limitedUrls = mutableSetOf<String>()
-    val offsets = mutableMapOf<String, Long>()
+    val state = progress ?: RawOutputProgress()
+    val urls = state.urls
+    urls.set(urls.get() + outputUrls)
+    val decoders = state.decoders
+    val finishedUrls = state.finishedUrls
+    val offsets = state.offsets
     val reading = AtomicBoolean()
     val stepFinished = snapshots
         .doOnNext { snapshot -> urls.set(urls.get() + snapshot.outputUrls) }
         .filter { it.finished }
-    polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
+    polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false).observeOn(delivery) }
         .filter { reading.compareAndSet(false, true) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = urls.get().filterNot(limitedUrls::contains).map { url ->
+            val reads = urls.get().filterNot(finishedUrls::contains).map { url ->
                 val read = Observable.defer {
                     val decoder = decoders.getOrPut(url) { Utf8StreamDecoder() }
                     val offset = offsets.getOrDefault(url, 0L)
@@ -186,14 +211,14 @@ internal fun pollActionOutputs(
                         offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
                         val log = decoder.decode(chunk.bytes)
                         if (chunk.limitReached) {
-                            limitedUrls.add(url)
+                            finishedUrls.add(url)
                             log + decoder.finish() + OUTPUT_LIMIT_MESSAGE
                         } else {
                             log
                         }
                     }
                     if (finishing) chunks.concatWith(Observable.fromCallable {
-                        if (url in limitedUrls) "" else decoder.finish()
+                        if (finishedUrls.add(url)) decoder.finish() else ""
                     }) else chunks
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
