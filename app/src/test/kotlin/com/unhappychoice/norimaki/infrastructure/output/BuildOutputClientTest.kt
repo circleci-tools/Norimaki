@@ -152,12 +152,12 @@ class BuildOutputClientTest : DescribeSpec({
                         else -> error("Unexpected range: $range")
                     }
                 }
-                val observer = pollActionOutputs(listOf(url), finished, client::fetchRawOutput, scheduler) { outputUrl, start ->
+                val observer = pollActionOutputs(mapOf(url to false), finished, client::fetchRawOutput, scheduler) { outputUrl, start ->
                     client.fetchFinalRawOutput(outputUrl, start, scheduler)
                 }.test()
 
                 observer.assertValues(live).assertNotComplete()
-                finished.onNext(ActionSnapshot(emptyList(), finished = true))
+                finished.onNext(ActionSnapshot(emptyMap(), finished = true))
                 scheduler.advanceTimeBy(5, SECONDS)
 
                 if (finalStatus == 206) {
@@ -264,7 +264,7 @@ class BuildOutputClientTest : DescribeSpec({
                 val body = if (ranges.size == 1) "abc" else "abcdef"
                 response(request, 200, body)
             }
-            val observer = pollActionOutputs(listOf(url), Observable.never(), client::fetchRawOutput, scheduler).test()
+            val observer = pollActionOutputs(mapOf(url to false), Observable.never(), client::fetchRawOutput, scheduler).test()
 
             try {
                 scheduler.advanceTimeBy(2, SECONDS)
