@@ -10,10 +10,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.subjects.SingleSubject
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.kodein.di.DI
 import org.kodein.di.bind
@@ -23,6 +25,7 @@ import org.kodein.di.singleton
 class ArtifactDownloadTestApplication : NorimakiApplication() {
     val bytes = byteArrayOf(0, 42, -1)
     val requests = mutableListOf<Request>()
+    var responseBody: (Call) -> ResponseBody = { bytes.toResponseBody() }
 
     private var session: SessionService? = null
 
@@ -55,6 +58,6 @@ class ArtifactDownloadTestApplication : NorimakiApplication() {
         val request = chain.request()
         requests.add(request)
         Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-            .body(bytes.toResponseBody()).build()
+            .body(responseBody(chain.call())).build()
     }.build()
 }

@@ -2,7 +2,6 @@ package com.unhappychoice.norimaki
 
 import android.content.ActivityNotFoundException
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -16,10 +15,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.di.activityModule
+import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.core.GsonParceler
@@ -27,6 +26,7 @@ import com.unhappychoice.norimaki.presentation.core.ScreenChanger
 import com.unhappychoice.norimaki.presentation.core.goBackFromScreen
 import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.presenter.ArtifactSelection
+import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.view.APITokenView
 import com.unhappychoice.norimaki.presentation.view.ArtifactsView
@@ -56,26 +56,25 @@ class MainActivity : AppCompatActivity() {
         ActivityMainBinding.inflate(layoutInflater)
     }
 
-    private val artifactPickerState by lazy { ViewModelProvider(this)[ArtifactPickerState::class.java] }
-    private var artifactResult: Pair<ArtifactSelection, Uri>? = null
+    internal val artifactDownloads by lazy { ViewModelProvider(this)[ArtifactDownloadState::class.java] }
     private val artifactPicker = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { destination ->
-        val selection = artifactPickerState.selection
-        artifactPickerState.selection = null
+        val selection = artifactDownloads.selection
+        artifactDownloads.selection = null
         if (destination != null && selection != null) {
-            artifactResult = selection to destination
+            artifactDownloads.destination = selection to destination
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) savePickedArtifact()
         }
     }
 
     internal fun pickArtifactDestination(selection: ArtifactSelection) {
-        if (artifactPickerState.selection != null) return
-        artifactPickerState.selection = selection
+        if (artifactDownloads.isBusy) return
+        artifactDownloads.selection = selection
         try {
             artifactPicker.launch(selection.filename)
         } catch (_: ActivityNotFoundException) {
-            artifactPickerState.selection = null
+            artifactDownloads.selection = null
             (getCurrentView() as? ArtifactsView)?.showMessage(R.string.artifact_save_failed)
         }
     }
@@ -118,8 +117,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         BundleServiceRunner.getBundleServiceRunner(this).onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, flowBackCallback)
-        if (artifactPickerState.selection == null) {
-            artifactPickerState.selection = savedInstanceState?.getBundle(ARTIFACT_SELECTION)
+        if (artifactDownloads.selection == null && artifactDownloads.destination == null) {
+            artifactDownloads.selection = savedInstanceState?.getBundle(ARTIFACT_SELECTION)
                 ?.let(ArtifactSelection::restore)
         }
         setupView()
@@ -145,7 +144,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        artifactPickerState.selection?.let { outState.putBundle(ARTIFACT_SELECTION, it.toBundle()) }
+        artifactDownloads.selection?.let { outState.putBundle(ARTIFACT_SELECTION, it.toBundle()) }
         BundleServiceRunner.getBundleServiceRunner(this).onSaveInstanceState(outState)
         super.onSaveInstanceState(outState)
     }
@@ -175,9 +174,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun savePickedArtifact() {
-        val (selection, destination) = artifactResult ?: return
-        artifactResult = null
-        (getCurrentView() as? ArtifactsView)?.presenter?.save(selection, destination)
+        val (selection, destination) = artifactDownloads.destination ?: return
+        artifactDownloads.destination = null
+        val screen = Flow.get(this).history.top<Any>() as? ArtifactsScreen ?: return
+        if (screen.buildId != selection.buildId) return
+        val downloader: ArtifactDownloader by module.instance()
+        artifactDownloads.save(selection, destination, applicationContext.contentResolver, session, downloader)
     }
 
     private fun setupView() {
@@ -227,8 +229,4 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val ARTIFACT_SELECTION = "artifact_selection"
     }
-}
-
-internal class ArtifactPickerState : ViewModel() {
-    var selection: ArtifactSelection? = null
 }
