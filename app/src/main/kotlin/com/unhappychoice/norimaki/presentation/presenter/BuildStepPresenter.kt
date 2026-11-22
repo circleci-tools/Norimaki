@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.rawOutputUrl
+import com.unhappychoice.norimaki.extension.AnsiEscapeStream
 import com.unhappychoice.norimaki.extension.Utf8StreamDecoder
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.polling
@@ -38,6 +39,8 @@ class BuildStepPresenter internal constructor(
 
     internal val log = BuildLog()
 
+    val logSearchAvailable = Variable(false)
+
     val logLoadFailed = Variable(false)
 
     val canRetryStepLoad = Variable(false)
@@ -52,6 +55,7 @@ class BuildStepPresenter internal constructor(
         val verified = account ?: return
         val client = verified.client
         val outputClient = createOutputClient(verified.token)
+        logSearchAvailable.value = false
         log.clear()
         logLoadFailed.value = false
         canRetryStepLoad.value = false
@@ -97,7 +101,7 @@ class BuildStepPresenter internal constructor(
         client: CircleCIAPIClientV1_1,
         outputClient: BuildOutputClient
     ) {
-        runningOutput(build, buildStep, client, outputClient).renderLog()
+        runningOutput(build, buildStep, client, outputClient).renderLog(searchOnError = true)
     }
 
     private fun actionSnapshots(client: CircleCIAPIClientV1_1): Observable<ActionSnapshot> =
@@ -111,10 +115,21 @@ class BuildStepPresenter internal constructor(
             )
         }
 
-    private fun Observable<String>.renderLog() {
+    private fun Observable<String>.renderLog(searchOnError: Boolean = false) {
         val chunks = subscribeOn(Schedulers.io()).observeOn(Schedulers.computation(), true)
-        log.render(chunks, AndroidSchedulers.mainThread(), onError = { logLoadFailed.value = true })
-            .addTo(bag)
+        log.render(
+            chunks,
+            AndroidSchedulers.mainThread(),
+            onError = {
+                logLoadFailed.value = true
+                if (searchOnError) allowLogSearch()
+            },
+            onComplete = ::allowLogSearch
+        ).addTo(bag)
+    }
+
+    private fun allowLogSearch() {
+        logSearchAvailable.value = log.lineCount > 0
     }
 
     companion object {
@@ -147,7 +162,10 @@ internal fun completedActionLogs(
     fetchOutput: (String) -> Observable<String>
 ): Observable<String> =
     Observable.fromIterable(outputUrls).concatMap { url ->
+        val ansiStream = AnsiEscapeStream()
         Observable.defer { fetchOutput(url) }
+            .map(ansiStream::strip)
+            .filter { it.isNotEmpty() }
             .onErrorReturnItem("\n[Some output could not be loaded.]\n")
     }
 
@@ -162,6 +180,7 @@ internal fun pollActionOutputs(
 ): Observable<String> = Observable.defer {
     val urls = AtomicReference(outputUrls.toSet())
     val decoders = mutableMapOf<String, Utf8StreamDecoder>()
+    val ansiStreams = mutableMapOf<String, AnsiEscapeStream>()
     val limitedUrls = mutableSetOf<String>()
     val offsets = mutableMapOf<String, Long>()
     val reading = AtomicBoolean()
@@ -178,18 +197,19 @@ internal fun pollActionOutputs(
                     val decoder = decoders.getOrPut(url) { Utf8StreamDecoder() }
                     val offset = offsets.getOrDefault(url, 0L)
                     val fetch = if (finishing) fetchFinalOutput else fetchOutput
+                    val ansiStream = ansiStreams.getOrPut(url) { AnsiEscapeStream() }
                     val chunks = fetch(url, offset).map { chunk ->
                         offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
                         val log = decoder.decode(chunk.bytes)
                         if (chunk.limitReached) {
                             limitedUrls.add(url)
-                            log + decoder.finish() + OUTPUT_LIMIT_MESSAGE
+                            ansiStream.strip(log + decoder.finish()) + OUTPUT_LIMIT_MESSAGE
                         } else {
-                            log
+                            ansiStream.strip(log)
                         }
                     }
                     if (finishing) chunks.concatWith(Observable.fromCallable {
-                        if (url in limitedUrls) "" else decoder.finish()
+                        if (url in limitedUrls) "" else ansiStream.strip(decoder.finish())
                     }) else chunks
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())

@@ -61,6 +61,16 @@ class BuildStepPresenterTest : DescribeSpec({
                 .test().assertResult("first", "second")
         }
 
+        it("should strip split hyperlink controls independently for each action") {
+            completedActionLogs(listOf("first", "second")) { url ->
+                if (url == "first") {
+                    Observable.just("before \u001B", "]8;id=hidden;https://example.test\u001B", "\\Report\u001B]8;;")
+                } else {
+                    Observable.just("other output")
+                }
+            }.test().assertResult("before ", "Report", "other output")
+        }
+
         it("should continue when creating a download throws") {
             completedActionLogs(listOf("invalid", "valid")) { url ->
                 if (url == "invalid") throw IllegalArgumentException("Invalid URL")
@@ -70,58 +80,110 @@ class BuildStepPresenterTest : DescribeSpec({
     }
 
     describe("BuildStepPresenter running output") {
-        listOf("selected step", "build", "build with the selected step missing").forEach { completion ->
-            it("keeps fetching a same-named running step until the $completion finishes") {
+        val scenarios = listOf(
+            "selected step", "build", "build with the selected step missing",
+            "final download failure", "failure without output", "split hyperlink"
+        )
+        scenarios.forEach { scenario ->
+            it("updates log search when polling ends with $scenario") {
                 val scheduler = TestScheduler()
-                val selected = action(5, null)
+                val runningStep = BuildStep("Run tests", listOf(action(5, null)))
                 val first = BuildStep("Run tests", listOf(action(2, Date())))
-                val second = BuildStep("Run tests", listOf(selected))
-                val running = build("running", listOf(first, second))
-                val runningSnapshot = if (completion == "build with the selected step missing") {
+                val running = build("running", listOf(first, runningStep))
+                val finishedStep = BuildStep("Run tests", listOf(action(5, Date())))
+                val runningSnapshot = if (scenario == "build with the selected step missing") {
                     build("running", listOf(first))
                 } else {
                     running
                 }
-                val finished = when (completion) {
-                    "build" -> build("finished", listOf(first, second))
+                val finished = when (scenario) {
+                    "build" -> build("finished", listOf(first, runningStep))
                     "build with the selected step missing" -> build("finished", listOf(first))
-                    else -> build("running", listOf(first, BuildStep("Run tests", listOf(action(5, Date())))))
+                    else -> build("running", listOf(first, finishedStep))
+                }
+                val finalDownloadFails = scenario.contains("failure")
+                val hasOutput = scenario != "failure without output"
+                val liveChunks = when (scenario) {
+                    "split hyperlink" -> listOf(
+                        "before \u001B", "]0;hidden ", "title\u0007\u001B]8;id=hidden", ";https://example.test", "\u001B"
+                    )
+                    "failure without output" -> emptyList()
+                    else -> (0..9).map(Int::toString)
+                }.map { it.toByteArray() }
+                val chunksByOffset = liveChunks.runningFold(0L) { offset, chunk -> offset + chunk.size }
+                    .zip(liveChunks).toMap()
+                val finalOffset = liveChunks.sumOf { it.size.toLong() }
+                val finalChunk = if (scenario == "split hyperlink") {
+                    "\\Report\u001B]8;;\u0007"
+                } else {
+                    "done"
                 }
                 val api = mockk<CircleCIAPIClientV1_1> {
                     every { getBuild("github", "owner", "repo", 42) } returnsMany
-                        listOf(Observable.just(runningSnapshot), Observable.just(finished))
+                        listOf(Observable.just(running), Observable.just(runningSnapshot), Observable.just(finished))
                 }
+                val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                 val output = mockk<BuildOutputClient> {
-                    val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
                     every { fetchRawOutput(url, any()) } answers {
-                        Observable.just(RawOutputChunk(byteArrayOf(secondArg<Long>().toByte())))
+                        Observable.just(RawOutputChunk(chunksByOffset[secondArg<Long>()] ?: byteArrayOf()))
                     }
-                    every { fetchFinalRawOutput(url, 10L) } returns Observable.just(RawOutputChunk(byteArrayOf(100)))
+                    every { fetchFinalRawOutput(url, finalOffset, any()) } returns if (finalDownloadFails) {
+                        Observable.error(IOException("HTTP 503"))
+                    } else {
+                        Observable.just(RawOutputChunk(finalChunk.toByteArray()))
+                    }
                 }
-                val presenter = BuildStepPresenter().apply {
+                val presenter = BuildStepPresenter { output }.apply {
                     di = DI {
                         bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                         bind<BuildStepId>() with singleton { BuildStepId(5) }
+                        bind<SessionService>() with singleton { testSession(api) }
                     }
                 }
+                val view = mockk<BuildStepView>(relaxUnitFun = true)
+                var scope: MortarScope? = null
 
-                val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
-                RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                 try {
-                    val observer = presenter.runningOutput(running, second, api, output).test()
-                    try {
-                        scheduler.advanceTimeBy(4, SECONDS)
-                        observer.assertNotComplete().assertNoErrors()
-                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4)
+                    RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+                    RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                    RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+                    RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
-                        scheduler.advanceTimeTo(10, SECONDS)
-                        observer.assertComplete().assertNoErrors()
-                        observer.values().map { it.single().code } shouldBe (0..9).toList() + 100
-                    } finally {
-                        observer.dispose()
+                    scope = presenter.attachToTestScope(view)
+
+                    scheduler.advanceTimeTo(4, SECONDS)
+                    verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+
+                    scheduler.advanceTimeTo(5, SECONDS)
+                    verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+                    verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
+
+                    scheduler.advanceTimeTo(9, SECONDS)
+                    verify(exactly = 1) { view.showStep(runningStep) }
+                    val retainedLog = when (scenario) {
+                        "split hyperlink" -> "before "
+                        "failure without output" -> ""
+                        else -> "0123456789"
                     }
+                    presenter.logLines().joinToString("\n") shouldBe retainedLog
+                    presenter.logSearchAvailable.value shouldBe false
+                    presenter.logLoadFailed.value shouldBe false
+
+                    scheduler.advanceTimeTo(10, SECONDS)
+                    verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
+                    verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
+                    presenter.logLoadFailed.value shouldBe finalDownloadFails
+                    val expectedFinalLog = when {
+                        finalDownloadFails -> retainedLog
+                        scenario == "split hyperlink" -> "before Report"
+                        else -> retainedLog + "done"
+                    }
+                    presenter.logLines().joinToString("\n") shouldBe expectedFinalLog
+                    presenter.logSearchAvailable.value shouldBe hasOutput
                 } finally {
-                    RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+                    scope?.destroy()
+                    RxAndroidPlugins.reset()
+                    RxJavaPlugins.reset()
                 }
             }
         }
@@ -174,6 +236,7 @@ class BuildStepPresenterTest : DescribeSpec({
             presenter.logLines() shouldBe listOf("first second")
             scheduler.advanceTimeTo(10, SECONDS)
             presenter.logLines() shouldBe listOf("first second done third")
+            presenter.logSearchAvailable.value shouldBe true
             presenter.logLoadFailed.value shouldBe false
             verify(exactly = 1) { view.showStep(initialStep) }
             verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
@@ -223,6 +286,8 @@ class BuildStepPresenterTest : DescribeSpec({
                 verify(exactly = 1) { view.showStep(finishedStep) }
                 presenter.logLoadFailed.value shouldBe false
                 presenter.logLines() shouldBe if (outputFails) listOf("", "[Some output could not be loaded.]", "") else listOf("done")
+                presenter.logSearchAvailable.value shouldBe true
+                verify(exactly = 1) { output.fetchOutput(expectedUrl) }
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
@@ -249,7 +314,7 @@ class BuildStepPresenterTest : DescribeSpec({
                 every { fetchFinalRawOutput(url, 5L, any()) } returns if (outputFails) {
                     Observable.error(IOException("Final output unavailable"))
                 } else {
-                    Observable.just(RawOutputChunk(" last".toByteArray(), limitReached = true))
+                    Observable.just(RawOutputChunk(" last\u001B]8;;https://example.test".toByteArray(), limitReached = true))
                 }
             }
             val presenter = BuildStepPresenter { output }.apply {
@@ -284,6 +349,7 @@ class BuildStepPresenterTest : DescribeSpec({
                 presenter.logLoadFailed.value shouldBe outputFails
                 val expected = if (outputFails) "first" else "first last" + OUTPUT_LIMIT_MESSAGE
                 presenter.logLines() shouldBe expected.split('\n')
+                presenter.logSearchAvailable.value shouldBe true
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
@@ -342,6 +408,7 @@ class BuildStepPresenterTest : DescribeSpec({
             presenter.canRetryStepLoad.value shouldBe false
             scheduler.triggerActions()
             presenter.logLines() shouldBe listOf("Selected step output")
+            presenter.logSearchAvailable.value shouldBe true
         } finally {
             scope?.destroy()
             failures.dispose()

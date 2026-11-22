@@ -1,11 +1,9 @@
 package com.unhappychoice.norimaki.infrastructure.testresults
 
-import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.JsonSyntaxException
+import com.unhappychoice.norimaki.domain.model.BuildId
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import io.mockk.every
-import io.mockk.mockk
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -29,11 +27,11 @@ class TestResultsClientTest : DescribeSpec({
                 }
             }
 
-            client.fetch(build()).test().awaitDone(5, SECONDS).assertResult(
-                TestResults.Reported(
-                    listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>"),
-                        TestFailure("throws", null, null))
-                )
+            client.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(
+                TestResults.FailurePage(emptyList()),
+                TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>"))),
+                TestResults.FailurePage(listOf(TestFailure("throws", null, null))),
+                TestResults.Reported
             )
             requests.map { it.url.encodedPath }.distinct() shouldBe listOf("/api/v2/project/gh/org/repo/123/tests")
             requests.map { it.header("Circle-Token") } shouldBe List(3) { "session-token" }
@@ -45,19 +43,18 @@ class TestResultsClientTest : DescribeSpec({
                 it.url.encodedPath shouldBe "/api/v2/project/bb/org/repo/123/tests"
                 200 to """{"items":[{"result":"success"},{"result":"skipped"}]}"""
             }
-            passing.fetch(build("https://bitbucket.org/org/repo")).test().awaitDone(5, SECONDS)
-                .assertResult(TestResults.Reported(emptyList()))
+            passing.fetch(buildId.copy(vcsType = "bitbucket")).test().awaitDone(5, SECONDS)
+                .assertResult(TestResults.Reported)
 
             listOf(200 to """{"items":[]}""", 404 to "{}").forEach { response ->
-                client { response }.fetch(build()).test().awaitDone(5, SECONDS)
+                client { response }.fetch(buildId).test().awaitDone(5, SECONDS)
                     .assertResult(TestResults.Unavailable)
             }
         }
 
-        it("reports unavailable metadata when the build identity is incomplete") {
+        it("reports unavailable metadata when the owner or repository is blank") {
             val client = client { error("Unexpected request") }
-            listOf(build(owner = null), build(owner = " "), build(repository = null),
-                build(repository = " "), build(job = null)).forEach { incomplete ->
+            listOf(buildId.copy(owner = " "), buildId.copy(repository = " ")).forEach { incomplete ->
                 client.fetch(incomplete).test().awaitDone(5, SECONDS).assertResult(TestResults.Unavailable)
             }
         }
@@ -66,26 +63,28 @@ class TestResultsClientTest : DescribeSpec({
             client { request ->
                 request.url.query shouldBe null
                 200 to """{"items":[{"result":"success"}],"next_page_token":""}"""
-            }.fetch(build()).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported(emptyList()))
+            }.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported)
         }
 
         it("propagates request errors, including an unavailable subsequent page") {
             listOf(401, 403, 429, 500).forEach { status ->
-                client { status to "{}" }.fetch(build()).test().awaitDone(5, SECONDS)
+                client { status to "{}" }.fetch(buildId).test().awaitDone(5, SECONDS)
                     .assertFailure(IOException::class.java)
             }
             client { request ->
                 if (request.url.query == null) 200 to """{"items":[],"next_page_token":"next"}"""
                 else 404 to "{}"
-            }.fetch(build()).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
+            }.fetch(buildId).test().awaitDone(5, SECONDS)
+                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList()))
         }
 
         it("rejects a repeated pagination token") {
             client { 200 to """{"items":[],"next_page_token":"next"}""" }
-                .fetch(build()).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
+                .fetch(buildId).test().awaitDone(5, SECONDS)
+                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList()))
         }
 
-        it("fails without emitting partial results when a later page contains invalid JSON") {
+        it("keeps emitted failures when a later page contains invalid JSON") {
             client { request ->
                 val body = if (request.url.queryParameter("page-token") == "next") {
                     """{"items":["""
@@ -93,22 +92,15 @@ class TestResultsClientTest : DescribeSpec({
                     """{"items":[{"result":"failure","name":"asserts"}],"next_page_token":"next"}"""
                 }
                 200 to body
-            }.fetch(build()).test().awaitDone(5, SECONDS).assertFailure(JsonSyntaxException::class.java)
+            }.fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(
+                JsonSyntaxException::class.java,
+                TestResults.FailurePage(listOf(TestFailure("asserts", null, null)))
+            )
         }
     }
 })
 
-private fun build(
-    url: String = "https://github.com/org/repo",
-    job: Int? = 123,
-    owner: String? = "org",
-    repository: String? = "repo"
-): Build = mockk {
-    every { vcsUrl } returns url
-    every { username } returns owner
-    every { reponame } returns repository
-    every { buildNum } returns job
-}
+private val buildId = BuildId("github", "org", "repo", 123)
 
 private fun client(respond: (Request) -> Pair<Int, String>): TestResultsClient =
     TestResultsClient("session-token", OkHttpClient.Builder().addInterceptor { chain ->

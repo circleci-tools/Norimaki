@@ -8,6 +8,8 @@ import io.reactivex.subjects.PublishSubject
 
 internal data class LogUpdate(val changedLine: Int?, val insertStart: Int, val insertCount: Int, val removedCount: Int = 0)
 
+internal data class LogMatch(val line: Int, val start: Int, val end: Int)
+
 internal class BuildLog {
     private val lines = mutableListOf<MutableList<LogSpan>>()
     private val updates = PublishSubject.create<LogUpdate>()
@@ -17,15 +19,19 @@ internal class BuildLog {
 
     operator fun get(index: Int): List<LogSpan> = lines[index]
 
+    fun snapshot(): List<List<LogSpan>> =
+        lines.mapIndexed { index, line -> if (index == lines.lastIndex) line.toList() else line }
+
     fun render(
         chunks: Observable<String>,
         displayScheduler: Scheduler,
         onError: (Throwable) -> Unit = { it.printStackTrace() },
+        onComplete: () -> Unit = {},
         format: (String) -> List<List<LogSpan>> = LogChunkFormatter()::format
     ): Disposable =
         chunks.map(format)
             .observeOn(displayScheduler, true)
-            .subscribeBy(onNext = ::append, onError = onError)
+            .subscribeBy(onNext = ::append, onError = onError, onComplete = onComplete)
 
     fun clear() {
         val removedCount = lineCount

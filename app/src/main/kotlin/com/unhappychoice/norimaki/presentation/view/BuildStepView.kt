@@ -10,7 +10,6 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.adapter.BuildLogAdapter
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
-import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import org.kodein.di.instance
 
@@ -21,8 +20,6 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         BuildStepViewBinding.bind(this)
     }
 
-    private val logSubscriptions = CompositeDisposable()
-
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
@@ -31,16 +28,22 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
         binding.logLines.layoutManager = LinearLayoutManager(context)
         binding.logLines.itemAnimator = null
         binding.logLines.adapter = adapter
-        presenter.log.changes.subscribeNext(adapter::update).addTo(logSubscriptions)
+        val search = BuildLogSearch(binding, presenter.log, adapter)
+        search.bind(bag)
+        presenter.logSearchAvailable.asObservable().subscribeNext(search::setAvailable).addTo(bag)
+        presenter.log.changes.subscribeNext {
+            adapter.update(it)
+            search.onLogChanged()
+        }.addTo(bag)
 
         binding.retryStepLoad.setOnClickListener { presenter.retryStepLoad() }
         presenter.canRetryStepLoad.asObservable()
             .subscribeNext { retry -> binding.retryStepLoad.visibility = if (retry) View.VISIBLE else View.GONE }
-            .addTo(logSubscriptions)
+            .addTo(bag)
 
         presenter.logLoadFailed.asObservable()
             .subscribeNext { failed -> binding.logLoadError.visibility = if (failed) View.VISIBLE else View.GONE }
-            .addTo(logSubscriptions)
+            .addTo(bag)
     }
 
     internal fun showStep(step: BuildStep) {
@@ -48,7 +51,6 @@ class BuildStepView(context: Context, attr: AttributeSet) : BaseView<BuildStepVi
     }
 
     override fun onDetachedFromWindow() {
-        logSubscriptions.clear()
         presenter.dropView(this)
         super.onDetachedFromWindow()
     }

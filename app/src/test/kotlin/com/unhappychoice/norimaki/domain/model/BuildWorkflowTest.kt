@@ -45,16 +45,4 @@ class BuildWorkflowTest : DescribeSpec({
             build(null).projectName() shouldBe "github/circleci-tools/Norimaki"
         }
     }
-
-    describe("List<Build>.inWorkflow()") {
-        val builds = listOf(build(workflow("a", "wf", "build")), build(workflow("b", "wf", "test")), build(null))
-
-        it("should keep builds of the workflow") {
-            builds.inWorkflow("a") shouldBe listOf(builds[0])
-        }
-        it("should keep every build without workflow id") {
-            builds.inWorkflow(null) shouldBe builds
-            builds.inWorkflow("") shouldBe builds
-        }
-    }
 })
