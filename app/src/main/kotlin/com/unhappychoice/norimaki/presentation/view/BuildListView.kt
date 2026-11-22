@@ -93,7 +93,7 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .addTo(bag)
 
         binding.buildsView.scrollEvents()
-            .filter { !presenter.isWorkflow || it.dy != 0 }
+            .filter { it.dy != 0 || (!presenter.isWorkflow && !presenter.canRetryPage.value) }
             .filter { binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)

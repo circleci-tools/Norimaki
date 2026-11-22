@@ -33,6 +33,7 @@ import mortar.MortarScope
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
+import java.util.Date
 import java.util.concurrent.TimeUnit
 
 class BuildListPresenterTest : DescribeSpec({
@@ -61,12 +62,13 @@ class BuildListPresenterTest : DescribeSpec({
         api: CircleCIAPIClientV1_1,
         workflowId: String? = "target",
         session: SessionService = testSession(api),
-        view: BuildListView = mockk()
+        view: BuildListView = mockk(),
+        projectName: String = "github/owner/repo"
     ) = BuildListPresenter().apply {
         di = DI {
             bind<SessionService>() with singleton { session }
             bind<MainActivity>() with singleton { activity }
-            bind<String>() with singleton { "github/owner/repo" }
+            bind<String>() with singleton { projectName }
             workflowId?.let { id ->
                 bind<String>(tag = WorkflowScreen.WORKFLOW_ID_TAG) with singleton { id }
             }
@@ -455,6 +457,49 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.page.value shouldBe 2
             presenter.hasMore.value shouldBe false
             builds.dispose()
+        }
+    }
+
+    describe("build history pagination") {
+        mapOf("Recent Builds" to "", "project history" to "github/owner/repo").forEach { (screen, projectName) ->
+            it("keeps loaded rows and retries the failed offset in $screen") {
+                val api = mockk<CircleCIAPIClientV1_1>()
+                fun requestPage(offset: Int) = if (projectName.isEmpty()) {
+                    api.getRecentBuilds(offset = offset, limit = 20)
+                } else {
+                    api.pageAt(offset)
+                }
+                val firstPage = (21 downTo 2).map { number ->
+                    build(null, number).apply { every { queuedAt } returns Date(number * 1000L) }
+                }
+                val older = build(null, 1).apply { every { queuedAt } returns Date(1000L) }
+                every { requestPage(0) } returns Observable.just(firstPage)
+                every { requestPage(20) } returnsMany listOf(
+                    Observable.error(IllegalStateException("Page request failed")),
+                    Observable.just(listOf(older))
+                )
+                val presenter = presenter(api, workflowId = null, projectName = projectName)
+                val builds = presenter.builds.test()
+                startPolling(presenter)
+
+                presenter.getBuilds()
+                advanceRefresh()
+
+                presenter.canRetryPage.value shouldBe true
+                presenter.page.value shouldBe 1
+                builds.assertValues(emptyList(), firstPage)
+                verify(exactly = 2) { requestPage(0) }
+                verify(exactly = 1) { requestPage(20) }
+
+                presenter.getBuilds()
+                scheduler.triggerActions()
+
+                presenter.canRetryPage.value shouldBe false
+                presenter.page.value shouldBe 2
+                builds.assertValues(emptyList(), firstPage, firstPage + older)
+                verify(exactly = 2) { requestPage(20) }
+                builds.dispose()
+            }
         }
     }
 
