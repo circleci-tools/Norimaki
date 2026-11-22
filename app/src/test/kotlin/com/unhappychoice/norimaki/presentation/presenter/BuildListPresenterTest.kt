@@ -510,6 +510,32 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("workflow pagination") {
+        it("keeps the session and pending page when a different view is dropped") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val newest = build("target", 2)
+            val older = build("target", 1)
+            val inFlight = PublishSubject.create<List<Build>>()
+            every { api.pageAt(0) } returns Observable.just(listOf(newest))
+            every { api.pageAt(20) } returns inFlight
+            every { api.pageAt(40) } returns Observable.just(emptyList())
+            val presenter = presenter(api)
+            scheduler.triggerActions()
+            presenter.getBuilds()
+            inFlight.hasObservers() shouldBe true
+
+            presenter.dropView(mockk<BuildListView>())
+
+            inFlight.hasObservers() shouldBe true
+            inFlight.onNext(listOf(older))
+            inFlight.onComplete()
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(older, newest))
+
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            verify(exactly = 1) { api.pageAt(40) }
+        }
+
         it("cancels pagination on detach and starts a fresh list on reattach") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build("target", 2)
