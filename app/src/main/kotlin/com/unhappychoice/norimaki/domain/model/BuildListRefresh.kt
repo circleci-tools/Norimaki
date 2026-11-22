@@ -6,7 +6,6 @@ import io.reactivex.Observable
 internal fun refreshBuildList(
     displayed: List<Build>,
     latest: List<Build>,
-    workflowId: String?,
     fetchDetails: (Build) -> Observable<Build>
 ): Observable<List<Build>> {
     val latestIds = latest.map { it.uniqueId() }.toSet()
@@ -16,5 +15,5 @@ internal fun refreshBuildList(
             Observable.defer { fetchDetails(build) }.onErrorResumeNext(Observable.empty<Build>())
         }
         .map { listOf(it) }
-        .startWith(latest.inWorkflow(workflowId))
+        .startWith(latest)
 }

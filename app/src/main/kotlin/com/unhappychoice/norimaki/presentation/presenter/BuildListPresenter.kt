@@ -13,7 +13,6 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
@@ -24,14 +23,12 @@ import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
-import org.kodein.di.instanceOrNull
 
 class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     val projectName: String by instance()
-    private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     private val buildList by lazy {
         BuildListRequests(
-            workflowId, Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
+            Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
             ::getBuildDetails, projectBuilds(branch = null)
         )
     }
@@ -40,8 +37,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private var pollingRegistration: Disposable? = null
     private var hasStartedPolling = false
 
-    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
-    val canFilterByBranch get() = !isWorkflow && projectName.isNotEmpty()
+    val canFilterByBranch get() = projectName.isNotEmpty()
     private val branchSelection = Variable("")
     val selectedBranch = branchSelection.asObservable()
     var recentBranches: List<String> = emptyList()
@@ -51,7 +47,6 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     override val isLoading get() = buildList.isLoading
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
-    val canRetryPage get() = buildList.canRetryPage
 
     override fun onAuthenticated() {
         pageRequests = CompositeDisposable().also { it.addTo(bag) }
@@ -91,10 +86,6 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
         buildList.start().addTo(pageRequests)
         hasStartedPolling = false
         pollingLifecycle?.let { observePolling(it) }
-    }
-
-    fun getBuildsIfUnderfilled(canScroll: Boolean) {
-        if (isWorkflow && !canScroll && !canRetryPage.value) getBuilds()
     }
 
     override fun onViewDropped() {

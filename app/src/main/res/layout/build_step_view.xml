@@ -16,6 +16,81 @@
         android:visibility="gone" />
 
     <Button
+        android:id="@+id/logFind"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/build_log_find"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/logSearchPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:paddingStart="@dimen/horizontal_margin"
+            android:paddingEnd="@dimen/horizontal_margin">
+
+            <EditText
+                android:id="@+id/logQuery"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/build_log_find"
+                android:inputType="textNoSuggestions"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/logMatchCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:accessibilityLiveRegion="polite" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/horizontal_margin"
+            android:paddingEnd="@dimen/horizontal_margin"
+            android:text="@string/build_log_search_scope" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Button
+                android:id="@+id/logPrevious"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/build_log_previous" />
+
+            <Button
+                android:id="@+id/logNext"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/build_log_next" />
+
+            <Button
+                android:id="@+id/logCloseSearch"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/build_log_close_search" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <Button
         android:id="@+id/retryStepLoad"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
