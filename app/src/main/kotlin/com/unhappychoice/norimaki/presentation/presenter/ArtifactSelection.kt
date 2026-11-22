@@ -21,8 +21,6 @@ internal class ArtifactSelection private constructor(
         session
     )
 
-    val isRestored: Boolean get() = session == null
-
     fun matches(verified: VerifiedSession): Boolean =
         session?.let { it === verified } ?: MessageDigest.isEqual(tokenDigest, digest(verified.token))
 
