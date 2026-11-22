@@ -56,6 +56,9 @@ jobs:
           max_auto_reruns: 2
           auto_rerun_delay: 10s
       - run:
+          name: Build Debug APK
+          command: ./gradlew assembleDebug
+      - run:
           name: Run Tests
           command: ./gradlew jacoco
       - run:
