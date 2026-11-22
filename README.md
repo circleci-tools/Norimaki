@@ -49,7 +49,7 @@ With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 insta
 
 Run `python3 scripts/test-gradle-wrapper.py` to verify that the Wrapper rejects a ZIP with a mismatched checksum. This test uses a local ZIP and requires a JDK and Python 3.
 
-Set `CODECOV_TOKEN` in the CircleCI project environment variables for coverage uploads. The coverage upload step fails when the token is unset or empty.
+Set `CODECOV_TOKEN` in the CircleCI project environment variables to enable coverage uploads. The test job logs a skip when the token is unset or empty.
 
 ## Release checklist
 

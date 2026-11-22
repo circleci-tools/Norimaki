@@ -30,17 +30,13 @@ chmod +x "$stub_dir/curl" "$stub_dir/sha256sum"
 export PATH="$stub_dir:$PATH"
 
 unset CODECOV_TOKEN
-if output=$(bash "$uploader" 2>&1); then
-    echo 'Expected an unset token to return a nonzero status.' >&2
-    exit 1
-fi
-[[ "$output" == *'CODECOV_TOKEN is unset or empty'* && "$output" != *'Downloading mock uploader'* ]]
-
-if output=$(CODECOV_TOKEN= bash "$uploader" 2>&1); then
-    echo 'Expected an empty token to return a nonzero status.' >&2
-    exit 1
-fi
-[[ "$output" == *'CODECOV_TOKEN is unset or empty'* && "$output" != *'Downloading mock uploader'* ]]
+for token_state in unset empty; do
+    if [[ "$token_state" == empty ]]; then
+        export CODECOV_TOKEN=
+    fi
+    output=$(bash "$uploader" 2>&1)
+    [[ "$output" == *'Skipping coverage upload'* && "$output" != *'Downloading mock uploader'* ]]
+done
 
 export CODECOV_TOKEN=mock-coverage-secret
 output=$(bash -x "$uploader" 2>&1)
