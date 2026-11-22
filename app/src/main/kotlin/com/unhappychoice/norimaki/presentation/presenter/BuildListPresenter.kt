@@ -128,7 +128,7 @@ class BuildListPresenter: PresenterNeedsToken<BuildListView>(), Loadable, Pagina
             .subscribeOnIoObserveOnUI()
             .doOnError {
                 isLoading.value = false
-                canRetryPage.value = isWorkflow
+                canRetryPage.value = true
                 initialLoadSettled.onComplete()
             }
             .doOnDispose { isLoading.value = false }
