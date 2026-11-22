@@ -158,6 +158,39 @@ class BuildStepViewTest {
     }
 
     @Test
+    fun resumesSearchingWhenTheSameViewIsReattached() {
+        withView { activity, view ->
+            val query = view.findViewById<EditText>(R.id.logQuery)
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            val output = view.findViewById<TextView>(R.id.logText)
+            log.value = "old output"
+            searchAvailable.value = true
+            renderUpdates()
+
+            view.findViewById<View>(R.id.logFind).performClick()
+            query.setText("output")
+            finishSearch()
+            assertEquals(4 until 10, highlightedRange(output))
+
+            query.setText("old")
+            activity.setContentView(View(activity))
+            log.value = "new output new"
+            finishSearch()
+            assertEquals(null, highlightedRange(output))
+
+            activity.setContentView(view)
+            renderUpdates()
+            finishSearch()
+            assertEquals(activity.getString(R.string.build_log_no_matches), count.text.toString())
+
+            query.setText("new")
+            finishSearch()
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, 2), count.text.toString())
+            assertEquals(0 until 3, highlightedRange(output))
+        }
+    }
+
+    @Test
     fun ignoresHiddenQueriesAndDropsResultsQueuedBeforeTheQueryIsCleared() {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)

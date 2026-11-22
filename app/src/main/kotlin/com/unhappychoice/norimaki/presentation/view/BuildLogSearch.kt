@@ -16,25 +16,28 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
 import io.reactivex.schedulers.Schedulers
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
-    private val search = SerialDisposable()
+    private lateinit var search: SerialDisposable
     private val highlight = BackgroundColorSpan(0x805285C9.toInt())
     private var matches = emptyList<IntRange>()
     private var selected = 0
 
     fun bind(bag: CompositeDisposable) = with(binding) {
+        search = SerialDisposable()
         bag.add(search)
         logFind.setOnClickListener { open() }
         logCloseSearch.setOnClickListener {
             close()
             logFind.requestFocus()
         }
-        logQuery.doAfterTextChanged { refresh() }
+        val queryWatcher = logQuery.doAfterTextChanged { refresh() }
+        bag.add(Disposables.fromAction { logQuery.removeTextChangedListener(queryWatcher) })
         logPrevious.setOnClickListener { move(-1) }
         logNext.setOnClickListener { move(1) }
     }
