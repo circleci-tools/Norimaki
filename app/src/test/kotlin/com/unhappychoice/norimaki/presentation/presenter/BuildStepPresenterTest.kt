@@ -26,6 +26,7 @@ import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.io.IOException
 import java.util.Date
+import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.TimeUnit.SECONDS
 import mortar.MortarScope
 
@@ -107,7 +108,7 @@ class BuildStepPresenterTest : DescribeSpec({
                         "before \u001B", "]0;hidden ", "title\u0007\u001B]8;id=hidden", ";https://example.test", "\u001B"
                     )
                     "failure without output" -> emptyList()
-                    else -> listOf("0", "1", "2", "3", "4")
+                    else -> (0..9).map(Int::toString)
                 }.map { it.toByteArray() }
                 val chunksByOffset = liveChunks.runningFold(0L) { offset, chunk -> offset + chunk.size }
                     .zip(liveChunks).toMap()
@@ -150,18 +151,26 @@ class BuildStepPresenterTest : DescribeSpec({
 
                     scope = presenter.attachToTestScope(view)
 
-                    scheduler.advanceTimeBy(4, SECONDS)
+                    scheduler.advanceTimeTo(4, SECONDS)
+                    verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+
+                    scheduler.advanceTimeTo(5, SECONDS)
+                    verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+                    verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
+
+                    scheduler.advanceTimeTo(9, SECONDS)
                     verify(exactly = 1) { view.showStep(runningStep) }
                     val retainedLog = when (scenario) {
                         "split hyperlink" -> "before "
                         "failure without output" -> ""
-                        else -> "01234"
+                        else -> "0123456789"
                     }
                     presenter.logString.value shouldBe retainedLog
                     presenter.logSearchAvailable.value shouldBe false
                     presenter.logLoadFailed.value shouldBe false
 
-                    scheduler.advanceTimeBy(1, SECONDS)
+                    scheduler.advanceTimeTo(10, SECONDS)
+                    verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
                     verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
                     presenter.logLoadFailed.value shouldBe finalDownloadFails
                     val expectedFinalLog = when {
@@ -190,7 +199,7 @@ class BuildStepPresenterTest : DescribeSpec({
         val finished = build("running", listOf(finishedStep))
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returnsMany listOf(
-                Observable.just(initial), Observable.just(initial), Observable.just(expanded), Observable.just(finished)
+                Observable.just(initial), Observable.just(expanded), Observable.just(finished)
             )
         }
         val urls = (0..2).map { "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/$it/5" }
@@ -229,7 +238,7 @@ class BuildStepPresenterTest : DescribeSpec({
             presenter.logSearchAvailable.value shouldBe true
             presenter.logLoadFailed.value shouldBe false
             verify(exactly = 1) { view.showStep(initialStep) }
-            verify(exactly = 4) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
         } finally {
             scope?.destroy()
             RxAndroidPlugins.reset()
@@ -294,7 +303,7 @@ class BuildStepPresenterTest : DescribeSpec({
             val finishedBuild = build("finished", listOf(finishedStep))
             val api = mockk<CircleCIAPIClientV1_1> {
                 every { getBuild("github", "owner", "repo", 42) } returnsMany
-                    listOf(Observable.just(runningBuild), Observable.just(runningBuild), Observable.just(finishedBuild))
+                    listOf(Observable.just(runningBuild), Observable.just(finishedBuild))
             }
             val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
             val output = mockk<BuildOutputClient> {
@@ -324,8 +333,14 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 scope = presenter.attachToTestScope(view)
                 verify(exactly = 1) { view.showStep(runningStep) }
+                verify(exactly = 1) { output.fetchRawOutput(url, 0L) }
                 presenter.logString.value shouldBe "first"
-                scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, SECONDS)
+                scheduler.advanceTimeTo(4_999, MILLISECONDS)
+                verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+                verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
+
+                scheduler.advanceTimeTo(5, SECONDS)
+                verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
 
                 verify(exactly = 1) { output.fetchFinalRawOutput(url, 5L, any()) }
                 presenter.logLoadFailed.value shouldBe outputFails

@@ -18,5 +18,5 @@ internal fun Flow.subscribeToProjectNavigation(
             val projectName = selection.toNullable()?.let { project ->
                 "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
             }.orEmpty()
-            replaceTop(BuildListScreen(projectName), Direction.REPLACE)
+            replaceHistory(BuildListScreen(projectName), Direction.REPLACE)
         }

@@ -1,8 +1,12 @@
+import com.github.triplet.gradle.play.tasks.internal.PublishTaskBase
+
 plugins {
     id 'com.android.application'
     id 'com.github.triplet.play' version '4.1.2'
     id 'jacoco'
 }
+
+apply from: 'release-credentials.gradle'
 
 def coverageToolVersion = '0.8.16'
 
@@ -60,8 +64,8 @@ android {
     }
     signingConfigs {
         release {
-            if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
-                storeFile decodeFileFromBase64Env('RELEASE_KEYSTORE_BASE64', "tmp_ks_", ".jks")
+            if (releaseKeystore != null) {
+                storeFile releaseKeystore
                 storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
                 keyAlias System.getenv('RELEASE_KEYSTORE_KEY_ALIAS')
                 keyPassword System.getenv('RELEASE_KEYSTORE_KEY_PASSWORD')
@@ -79,7 +83,7 @@ android {
             debuggable false
             testCoverageEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (System.getenv("RELEASE_KEYSTORE_BASE64") != null) {
+            if (releaseKeystore != null) {
                 signingConfig signingConfigs.release
             }
         }
@@ -137,8 +141,21 @@ android {
 }
 
 play {
-    enabled = System.getenv("RELEASE_KEYSTORE_BASE64") != null
-    serviceAccountCredentials.set(decodeFileFromBase64Env("PLAY_ACCOUNT_JSON_BASE64", "norimaki", ".json"))
+    enabled = releaseKeystore != null
+}
+
+if (releaseKeystore != null && playCredentials != null) {
+    androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+        // GPP also uses its extension as an input to local metadata tasks.
+        // Give only the API service the credential path.
+        def api = gradle.sharedServices.registrations.named("playApi-${variant.applicationId.get()}").get()
+        api.parameters.credentials.fileValue(playCredentials)
+    }
+    tasks.withType(PublishTaskBase).configureEach {
+        doFirst {
+            materializePlayCredentials()
+        }
+    }
 }
 
 tasks.register('validateReleaseTag') {
@@ -161,21 +178,4 @@ tasks.withType(Test) {
 tasks.register('jacoco') {
     description = 'Run debug unit tests and generate JaCoCo coverage reports.'
     dependsOn 'createDebugUnitTestCoverageReport'
-}
-
-static decodeFileFromBase64Env(String name, String fileName, String ext) {
-    String base64String = System.getenv(name)
-    if (base64String == null) return null
-    File tempFile = File.createTempFile(fileName, ext, File.createTempDir())
-    FileOutputStream fos = null
-    try {
-        fos = new FileOutputStream(tempFile)
-        fos.write(base64String.decodeBase64())
-        fos.flush()
-    } finally {
-        if (fos != null) {
-            fos.close()
-        }
-    }
-    return tempFile
 }

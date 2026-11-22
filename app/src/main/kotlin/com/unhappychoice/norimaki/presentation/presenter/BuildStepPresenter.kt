@@ -117,7 +117,7 @@ class BuildStepPresenter internal constructor(
     private fun actionSnapshots(client: CircleCIAPIClientV1_1): Observable<ActionSnapshot> =
         polling(BuildPresenter.BUILD_POLLING_SECONDS) {
             buildId.load(client)
-        }.map { build ->
+        }.delaySubscription(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS).map { build ->
             val step = stepId.resolve(build.steps)
             ActionSnapshot(
                 step?.actions.orEmpty().map { build.rawOutputUrl(it) },
