@@ -49,6 +49,9 @@ jobs:
       - checkout
       - restore_gradle_cache
       - run:
+          name: Build Debug APK
+          command: ./gradlew assembleDebug
+      - run:
           name: Run Tests
           command: ./gradlew jacoco
       - run:
