@@ -111,7 +111,7 @@ internal class BuildListRequests(
         canRetryPage.value = false
         return response
             .doOnError {
-                canRetryPage.value = !workflowId.isNullOrBlank()
+                canRetryPage.value = true
                 isLoading.value = false
             }
             .doOnDispose { isLoading.value = false }

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.os.Looper
 import android.view.LayoutInflater
+import android.view.View
 import android.view.View.MeasureSpec
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -108,7 +109,7 @@ class BuildListViewTest {
 
     @Test
     fun workflowListPaginatesOnlyForVerticalScrollNearTheEnd() {
-        withBuildList(isWorkflow = true) { presenter, scroll ->
+        withBuildList(isWorkflow = true) { presenter, scroll, _ ->
             scroll(0, 12, 3)
             scroll(12, 0, 8)
             verify(exactly = 0) { presenter.getBuilds() }
@@ -120,8 +121,23 @@ class BuildListViewTest {
 
     @Test
     fun regularListPaginatesForZeroDeltaNotificationNearTheEnd() {
-        withBuildList(isWorkflow = false) { presenter, scroll ->
+        withBuildList(isWorkflow = false) { presenter, scroll, _ ->
             scroll(0, 0, 8)
+            verify(exactly = 1) { presenter.getBuilds() }
+        }
+    }
+
+    @Test
+    fun regularListShowsRetryAndWaitsForAUserActionAfterFailure() {
+        withBuildList(isWorkflow = false) { presenter, scroll, binding ->
+            assertEquals(View.GONE, binding.retryPage.visibility)
+
+            presenter.canRetryPage.value = true
+            assertEquals(View.VISIBLE, binding.retryPage.visibility)
+            scroll(0, 0, 8)
+            verify(exactly = 0) { presenter.getBuilds() }
+
+            assertTrue(binding.retryPage.performClick())
             verify(exactly = 1) { presenter.getBuilds() }
         }
     }
@@ -206,11 +222,12 @@ class BuildListViewTest {
 
     private fun withBuildList(
         isWorkflow: Boolean,
-        test: (BuildListPresenter, (dx: Int, dy: Int, lastVisible: Int) -> Unit) -> Unit
+        test: (BuildListPresenter, (dx: Int, dy: Int, lastVisible: Int) -> Unit, BuildListViewBinding) -> Unit
     ) {
         val presenter = mockk<BuildListPresenter>(relaxed = true)
         every { presenter.isWorkflow } returns isWorkflow
         every { presenter.page } returns Variable(0)
+        every { presenter.canRetryPage } returns Variable(false)
         every { presenter.builds } returns Observable.empty()
 
         Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
@@ -228,7 +245,7 @@ class BuildListViewTest {
             recycler.layoutManager = layout
             clearMocks(presenter, answers = false)
 
-            test(presenter) { dx, dy, lastVisible ->
+            val scroll = { dx: Int, dy: Int, lastVisible: Int ->
                 layout.lastVisible = lastVisible
                 ReflectionHelpers.callInstanceMethod<Unit>(
                     recycler, "dispatchOnScrolled",
@@ -236,6 +253,7 @@ class BuildListViewTest {
                     ClassParameter.from(Integer.TYPE, dy)
                 )
             }
+            test(presenter, scroll, binding)
         }
     }
 }
