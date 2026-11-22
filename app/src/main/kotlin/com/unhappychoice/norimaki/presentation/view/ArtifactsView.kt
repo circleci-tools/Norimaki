@@ -19,6 +19,7 @@ class ArtifactsView(context: Context, attr: AttributeSet) : BaseView<ArtifactsVi
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         presenter.takeView(this)
+        presenter.observeDownloads()
         binding.retryArtifacts.setOnClickListener { presenter.load() }
         presenter.render()
     }
