@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki
 
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -11,16 +12,21 @@ import android.widget.ListView
 import android.widget.PopupMenu
 import android.widget.TextView
 import com.github.unhappychoice.circleci.v1.response.Artifact
+import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
+import com.unhappychoice.norimaki.presentation.presenter.ArtifactSelection
 import com.unhappychoice.norimaki.presentation.screen.ArtifactsScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.ArtifactsView
 import flow.Flow
+import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
+import io.reactivex.subjects.SingleSubject
 import java.io.File
 import java.util.concurrent.TimeUnit
 import org.junit.After
@@ -99,7 +105,60 @@ class ArtifactDownloadFlowTest {
     }
 
     @Test
-    fun defersSavingThePickerResultUntilTheActivityResumes() {
+    fun clearsTheTransferWhenSessionRestorationFails() {
+        withRestoredPicker(
+            "test-token",
+            completeVerification = { it.onError(IllegalStateException("Verification failed")) }
+        ) { app, destination ->
+            assertTrue(app.requests.isEmpty())
+            assertEquals(0L, destination.length())
+        }
+    }
+
+    @Test
+    fun reportsACompletedDownloadOnlyOnceAcrossScreenReentry() = withArtifacts { activity, app ->
+        val list = activity.findViewById<ListView>(R.id.artifact_list)
+        val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
+        activity.deliverDestination(activity.selectArtifact(list), destination)
+        flushIo()
+
+        assertEquals(activity.getString(R.string.artifact_saved), ShadowToast.getTextOfLatestToast())
+        val toastCount = ShadowToast.shownToastCount()
+        Flow.get(activity).set(ArtifactsScreen(buildId.copy(number = 43)))
+        finishTransition()
+        Flow.get(activity).set(ArtifactsScreen(buildId))
+        finishTransition()
+
+        assertEquals(toastCount, ShadowToast.shownToastCount())
+        assertEquals(1, app.requests.size)
+    }
+
+    @Test
+    fun ignoresDuplicateSavesAndRejectsAnObsoleteCompletion() = withArtifacts { activity, app ->
+        val state = activity.artifactDownloads
+        val session = app.module.direct.instance<SessionService>()
+        val downloader = app.module.direct.instance<ArtifactDownloader>()
+        val artifact = Artifact(0, "check.txt", "check.txt", "https://dl.circleci.com/file")
+        val selection = ArtifactSelection(buildId, artifact, session.restore().blockingGet())
+        val destination = Uri.parse("content://test/artifact")
+        val resolver = mockk<ContentResolver>()
+        every { resolver.openOutputStream(destination, "w") } returns null
+
+        state.save(selection, destination, resolver, session, downloader)
+        state.save(selection, destination, resolver, session, downloader)
+        flushIo()
+        val result = state.changes.blockingFirst() as ArtifactDownloadState.Transfer.Finished
+        assertEquals(R.string.artifact_save_failed, result.message)
+        assertEquals(1, app.requests.size)
+
+        state.save(selection, destination, resolver, session, downloader)
+        assertFalse(state.consume(result))
+        flushIo()
+        assertEquals(2, app.requests.size)
+    }
+
+    @Test
+    fun savesADeferredPickerResultWhenTheRecreatedActivityResumes() {
         Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
             val activity = controller.get()
             val app = activity.application as ArtifactDownloadTestApplication
@@ -108,11 +167,30 @@ class ArtifactDownloadFlowTest {
             val destination = File.createTempFile("artifact-", ".txt", activity.cacheDir)
             controller.pause()
             activity.deliverDestination(picker, destination)
+            assertTrue(activity.artifactDownloads.isBusy)
             flushIo()
             assertTrue(app.requests.isEmpty())
             assertEquals(0L, destination.length())
 
-            controller.resume().postResume()
+            controller.recreate()
+            flushIo()
+
+            assertArrayEquals(app.bytes, destination.readBytes())
+            assertEquals(1, app.requests.size)
+        }
+    }
+
+    @Test
+    fun savesTheArtifactWhenTheOpenPickerReturnsToARecreatedActivity() {
+        Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
+            val original = controller.get()
+            val app = original.application as ArtifactDownloadTestApplication
+            original.openArtifacts()
+            val picker = original.selectArtifact(original.findViewById(R.id.artifact_list))
+            val destination = File.createTempFile("artifact-", ".txt", original.cacheDir)
+
+            controller.recreate()
+            controller.get().deliverDestination(picker, destination)
             flushIo()
 
             assertArrayEquals(app.bytes, destination.readBytes())
@@ -232,6 +310,7 @@ class ArtifactDownloadFlowTest {
 
     private fun withRestoredPicker(
         token: String,
+        completeVerification: (SingleSubject<User>) -> Unit = { it.onSuccess(mockk()) },
         assertResult: (ArtifactDownloadTestApplication, File) -> Unit
     ) {
         val savedState = Bundle()
@@ -250,10 +329,12 @@ class ArtifactDownloadFlowTest {
             restored.deliverDestination(picker, destination)
             flushIo()
             assertTrue(app.requests.isEmpty())
+            assertTrue(restored.artifactDownloads.isBusy)
 
-            verification.onSuccess(mockk())
+            completeVerification(verification)
             flushIo()
 
+            assertFalse(restored.artifactDownloads.isBusy)
             assertResult(app, destination)
         }
     }

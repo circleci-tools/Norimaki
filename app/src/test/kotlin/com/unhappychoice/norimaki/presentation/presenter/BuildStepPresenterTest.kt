@@ -26,6 +26,7 @@ import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.io.IOException
 import java.util.Date
+import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.TimeUnit.SECONDS
 import mortar.MortarScope
 
@@ -95,7 +96,7 @@ class BuildStepPresenterTest : DescribeSpec({
                     every { fetchRawOutput(url, any()) } answers {
                         Observable.just(RawOutputChunk(byteArrayOf(secondArg<Long>().toByte())))
                     }
-                    every { fetchFinalRawOutput(url, 5L) } returns Observable.just(RawOutputChunk(byteArrayOf(100)))
+                    every { fetchFinalRawOutput(url, 10L) } returns Observable.just(RawOutputChunk(byteArrayOf(100)))
                 }
                 val presenter = BuildStepPresenter().apply {
                     di = DI {
@@ -113,9 +114,9 @@ class BuildStepPresenterTest : DescribeSpec({
                         observer.assertNotComplete().assertNoErrors()
                         observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4)
 
-                        scheduler.advanceTimeBy(1, SECONDS)
+                        scheduler.advanceTimeTo(10, SECONDS)
                         observer.assertComplete().assertNoErrors()
-                        observer.values().map { it.single().code } shouldBe listOf(0, 1, 2, 3, 4, 100)
+                        observer.values().map { it.single().code } shouldBe (0..9).toList() + 100
                     } finally {
                         observer.dispose()
                     }
@@ -136,7 +137,7 @@ class BuildStepPresenterTest : DescribeSpec({
         val finished = build("running", listOf(finishedStep))
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returnsMany listOf(
-                Observable.just(initial), Observable.just(initial), Observable.just(expanded), Observable.just(finished)
+                Observable.just(initial), Observable.just(expanded), Observable.just(finished)
             )
         }
         val urls = (0..2).map { "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/$it/5" }
@@ -175,7 +176,7 @@ class BuildStepPresenterTest : DescribeSpec({
             presenter.logLines() shouldBe listOf("first second done third")
             presenter.logLoadFailed.value shouldBe false
             verify(exactly = 1) { view.showStep(initialStep) }
-            verify(exactly = 4) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
         } finally {
             scope?.destroy()
             RxAndroidPlugins.reset()
@@ -239,7 +240,7 @@ class BuildStepPresenterTest : DescribeSpec({
             val finishedBuild = build("finished", listOf(finishedStep))
             val api = mockk<CircleCIAPIClientV1_1> {
                 every { getBuild("github", "owner", "repo", 42) } returnsMany
-                    listOf(Observable.just(runningBuild), Observable.just(runningBuild), Observable.just(finishedBuild))
+                    listOf(Observable.just(runningBuild), Observable.just(finishedBuild))
             }
             val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
             val output = mockk<BuildOutputClient> {
@@ -270,8 +271,14 @@ class BuildStepPresenterTest : DescribeSpec({
                 scope = presenter.attachToTestScope(view)
                 verify(exactly = 1) { view.showStep(runningStep) }
                 scheduler.triggerActions()
+                verify(exactly = 1) { output.fetchRawOutput(url, 0L) }
                 presenter.logLines() shouldBe listOf("first")
-                scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, SECONDS)
+                scheduler.advanceTimeTo(4_999, MILLISECONDS)
+                verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+                verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
+
+                scheduler.advanceTimeTo(5, SECONDS)
+                verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
 
                 verify(exactly = 1) { output.fetchFinalRawOutput(url, 5L, any()) }
                 presenter.logLoadFailed.value shouldBe outputFails
