@@ -18,16 +18,18 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        presenter.takeView(this)
         binding.failures.layoutManager = LinearLayoutManager(context)
-        binding.retry.setOnClickListener { load() }
-        load()
+        binding.retry.setOnClickListener { presenter.load() }
+        showLoading()
+        presenter.takeView(this)
     }
 
     override fun onDetachedFromWindow() {
         presenter.dropView(this)
         super.onDetachedFromWindow()
     }
+
+    internal fun showLoading() = showStatus(R.string.test_results_loading)
 
     internal fun showUnavailable() = showStatus(R.string.test_results_unavailable)
 
@@ -40,11 +42,6 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
         }
         binding.status.isVisible = false
         binding.failures.adapter = TestFailureAdapter(failures)
-    }
-
-    private fun load() {
-        showStatus(R.string.test_results_loading)
-        presenter.load(this)
     }
 
     private fun showStatus(message: Int, retry: Boolean = false) {
