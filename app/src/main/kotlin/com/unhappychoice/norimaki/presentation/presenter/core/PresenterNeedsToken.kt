@@ -15,7 +15,6 @@ import flow.Flow
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposables
 import io.reactivex.rxkotlin.addTo
-import mortar.MortarScope
 import org.kodein.di.instance
 
 abstract class PresenterNeedsToken<T : View> : Presenter<T>() {

@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.Project
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.extension.Variable
 import io.reactivex.subjects.PublishSubject
 
@@ -28,7 +29,13 @@ class ProjectAdapter(val context: Context) : RecyclerView.Adapter<ProjectAdapter
 
     inner class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         fun bind(project: Project) {
-            projectNameView.text = "${project.username}/${project.reponame}"
+            val provider = when (vcsTypeFromUrl(project.vcsUrl)) {
+                "bitbucket" -> R.string.project_provider_bitbucket
+                else -> R.string.project_provider_github
+            }
+            projectNameView.text = view.context.getString(
+                R.string.project_picker_row, view.context.getString(provider), project.username, project.reponame
+            )
         }
 
         private val projectNameView = view.findViewById<TextView>(R.id.projectNameView)

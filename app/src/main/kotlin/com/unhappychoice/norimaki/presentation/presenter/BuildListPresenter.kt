@@ -12,7 +12,6 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
-import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
@@ -22,26 +21,22 @@ import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
-import org.kodein.di.instanceOrNull
 
 class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     val projectName: String by instance()
-    private val workflowId: String? by instanceOrNull(tag = WorkflowScreen.WORKFLOW_ID_TAG)
     private val buildList by lazy {
         BuildListRequests(
-            workflowId, Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
+            Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
             ::getBuildDetails, ::getBuildsAPI
         )
     }
     private var pollingRegistration: Disposable? = null
     private var hasStartedPolling = false
 
-    val isWorkflow: Boolean get() = !workflowId.isNullOrBlank()
     val builds get() = buildList.builds
     override val isLoading get() = buildList.isLoading
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
-    val canRetryPage get() = buildList.canRetryPage
 
     override fun onLoad(savedInstanceState: Bundle?) {
         resetRequests()
@@ -58,10 +53,6 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
 
     fun getBuilds() {
         if (account != null) buildList.loadNextPage()?.addTo(bag)
-    }
-
-    fun getBuildsIfUnderfilled(canScroll: Boolean) {
-        if (isWorkflow && !canScroll && !canRetryPage.value) getBuilds()
     }
 
     override fun onViewDropped() {

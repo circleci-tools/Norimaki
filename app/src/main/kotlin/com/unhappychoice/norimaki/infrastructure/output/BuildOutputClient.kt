@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.infrastructure.output
 
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.unhappychoice.norimaki.extension.AnsiEscapeStream
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.schedulers.Schedulers
@@ -164,7 +165,7 @@ class BuildOutputClient(
     private fun completedOutput(body: ResponseBody): String {
         val bytes = body.readPrefix(outputByteLimit.toLong())
         val limitReached = bytes.size == outputByteLimit && body.contentLength() != bytes.size.toLong()
-        return buildString {
+        val log = buildString {
             JsonReader(bytes.toResponseBody(body.contentType()).charStream()).use { reader ->
                 try {
                     reader.beginArray()
@@ -175,8 +176,8 @@ class BuildOutputClient(
                     if (!limitReached) throw error
                 }
             }
-            if (limitReached) append(OUTPUT_LIMIT_MESSAGE)
         }
+        return if (limitReached) AnsiEscapeStream().strip(log) + OUTPUT_LIMIT_MESSAGE else log
     }
 
     private companion object {
