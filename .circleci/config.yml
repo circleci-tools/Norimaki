@@ -62,6 +62,11 @@ jobs:
           name: Verify Kotest and Vintage execution
           command: python3 scripts/ci/check-unit-test-results.py
       - run:
+          name: Enforce JaCoCo line coverage
+          command: |
+            python3 scripts/ci/test-check-line-coverage.py
+            python3 scripts/ci/check-line-coverage.py app/build/reports/coverage/test/debug/report.xml 89
+      - run:
           name: Test release tag validation
           command: bash scripts/ci/test-release-tag.sh
       - run:
