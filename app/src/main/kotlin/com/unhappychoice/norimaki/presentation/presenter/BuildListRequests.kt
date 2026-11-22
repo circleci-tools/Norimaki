@@ -2,7 +2,6 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildHistory
-import com.unhappychoice.norimaki.domain.model.inWorkflow
 import com.unhappychoice.norimaki.domain.model.refreshBuildList
 import com.unhappychoice.norimaki.domain.model.uniqueId
 import com.unhappychoice.norimaki.extension.Variable
@@ -21,7 +20,6 @@ import io.reactivex.subjects.PublishSubject
 import java.util.concurrent.TimeUnit.SECONDS
 
 internal class BuildListRequests(
-    private val workflowId: String?,
     private val io: Scheduler,
     private val computation: Scheduler,
     private val ui: Scheduler,
@@ -31,7 +29,6 @@ internal class BuildListRequests(
     override val isLoading = Variable(false)
     override val page = Variable(0)
     override val hasMore = Variable(true)
-    val canRetryPage = Variable(false)
     private val history = Variable(BuildHistory())
     val builds = history.asObservable().map { it.builds }
 
@@ -57,13 +54,12 @@ internal class BuildListRequests(
             .subscribeNext {}
 
     fun loadNextPage(): Disposable? {
-        if (isLoading.value || !hasMore.value || (page.value == 0 && !canRetryPage.value)) return null
+        if (!initialLoadSettled.hasComplete() || isLoading.value || !hasMore.value) return null
         return requestPage(page.value * BUILD_LIST_PAGE_SIZE).subscribeNext {}
     }
 
     fun reset() {
         initialLoadSettled = CompletableSubject.create()
-        canRetryPage.value = false
         buildPolling = BuildListPolling(fetch)
         lastPollIds = emptySet()
         latestRequestByBuild.clear()
@@ -81,7 +77,7 @@ internal class BuildListRequests(
             .observeOn(ui)
             .doOnNext { latest -> pollIds = latest.mapTo(hashSetOf()) { it.uniqueId() } }
             .concatMap { latest ->
-                refreshBuildList(history.value.builds, latest, workflowId) { build ->
+                refreshBuildList(history.value.builds, latest) { build ->
                     Observable.defer { fetchDetails(build) }.subscribeOn(io)
                 }
             }
@@ -108,19 +104,14 @@ internal class BuildListRequests(
         if (!paginated) return response
 
         isLoading.value = true
-        canRetryPage.value = false
         return response
-            .doOnError {
-                canRetryPage.value = !workflowId.isNullOrBlank()
-                isLoading.value = false
-            }
+            .doOnError { isLoading.value = false }
             .doOnDispose { isLoading.value = false }
     }
 
     private fun merge(response: Response): Single<Update> {
         val current = history.value
-        val filter = workflowId.takeIf { response.paginated }
-        val eligible = response.builds.inWorkflow(filter).filter { build ->
+        val eligible = response.builds.filter { build ->
             val latest = latestRequestByBuild[build.uniqueId()]
             latest == null || latest <= response.number
         }

@@ -3,8 +3,8 @@ package com.unhappychoice.norimaki.infrastructure.testresults
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.unhappychoice.norimaki.domain.model.BuildId
-import io.reactivex.Single
-import io.reactivex.SingleEmitter
+import io.reactivex.Observable
+import io.reactivex.ObservableEmitter
 import io.reactivex.schedulers.Schedulers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -16,18 +16,18 @@ internal class TestResultsClient(
     private val token: String,
     private val client: OkHttpClient = OkHttpClient()
 ) {
-    fun fetch(buildId: BuildId): Single<TestResults> = Single.create<TestResults> { emitter ->
+    fun fetch(buildId: BuildId): Observable<TestResults> = Observable.create<TestResults> { emitter ->
         try {
             val url = buildId.testResultsUrl()
-            if (url == null) emitter.onSuccess(TestResults.Unavailable)
+            if (url == null) emitter.onNext(TestResults.Unavailable)
             else fetchPages(url, emitter)
+            emitter.onComplete()
         } catch (error: Exception) {
             emitter.tryOnError(error)
         }
     }.subscribeOn(Schedulers.io())
 
-    private fun fetchPages(url: HttpUrl, emitter: SingleEmitter<TestResults>) {
-        val failures = mutableListOf<TestFailure>()
+    private fun fetchPages(url: HttpUrl, emitter: ObservableEmitter<TestResults>) {
         val seenTokens = mutableSetOf<String>()
         var hasResults = false
         var pageToken: String? = null
@@ -35,21 +35,22 @@ internal class TestResultsClient(
             if (emitter.isDisposed) return
             val page = fetchPage(url, pageToken, emitter)
             if (page == null) {
-                emitter.onSuccess(TestResults.Unavailable)
+                emitter.onNext(TestResults.Unavailable)
                 return
             }
             val items = page.getAsJsonArray("items")
             hasResults = hasResults || items.size() > 0
-            items.mapNotNullTo(failures) { it.asJsonObject.toFailure() }
+            val failures = items.mapNotNull { it.asJsonObject.toFailure() }
             pageToken = page.stringOrNull("next_page_token")?.takeIf { it.isNotEmpty() }
             if (pageToken != null && !seenTokens.add(pageToken)) {
                 throw IOException("Repeated test results page token")
             }
+            if (failures.isNotEmpty() || pageToken != null) emitter.onNext(TestResults.FailurePage(failures))
         } while (pageToken != null)
-        emitter.onSuccess(if (hasResults) TestResults.Reported(failures) else TestResults.Unavailable)
+        emitter.onNext(if (hasResults) TestResults.Reported else TestResults.Unavailable)
     }
 
-    private fun fetchPage(url: HttpUrl, pageToken: String?, emitter: SingleEmitter<TestResults>): JsonObject? {
+    private fun fetchPage(url: HttpUrl, pageToken: String?, emitter: ObservableEmitter<TestResults>): JsonObject? {
         val pageUrl = if (pageToken == null) url else url.newBuilder().addQueryParameter("page-token", pageToken).build()
         val request = Request.Builder().url(pageUrl).header("Circle-Token", token).build()
         val call = client.newCall(request)
@@ -66,7 +67,8 @@ internal class TestResultsClient(
 
 internal sealed interface TestResults {
     data object Unavailable : TestResults
-    data class Reported(val failures: List<TestFailure>) : TestResults
+    data object Reported : TestResults
+    data class FailurePage(val failures: List<TestFailure>) : TestResults
 }
 
 internal data class TestFailure(val name: String, val className: String?, val message: String?)
