@@ -14,7 +14,6 @@ internal fun fetchOlderBuilds(
 ): Observable<OlderBuildPage> = Observable.defer {
     val tailId = tail.uniqueId()
     var offset = startOffset
-    var foundTail = false
     var canRewind = startOffset > 0
 
     Observable.defer {
@@ -29,10 +28,8 @@ internal fun fetchOlderBuilds(
             val older = when {
                 rewind -> emptyList()
                 anchor >= 0 -> page.drop(anchor + 1)
-                foundTail -> page.filter { compareValues(it.queuedAt, tail.queuedAt) <= 0 }
-                else -> page.dropWhile { compareValues(it.queuedAt, tail.queuedAt) >= 0 }
+                else -> page.filter { compareValues(it.queuedAt, tail.queuedAt) <= 0 }
             }.filter { it.uniqueId() !in retainedIds }
-            foundTail = foundTail || anchor >= 0
             OlderBuildPage(pageOffset, older) to (exhausted && !rewind)
         }
     }.repeat()

@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.google.gson.Gson
+import com.unhappychoice.norimaki.domain.model.uniqueId
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -99,6 +100,26 @@ class BuildListRequestsTest : DescribeSpec({
                 initialLoad.dispose()
                 builds.dispose()
             }
+        }
+
+        it("recovers unseen builds at a deleted pagination anchor's queue time") {
+            val tail = build(21, "success")
+            val retained = (40 downTo 22).map { build(it, "success") } + tail
+            val sameTime = (20 downTo 19).map { build(it, "success", queueTime = 21) }
+            val older = build(18, "success")
+            val apiBuilds = retained.dropLast(1) + sameTime + older
+            val offsets = mutableListOf<Int>()
+            val fetch: (Int) -> Observable<List<Build>> = { offset ->
+                offsets.add(offset)
+                Observable.just(apiBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+            val retainedIds = retained.map { it.uniqueId() }.toSet()
+
+            fetchOlderBuilds(fetch, tail, retainedIds, BUILD_LIST_PAGE_SIZE).test()
+                .assertResult(OlderBuildPage(0, sameTime.take(1)))
+            fetchOlderBuilds(fetch, sameTime.first(), retainedIds + sameTime.first().uniqueId(), 0).test()
+                .assertResult(OlderBuildPage(BUILD_LIST_PAGE_SIZE, sameTime.drop(1) + older))
+            offsets shouldBe listOf(BUILD_LIST_PAGE_SIZE, 0, 0, BUILD_LIST_PAGE_SIZE)
         }
 
         it("loads page zero once while polling waits for it to settle") {
@@ -235,12 +256,12 @@ class BuildListRequestsTest : DescribeSpec({
     }
 })
 
-private fun build(number: Int, buildStatus: String): Build = mockk {
+private fun build(number: Int, buildStatus: String, queueTime: Long = number.toLong()): Build = mockk {
     every { vcsUrl } returns null
     every { username } returns "circleci-tools"
     every { reponame } returns "Norimaki"
     every { buildNum } returns number
     every { lifecycle } returns if (buildStatus == "running") "running" else "finished"
     every { status } returns buildStatus
-    every { queuedAt } returns Date(number.toLong())
+    every { queuedAt } returns Date(queueTime)
 }
