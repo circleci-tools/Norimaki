@@ -7,6 +7,7 @@ import android.util.SparseArray
 import android.view.Menu
 import android.view.MenuItem
 import androidx.core.view.children
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.jakewharton.rxbinding3.recyclerview.scrollEvents
 import com.unhappychoice.norimaki.R
@@ -35,16 +36,22 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
     }
 
     private enum class MenuResource(val id: Int) {
-        LogOut(0)
+        LogOut(0),
+        ShowLatest(1)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?) {
+        menu?.add(Menu.NONE, MenuResource.ShowLatest.id, Menu.NONE, "Show Latest Builds")
         menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
     }
 
     override fun onOptionsItemSelected(item: MenuItem?) {
         when (item?.itemId) {
             MenuResource.LogOut.id -> presenter.changeAPIToken()
+            MenuResource.ShowLatest.id -> {
+                presenter.showLatestBuilds()
+                binding.buildsView.scrollToPosition(0)
+            }
         }
     }
 
@@ -68,8 +75,13 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
             .subscribeNext { presenter.goToBuildView(it) }
             .addTo(bag)
 
+        binding.retryBuildPage.setOnClickListener { presenter.getBuilds() }
+        presenter.canRetryPage
+            .subscribeNext { binding.retryBuildPage.isVisible = it }
+            .addTo(bag)
+
         binding.buildsView.scrollEvents()
-            .filter { binding.buildsView.isNearEnd() }
+            .filter { !binding.retryBuildPage.isVisible && binding.buildsView.isNearEnd() }
             .subscribeNext { presenter.getBuilds() }
             .addTo(bag)
 

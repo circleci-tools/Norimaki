@@ -217,6 +217,41 @@ class BuildStepViewTest {
     }
 
     @Test
+    fun searchesAndWrapsThroughNearlyOneMebibyteOfMatches() {
+        withView { activity, view ->
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
+            val previous = view.findViewById<View>(R.id.logPrevious)
+            val next = view.findViewById<View>(R.id.logNext)
+            val lineLength = 1023
+            val lineCount = 1024
+            val matchCount = lineLength * lineCount
+            replaceLog(List(lineCount) { "x".repeat(lineLength) }.joinToString("\n"))
+            searchAvailable.value = true
+            renderUpdates()
+
+            view.findViewById<View>(R.id.logFind).performClick()
+            view.findViewById<EditText>(R.id.logQuery).setText("X")
+            finishSearch()
+
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, matchCount), count.text.toString())
+            assertEquals(0 until 1, highlightedRange(output))
+            previous.performClick()
+            assertEquals(
+                activity.getString(R.string.build_log_match_count, matchCount, matchCount),
+                count.text.toString()
+            )
+            assertEquals((lineLength - 1) until lineLength, highlightedRange(output, lineCount - 1))
+            next.performClick()
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, matchCount), count.text.toString())
+            assertEquals(0 until 1, highlightedRange(output))
+            next.performClick()
+            assertEquals(activity.getString(R.string.build_log_match_count, 2, matchCount), count.text.toString())
+            assertEquals(1 until 2, highlightedRange(output))
+        }
+    }
+
+    @Test
     fun resumesSearchingWhenTheSameViewIsReattached() {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)
@@ -298,7 +333,7 @@ class BuildStepViewTest {
             val parts = chunks.map { it.toByteArray() }
             val partsByOffset = parts.runningFold(0L) { offset, part -> offset + part.size }
                 .zip(parts).toMap()
-            val output = pollActionOutputs(listOf("action"), finished, { _, offset ->
+            val output = pollActionOutputs(mapOf("action" to false), finished, { _, offset ->
                 Observable.just(RawOutputChunk(partsByOffset.getValue(offset)))
             }, scheduler, fetchFinalOutput = { _, offset ->
                 assertEquals(parts.dropLast(1).sumOf { it.size.toLong() }, offset)
@@ -307,7 +342,7 @@ class BuildStepViewTest {
 
             scheduler.advanceTimeBy((parts.size - 2) * BuildStepPresenter.LOG_POLLING_SECONDS, SECONDS)
             output.assertNotComplete()
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
             output.assertComplete().assertNoErrors()
             output.values()
         }

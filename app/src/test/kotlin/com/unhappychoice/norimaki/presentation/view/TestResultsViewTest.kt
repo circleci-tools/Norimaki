@@ -1,11 +1,13 @@
 package com.unhappychoice.norimaki.presentation.view
 
+import android.os.Bundle
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.unhappychoice.norimaki.ArtifactDownloadTestApplication
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildId
@@ -13,14 +15,20 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.testresults.TestFailure
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
+import com.unhappychoice.norimaki.presentation.core.ScreenTransition
+import com.unhappychoice.norimaki.presentation.presenter.TestResultsPresenter
+import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.presenter.testSession
+import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
+import flow.Flow
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
+import mortar.MortarScope
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -43,6 +51,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.TimeUnit.SECONDS
 import kotlin.concurrent.thread
 
@@ -63,18 +72,50 @@ class TestResultsViewTest {
     }
 
     @Test
-    fun displaysFailuresAfterRetryingARequestError() {
-        val pending = PublishSubject.create<TestResults>()
-        val firstPage = TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected a value")))
-        withResults(pending, Observable.just(firstPage, TestResults.Reported)) { view ->
+    @Config(application = ArtifactDownloadTestApplication::class)
+    fun opensTokenSetupWhenTheRestoredSessionIsRejected() {
+        val savedState = Bundle()
+        val mainLooper = shadowOf(Looper.getMainLooper())
+        val original = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = original.get()
+        val app = activity.application as ArtifactDownloadTestApplication
+        Flow.get(activity).set(TestResultsScreen(buildId))
+        mainLooper.idleFor(ScreenTransition.DURATION_MILLIS * 2, MILLISECONDS)
+        original.pause().stop().saveInstanceState(savedState).destroy()
+        val verification = app.resetSession("revoked-token")
+
+        Robolectric.buildActivity(MainActivity::class.java).setup(savedState).use { controller ->
+            val restored = controller.get()
+            val flow = Flow.get(restored)
+            assertEquals(TestResultsScreen(buildId), flow.history.top<Any>())
+            verification.onError(IOException("HTTP 401"))
+            mainLooper.idle()
+            assertEquals(View.GONE, restored.findViewById<Button>(R.id.retry).visibility)
+
+            mainLooper.idleFor(500 + ScreenTransition.DURATION_MILLIS * 2, MILLISECONDS)
+            assertTrue(flow.history.top<Any>() is APITokenScreen)
+        }
+    }
+
+    @Test
+    fun displaysFailuresAfterRetryingAnHttp500RequestError() {
+        val statuses = listOf(500, 200).iterator()
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(statuses.next()).message("Test response")
+                .body("""{"items":[{"result":"failure","name":"asserts"}]}""".toResponseBody())
+                .build()
+        }.build()
+        withResults(TestResultsClient("test-token", http).fetch(buildId)) { view ->
             assertStatus(view, R.string.test_results_loading)
-            pending.onError(IOException("Network unavailable"))
+            scheduler.triggerActions()
             shadowOf(Looper.getMainLooper()).idle()
             assertStatus(view, R.string.test_results_load_error)
 
             val retry = view.findViewById<Button>(R.id.retry)
             assertEquals(View.VISIBLE, retry.visibility)
             retry.performClick()
+            scheduler.triggerActions()
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals(View.GONE, retry.visibility)
             assertEquals(View.GONE, view.findViewById<TextView>(R.id.status).visibility)
@@ -84,16 +125,26 @@ class TestResultsViewTest {
     }
 
     @Test
-    fun keepsVisibleFailuresWhenALaterPageFails() {
+    fun keepsVisibleFailuresWhenALaterPageFailsAndClearsThemOnRetry() {
         val pages = PublishSubject.create<TestResults>()
-        withResults(pages) { view ->
-            pages.onNext(TestResults.FailurePage(listOf(TestFailure("asserts", null, null))))
+        val firstPage = TestResults.FailurePage(listOf(TestFailure("asserts", null, null)))
+        withResults(pages, Observable.just(firstPage, TestResults.Reported)) { view ->
+            pages.onNext(firstPage)
             pages.onError(IOException("Second page failed"))
             shadowOf(Looper.getMainLooper()).idle()
 
             assertStatus(view, R.string.test_results_incomplete)
-            assertEquals(View.VISIBLE, view.findViewById<Button>(R.id.retry).visibility)
-            assertEquals(1, view.findViewById<RecyclerView>(R.id.failures).adapter?.itemCount)
+            val retry = view.findViewById<Button>(R.id.retry)
+            val failures = view.findViewById<RecyclerView>(R.id.failures)
+            assertEquals(View.VISIBLE, retry.visibility)
+            assertEquals(1, failures.adapter?.itemCount)
+
+            retry.performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+
+            assertEquals(1, failures.adapter?.itemCount)
+            assertEquals(View.GONE, retry.visibility)
+            assertEquals(View.GONE, view.findViewById<TextView>(R.id.status).visibility)
         }
     }
 
@@ -167,6 +218,54 @@ class TestResultsViewTest {
             assertTrue(pending.hasObservers())
             session.replace("new-token").blockingGet()
             assertFalse(pending.hasObservers())
+        }
+    }
+
+    @Test
+    fun reloadsResultsWhenTheSameViewReattaches() {
+        val pending = PublishSubject.create<TestResults>()
+        withResults(pending, Observable.just(TestResults.Unavailable)) { view ->
+            val container = view.parent as ViewGroup
+            container.removeView(view)
+            assertFalse(pending.hasObservers())
+            container.addView(view)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertStatus(view, R.string.test_results_unavailable)
+        }
+    }
+
+    @Test
+    fun ignoresRetryAfterTheSessionChanges() {
+        val session = testSession(mockk())
+        val failure = Observable.error<TestResults>(IOException("HTTP 500"))
+        withResults(failure, session = session) { view ->
+            assertStatus(view, R.string.test_results_load_error)
+            session.replace("new-token").blockingGet()
+
+            assertTrue(view.findViewById<Button>(R.id.retry).performClick())
+            assertStatus(view, R.string.test_results_load_error)
+        }
+    }
+
+    @Test
+    fun skipsFetchingWhenAuthenticationFinishesBeforeAViewAttaches() {
+        val session = testSession(mockk())
+        val errors = mutableListOf<Throwable>()
+        RxJavaPlugins.setErrorHandler { errors.add(it) }
+        val presenter = TestResultsPresenter().apply {
+            di = DI { bind<SessionService>() with singleton { session } }
+        }
+        val scope = MortarScope.buildRootScope().build("test-results")
+        try {
+            PresenterNeedsToken::class.java.getDeclaredMethod("onEnterScope", MortarScope::class.java)
+                .apply { isAccessible = true }
+                .invoke(presenter, scope)
+            assertTrue(session.hasVerifiedSession)
+            assertTrue(errors.toString(), errors.isEmpty())
+        } finally {
+            PresenterNeedsToken::class.java.getDeclaredMethod("onExitScope")
+                .apply { isAccessible = true }
+                .invoke(presenter)
         }
     }
 

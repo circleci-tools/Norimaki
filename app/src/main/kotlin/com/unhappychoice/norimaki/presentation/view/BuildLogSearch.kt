@@ -11,7 +11,6 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.adapter.BuildLogAdapter
 import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.log.LogMatch
-import com.unhappychoice.norimaki.presentation.log.LogSpan
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
@@ -19,7 +18,6 @@ import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
 import io.reactivex.schedulers.Schedulers
 import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 
 internal class BuildLogSearch(
     private val binding: BuildStepViewBinding,
@@ -27,7 +25,7 @@ internal class BuildLogSearch(
     private val adapter: BuildLogAdapter
 ) {
     private lateinit var search: SerialDisposable
-    private var matches = emptyList<LogMatch>()
+    private var matches = LogMatchIndex.EMPTY
     private var selected = 0
 
     fun bind(bag: CompositeDisposable) = with(binding) {
@@ -73,7 +71,7 @@ internal class BuildLogSearch(
 
     private fun refresh() = with(binding) {
         search.set(null)
-        matches = emptyList()
+        matches = LogMatchIndex.EMPTY
         updateMatch(null)
         val query = logQuery.text.toString()
         if (query.isEmpty() || logSearchPanel.visibility != View.VISIBLE) return@with
@@ -82,19 +80,19 @@ internal class BuildLogSearch(
         val snapshot = log.snapshot()
         search.set(
             Observable.timer(150, TimeUnit.MILLISECONDS, Schedulers.computation())
-                .map { findLogMatches(snapshot, query) }
+                .flatMap { LogMatchIndex.find(snapshot, query) }
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribeNext {
                     matches = it
                     selected = 0
-                    updateMatch(it.firstOrNull())
-                    if (it.isEmpty()) logMatchCount.setText(R.string.build_log_no_matches)
+                    updateMatch(if (it.size == 0) null else it[0])
+                    if (it.size == 0) logMatchCount.setText(R.string.build_log_no_matches)
                 }
         )
     }
 
     private fun move(delta: Int) {
-        if (matches.isEmpty()) return
+        if (matches.size == 0) return
         selected = (selected + delta + matches.size) % matches.size
         updateMatch(matches[selected])
     }
@@ -117,14 +115,4 @@ internal class BuildLogSearch(
 
     private fun keyboard(): InputMethodManager =
         binding.root.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-}
-
-private fun findLogMatches(lines: List<List<LogSpan>>, query: String): List<LogMatch> {
-    val pattern = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
-    return buildList {
-        lines.forEachIndexed { line, spans ->
-            val matcher = pattern.matcher(spans.joinToString("") { it.text })
-            while (matcher.find()) add(LogMatch(line, matcher.start(), matcher.end()))
-        }
-    }
 }

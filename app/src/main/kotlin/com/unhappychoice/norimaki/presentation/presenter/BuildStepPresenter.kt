@@ -86,9 +86,8 @@ class BuildStepPresenter internal constructor(
         client: CircleCIAPIClientV1_1,
         outputClient: BuildOutputClient
     ): Observable<String> {
-        val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
         return pollActionOutputs(
-            outputUrls,
+            build.actionCompletion(buildStep),
             actionSnapshots(client),
             outputClient::fetchRawOutput,
             fetchFinalOutput = { url, offset -> outputClient.fetchFinalRawOutput(url, offset) }
@@ -110,7 +109,7 @@ class BuildStepPresenter internal constructor(
         }.delaySubscription(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS).map { build ->
             val step = stepId.resolve(build.steps)
             ActionSnapshot(
-                step?.actions.orEmpty().map { build.rawOutputUrl(it) },
+                build.actionCompletion(step),
                 build.isFinished() || step?.isFinished() == true
             )
         }
@@ -169,34 +168,45 @@ internal fun completedActionLogs(
             .onErrorReturnItem("\n[Some output could not be loaded.]\n")
     }
 
-internal data class ActionSnapshot(val outputUrls: List<String>, val finished: Boolean)
+private fun Build.actionCompletion(step: BuildStep?): Map<String, Boolean> =
+    step?.actions.orEmpty().associate { rawOutputUrl(it) to (it.endTime != null) }
+
+internal data class ActionSnapshot(val actionCompletion: Map<String, Boolean>, val finished: Boolean)
 
 internal fun pollActionOutputs(
-    outputUrls: List<String>,
+    initialActionCompletion: Map<String, Boolean>,
     snapshots: Observable<ActionSnapshot>,
     fetchOutput: (String, Long) -> Observable<RawOutputChunk>,
     scheduler: Scheduler = Schedulers.computation(),
     fetchFinalOutput: (String, Long) -> Observable<RawOutputChunk> = fetchOutput
 ): Observable<String> = Observable.defer {
-    val urls = AtomicReference(outputUrls.toSet())
+    val actions = AtomicReference(initialActionCompletion)
+    val caughtUpUrls = mutableSetOf<String>()
     val decoders = mutableMapOf<String, Utf8StreamDecoder>()
     val ansiStreams = mutableMapOf<String, AnsiEscapeStream>()
     val limitedUrls = mutableSetOf<String>()
     val offsets = mutableMapOf<String, Long>()
     val reading = AtomicBoolean()
     val stepFinished = snapshots
-        .doOnNext { snapshot -> urls.set(urls.get() + snapshot.outputUrls) }
+        .doOnNext { snapshot ->
+            val known = actions.get()
+            actions.set(known + snapshot.actionCompletion.mapValues { (url, finished) ->
+                finished || known[url] == true
+            })
+        }
         .filter { it.finished }
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false) }
         .filter { reading.compareAndSet(false, true) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = urls.get().filterNot(limitedUrls::contains).map { url ->
+            val reads = actions.get().filterKeys { url ->
+                url !in limitedUrls && (finishing || url !in caughtUpUrls)
+            }.map { (url, finished) ->
                 val read = Observable.defer {
                     val decoder = decoders.getOrPut(url) { Utf8StreamDecoder() }
                     val offset = offsets.getOrDefault(url, 0L)
-                    val fetch = if (finishing) fetchFinalOutput else fetchOutput
+                    val fetch = if (finishing || finished) fetchFinalOutput else fetchOutput
                     val ansiStream = ansiStreams.getOrPut(url) { AnsiEscapeStream() }
                     val chunks = fetch(url, offset).map { chunk ->
                         offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
@@ -208,9 +218,13 @@ internal fun pollActionOutputs(
                             ansiStream.strip(log)
                         }
                     }
-                    if (finishing) chunks.concatWith(Observable.fromCallable {
-                        if (url in limitedUrls) "" else ansiStream.strip(decoder.finish())
-                    }) else chunks
+                    when {
+                        finishing -> chunks.concatWith(Observable.fromCallable {
+                            if (url in limitedUrls) "" else ansiStream.strip(decoder.finish())
+                        })
+                        finished -> chunks.doOnComplete { caughtUpUrls.add(url) }
+                        else -> chunks
+                    }
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }
