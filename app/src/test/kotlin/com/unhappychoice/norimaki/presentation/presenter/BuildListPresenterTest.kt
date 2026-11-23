@@ -185,6 +185,34 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.selectedBranch.test().assertValue("")
             verify(exactly = 1) { api.getRecentBuilds(offset = 0, limit = 20) }
         }
+
+        it("reloads the selected branch from page zero when reattached") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val view = mockk<BuildListView>()
+            val branch = "release/Next"
+            val first = build(2, branchName = branch)
+            val refreshed = build(3, branchName = branch)
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            every { api.branchPageAt(branch, 0) } returnsMany listOf(
+                Observable.just(listOf(first)),
+                Observable.just(listOf(refreshed))
+            )
+            val presenter = presenter(api, view = view)
+            scheduler.triggerActions()
+            presenter.selectBranch(branch)
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(first))
+
+            presenter.dropView(view)
+            presenter.takeView(view)
+            scheduler.triggerActions()
+
+            presenter.selectedBranch.take(1).test().assertResult(branch)
+            presenter.builds.take(1).test().assertResult(listOf(refreshed))
+            presenter.page.value shouldBe 1
+            verify(exactly = 1) { api.pageAt(0) }
+            verify(exactly = 2) { api.branchPageAt(branch, 0) }
+        }
     }
 
     describe("polling lifecycle") {
@@ -616,6 +644,66 @@ class BuildListPresenterTest : DescribeSpec({
     }
 
     describe("project build pagination") {
+        it("keeps the session and pending page when a different view is dropped") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val newest = build(2)
+            val older = build(1)
+            val inFlight = PublishSubject.create<List<Build>>()
+            every { api.pageAt(0) } returns Observable.just(listOf(newest))
+            every { api.pageAt(20) } returns inFlight
+            every { api.pageAt(40) } returns Observable.just(emptyList())
+            val presenter = presenter(api)
+            scheduler.triggerActions()
+            presenter.getBuilds()
+            inFlight.hasObservers() shouldBe true
+
+            presenter.dropView(mockk<BuildListView>())
+
+            inFlight.hasObservers() shouldBe true
+            inFlight.onNext(listOf(older))
+            inFlight.onComplete()
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(newest, older))
+
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            verify(exactly = 1) { api.pageAt(40) }
+        }
+
+        it("cancels pagination on detach and starts a fresh list on reattach") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val newest = build(2)
+            val older = build(1)
+            val inFlight = PublishSubject.create<List<Build>>()
+            val view = mockk<BuildListView>()
+            every { api.pageAt(0) } returns Observable.just(listOf(newest))
+            every { api.pageAt(20) } returns inFlight
+            val presenter = presenter(api, view = view)
+            scheduler.triggerActions()
+
+            presenter.getBuilds()
+            inFlight.hasObservers() shouldBe true
+            presenter.page.value shouldBe 1
+
+            presenter.dropView(view)
+            inFlight.hasObservers() shouldBe false
+            inFlight.onNext(listOf(older))
+            inFlight.onComplete()
+            scheduler.triggerActions()
+
+            presenter.page.value shouldBe 1
+            presenter.builds.take(1).test().assertResult(listOf(newest))
+
+            val refreshed = build(3)
+            every { api.pageAt(0) } returns Observable.just(listOf(refreshed))
+            presenter.takeView(view)
+            scheduler.triggerActions()
+
+            verify(exactly = 2) { api.pageAt(0) }
+            presenter.page.value shouldBe 1
+            presenter.builds.take(1).test().assertResult(listOf(refreshed))
+        }
+
         it("merges pages and stops requesting builds after an empty page") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val latest = build(2)

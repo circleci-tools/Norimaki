@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import android.os.Bundle
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
@@ -16,22 +15,12 @@ import org.kodein.di.instance
 class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
     private val buildId: BuildId by instance()
     private val createClient: (String) -> TestResultsClient by factory()
-    private var needsSessionRestore = false
     private var nextCursor: TestResultsCursor? = null
 
     override fun onAuthenticated() = load()
 
-    override fun onLoad(savedInstanceState: Bundle?) {
-        super.onLoad(savedInstanceState)
-        if (!needsSessionRestore) return
-        needsSessionRestore = false
-        restoreSession()
-    }
-
     override fun onViewDropped() {
-        needsSessionRestore = true
         nextCursor = null
-        super.onViewDropped()
     }
 
     internal fun load() {
