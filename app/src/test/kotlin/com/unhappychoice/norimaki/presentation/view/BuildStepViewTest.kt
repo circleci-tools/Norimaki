@@ -158,6 +158,39 @@ class BuildStepViewTest {
     }
 
     @Test
+    fun searchesAndWrapsThroughNearlyOneMebibyteOfMatches() {
+        withView { activity, view ->
+            val count = view.findViewById<TextView>(R.id.logMatchCount)
+            val output = view.findViewById<TextView>(R.id.logText)
+            val previous = view.findViewById<View>(R.id.logPrevious)
+            val next = view.findViewById<View>(R.id.logNext)
+            val matchCount = 1024 * 1024 - 1
+            log.value = "x".repeat(matchCount)
+            searchAvailable.value = true
+            renderUpdates()
+
+            view.findViewById<View>(R.id.logFind).performClick()
+            view.findViewById<EditText>(R.id.logQuery).setText("X")
+            finishSearch()
+
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, matchCount), count.text.toString())
+            assertEquals(0 until 1, highlightedRange(output))
+            previous.performClick()
+            assertEquals(
+                activity.getString(R.string.build_log_match_count, matchCount, matchCount),
+                count.text.toString()
+            )
+            assertEquals((matchCount - 1) until matchCount, highlightedRange(output))
+            next.performClick()
+            assertEquals(activity.getString(R.string.build_log_match_count, 1, matchCount), count.text.toString())
+            assertEquals(0 until 1, highlightedRange(output))
+            next.performClick()
+            assertEquals(activity.getString(R.string.build_log_match_count, 2, matchCount), count.text.toString())
+            assertEquals(1 until 2, highlightedRange(output))
+        }
+    }
+
+    @Test
     fun resumesSearchingWhenTheSameViewIsReattached() {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)

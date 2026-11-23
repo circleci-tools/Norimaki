@@ -17,6 +17,9 @@ jobs:
       JVM_OPTS: -Xmx3200m
     steps:
       - checkout
+      - run:
+          name: Test Gradle Wrapper checksum verification
+          command: python3 scripts/test-gradle-wrapper.py
       - restore_gradle_cache
       - run:
           name: Download Dependencies

@@ -1,11 +1,16 @@
 package com.unhappychoice.norimaki
 
 import android.app.Activity
+import android.content.ContentProvider
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.ProviderInfo
+import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.view.View
 import android.widget.Button
 import android.widget.ListView
@@ -44,6 +49,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowContentResolver
 import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
@@ -97,21 +103,21 @@ class ArtifactDownloadFlowTest {
     }
 
     @Test
-    fun discardsARestoredPickerResultWhenADifferentTokenIsVerified() {
+    fun deletesTheRestoredDestinationWhenADifferentTokenIsVerified() {
         withRestoredPicker("replacement-token") { app, destination ->
             assertTrue(app.requests.isEmpty())
-            assertEquals(0L, destination.length())
+            assertFalse(destination.exists())
         }
     }
 
     @Test
-    fun clearsTheTransferWhenSessionRestorationFails() {
+    fun deletesTheDestinationWhenSessionRestorationFails() {
         withRestoredPicker(
             "test-token",
             completeVerification = { it.onError(IllegalStateException("Verification failed")) }
         ) { app, destination ->
             assertTrue(app.requests.isEmpty())
-            assertEquals(0L, destination.length())
+            assertFalse(destination.exists())
         }
     }
 
@@ -144,14 +150,15 @@ class ArtifactDownloadFlowTest {
         val resolver = mockk<ContentResolver>()
         every { resolver.openOutputStream(destination, "w") } returns null
 
-        state.save(selection, destination, resolver, session, downloader)
-        state.save(selection, destination, resolver, session, downloader)
+        state.save(selection, ArtifactDestination(resolver, destination), session, downloader)
+        val duplicate = ArtifactDestination(resolver, Uri.parse("content://test/duplicate"))
+        state.save(selection, duplicate, session, downloader)
         flushIo()
         val result = state.changes.blockingFirst() as ArtifactDownloadState.Transfer.Finished
         assertEquals(R.string.artifact_save_failed, result.message)
         assertEquals(1, app.requests.size)
 
-        state.save(selection, destination, resolver, session, downloader)
+        state.save(selection, ArtifactDestination(resolver, destination), session, downloader)
         assertFalse(state.consume(result))
         flushIo()
         assertEquals(2, app.requests.size)
@@ -170,6 +177,7 @@ class ArtifactDownloadFlowTest {
             assertTrue(activity.artifactDownloads.isBusy)
             flushIo()
             assertTrue(app.requests.isEmpty())
+            assertTrue(destination.exists())
             assertEquals(0L, destination.length())
 
             controller.recreate()
@@ -201,7 +209,8 @@ class ArtifactDownloadFlowTest {
     @Test
     fun reportsAnUnwritableDestinationAndAllowsAnotherAttempt() = withArtifacts { activity, app ->
         val list = activity.findViewById<ListView>(R.id.artifact_list)
-        activity.deliverDestination(activity.selectArtifact(list), activity.cacheDir)
+        val directory = File(activity.cacheDir, "unwritable-artifact").apply { mkdir() }
+        activity.deliverDestination(activity.selectArtifact(list), directory)
         flushIo()
 
         assertEquals(1, app.requests.size)
@@ -223,7 +232,7 @@ class ArtifactDownloadFlowTest {
     }
 
     @Test
-    fun ignoresThePickerResultAfterReturningToTheBuild() = withArtifacts { activity, app ->
+    fun deletesTheDestinationAfterReturningToTheBuild() = withArtifacts { activity, app ->
         val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
         activity.onBackPressedDispatcher.onBackPressed()
         finishTransition()
@@ -234,7 +243,7 @@ class ArtifactDownloadFlowTest {
         flushIo()
 
         assertTrue(app.requests.isEmpty())
-        assertEquals(0L, destination.length())
+        assertFalse(destination.exists())
     }
 
     @Test
@@ -252,7 +261,7 @@ class ArtifactDownloadFlowTest {
     }
 
     @Test
-    fun ignoresThePickerResultAfterTheSessionChanges() = withArtifacts { activity, app ->
+    fun deletesTheDestinationWhenThePickerReturnsAfterASessionChange() = withArtifacts { activity, app ->
         val list = activity.findViewById<ListView>(R.id.artifact_list)
         val picker = activity.selectArtifact(list)
         val artifact = Artifact(0, "reports/check.txt", "check.txt", "https://dl.circleci.com/file")
@@ -266,7 +275,7 @@ class ArtifactDownloadFlowTest {
         flushIo()
 
         assertTrue(app.requests.isEmpty())
-        assertEquals(0L, destination.length())
+        assertFalse(destination.exists())
     }
 
     @Test
@@ -277,10 +286,10 @@ class ArtifactDownloadFlowTest {
         assertFalse(list.isEnabled)
 
         app.module.direct.instance<SessionService>().replace("replacement-token").test().assertComplete()
+        assertFalse(destination.exists())
         flushIo()
 
         assertTrue(app.requests.isEmpty())
-        assertEquals(0L, destination.length())
         assertTrue(list.isEnabled)
         assertEquals(View.GONE, list.visibility)
         assertEquals(View.GONE, activity.findViewById<View>(R.id.artifact_downloading).visibility)
@@ -296,7 +305,7 @@ class ArtifactDownloadFlowTest {
     }
 
     @Test
-    fun ignoresThePickerResultWhenViewingAnotherJob() = withArtifacts { activity, app ->
+    fun deletesTheDestinationWhenThePickerReturnsToAnotherJob() = withArtifacts { activity, app ->
         val picker = activity.selectArtifact(activity.findViewById(R.id.artifact_list))
         Flow.get(activity).set(ArtifactsScreen(buildId.copy(number = 43)))
         finishTransition()
@@ -305,7 +314,7 @@ class ArtifactDownloadFlowTest {
         flushIo()
 
         assertTrue(app.requests.isEmpty())
-        assertEquals(0L, destination.length())
+        assertFalse(destination.exists())
     }
 
     private fun withRestoredPicker(
@@ -375,7 +384,11 @@ class ArtifactDownloadFlowTest {
     }
 
     private fun MainActivity.deliverDestination(request: Int, file: File) {
-        val result = Intent().setData(Uri.fromFile(file))
+        val authority = "artifact-test"
+        val provider = ArtifactDocumentProvider(file)
+        provider.attachInfo(applicationContext, ProviderInfo().apply { this.authority = authority })
+        ShadowContentResolver.registerProviderInternal(authority, provider)
+        val result = Intent().setData(Uri.parse("content://$authority/document/artifact"))
         assertTrue(activityResultRegistry.dispatchResult(request, Activity.RESULT_OK, result))
     }
 
@@ -392,3 +405,32 @@ class ArtifactDownloadFlowTest {
 
 private fun android.view.Menu.findItemByTitle(title: String) =
     (0 until size()).map(::getItem).single { it.title == title }
+
+private class ArtifactDocumentProvider(private val file: File) : ContentProvider() {
+    override fun onCreate() = true
+
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor =
+        ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode))
+
+    override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
+        check(method == "android:deleteDocument")
+        check(file.delete())
+        return Bundle.EMPTY
+    }
+
+    override fun query(
+        uri: Uri,
+        projection: Array<out String>?,
+        selection: String?,
+        selectionArgs: Array<out String>?,
+        sortOrder: String?
+    ): Cursor? = error("Unexpected query")
+
+    override fun getType(uri: Uri): String? = error("Unexpected getType")
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = error("Unexpected insert")
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int =
+        error("Unexpected delete")
+
+    override fun update(uri: Uri, values: ContentValues?, selection: String?,
+        selectionArgs: Array<out String>?): Int = error("Unexpected update")
+}

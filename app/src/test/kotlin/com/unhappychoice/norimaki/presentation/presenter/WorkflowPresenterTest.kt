@@ -59,17 +59,19 @@ class WorkflowPresenterTest : DescribeSpec({
         client: WorkflowClient,
         api: CircleCIAPIClientV1_1 = mockk(),
         activity: MainActivity = mockk(),
-        session: SessionService = testSession(api)
+        session: SessionService = testSession(api),
+        expectedToken: String = "test-token",
+        view: WorkflowView = mockk()
     ) =
         WorkflowPresenter(WorkflowScreen("github/owner/repo", "run", "deploy")) { token ->
-            token shouldBe "test-token"
+            token shouldBe expectedToken
             client
         }.apply {
             di = DI {
                 bind<MainActivity>() with singleton { activity }
                 bind<SessionService>() with singleton { session }
             }
-            scope = attachToTestScope(mockk<WorkflowView>())
+            scope = attachToTestScope(view)
         }
 
     describe("workflow approvals") {
@@ -120,6 +122,76 @@ class WorkflowPresenterTest : DescribeSpec({
             verify(exactly = 1) { client.approve("run", "request") }
             verify(exactly = 2) { client.jobs("run") }
             updates.values().last() shouldBe WorkflowState(listOf(resolved), message = R.string.workflow_approval_submitted)
+        }
+
+        it("retains an accepted approval when the workflow screen is recreated during refresh") {
+            val session = testSession(mockk())
+            val post = CompletableSubject.create()
+            val delayedRefresh = SingleSubject.create<List<WorkflowJob>>()
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returnsMany listOf(
+                    Single.just(listOf(hold)), delayedRefresh, Single.just(listOf(hold))
+                )
+                every { approve("run", "request") } returnsMany listOf(post, Completable.complete())
+            }
+            val view = mockk<WorkflowView>()
+            val original = presenter(client, session = session, view = view)
+            val originalUpdates = original.updates.test()
+
+            original.approve(hold)
+            post.onComplete()
+            delayedRefresh.hasObservers() shouldBe true
+            originalUpdates.values().last() shouldBe WorkflowState(
+                listOf(hold), busy = true, message = R.string.workflow_approval_submitted
+            )
+
+            original.dropView(view)
+            scope?.destroy()
+            delayedRefresh.hasObservers() shouldBe false
+            val recreated = presenter(client, session = session)
+            delayedRefresh.onSuccess(listOf(resolved))
+
+            recreated.updates.test().values().last() shouldBe WorkflowState(
+                listOf(hold), message = R.string.workflow_approval_submitted
+            )
+            recreated.canApprove(hold) shouldBe false
+            recreated.approve(hold)
+            verify(exactly = 1) { client.approve("run", "request") }
+
+            session.replace("replacement-token").test().assertComplete()
+            scope?.destroy()
+            val replacement = presenter(client, session = session, expectedToken = "replacement-token")
+
+            replacement.updates.test().values().last() shouldBe WorkflowState(listOf(hold))
+            replacement.canApprove(hold) shouldBe true
+            replacement.approve(hold)
+            verify(exactly = 2) { client.approve("run", "request") }
+        }
+
+        it("keeps the POST in flight when the submitting screen is dropped") {
+            val session = testSession(mockk())
+            val post = CompletableSubject.create()
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returns Single.just(listOf(hold))
+                every { approve("run", "request") } returns post
+            }
+            val view = mockk<WorkflowView>()
+            val original = presenter(client, session = session, view = view)
+            original.approve(hold)
+
+            original.dropView(view)
+            scope?.destroy()
+            val recreated = presenter(client, session = session)
+            recreated.canApprove(hold) shouldBe false
+            recreated.approve(hold)
+            post.hasObservers() shouldBe true
+            post.onComplete()
+
+            recreated.updates.test().values().last() shouldBe WorkflowState(
+                listOf(hold), message = R.string.workflow_approval_submitted
+            )
+            recreated.canApprove(hold) shouldBe false
+            verify(exactly = 1) { client.approve("run", "request") }
         }
 
         it("retries a failed refresh without resubmitting an accepted approval") {
