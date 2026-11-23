@@ -62,9 +62,14 @@ class MainActivity : AppCompatActivity() {
     ) { destination ->
         val selection = artifactDownloads.selection
         artifactDownloads.selection = null
-        if (destination != null && selection != null) {
-            artifactDownloads.destination = selection to destination
-            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) savePickedArtifact()
+        if (destination != null) {
+            val document = ArtifactDestination(applicationContext.contentResolver, destination)
+            if (selection == null) {
+                document.discard()
+            } else {
+                artifactDownloads.destination = selection to document
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) savePickedArtifact()
+            }
         }
     }
 
@@ -176,10 +181,13 @@ class MainActivity : AppCompatActivity() {
     private fun savePickedArtifact() {
         val (selection, destination) = artifactDownloads.destination ?: return
         artifactDownloads.destination = null
-        val screen = Flow.get(this).history.top<Any>() as? ArtifactsScreen ?: return
-        if (screen.buildId != selection.buildId) return
+        val screen = Flow.get(this).history.top<Any>() as? ArtifactsScreen
+        if (screen?.buildId != selection.buildId) {
+            destination.discard()
+            return
+        }
         val downloader: ArtifactDownloader by module.instance()
-        artifactDownloads.save(selection, destination, applicationContext.contentResolver, session, downloader)
+        artifactDownloads.save(selection, destination, session, downloader)
     }
 
     private fun setupView() {
