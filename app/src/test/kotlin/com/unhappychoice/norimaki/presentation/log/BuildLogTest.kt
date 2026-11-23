@@ -99,6 +99,17 @@ class BuildLogTest : DescribeSpec({
             log[0] shouldBe listOf(LogSpan("fresh", null))
         }
 
+        it("skips extended color arguments across chunks and applies subsequent foreground codes") {
+            val formatter = LogChunkFormatter()
+            val green = 0xFF00F000.toInt()
+
+            formatter.format("\u001B[48;5;") shouldBe listOf(emptyList<LogSpan>())
+            formatter.format("31mplain\u001B[38;2;0;31;39;32mgreen") shouldBe
+                listOf(listOf(LogSpan("plain", null), LogSpan("green", green)))
+            formatter.format("\u001B[58;5;0mstill green\u001B[48;2;31m also green") shouldBe
+                listOf(listOf(LogSpan("still green", green), LogSpan(" also green", green)))
+        }
+
         it("continues a partial line and ANSI sequence across chunks") {
             val source = PublishSubject.create<String>()
             val log = BuildLog()

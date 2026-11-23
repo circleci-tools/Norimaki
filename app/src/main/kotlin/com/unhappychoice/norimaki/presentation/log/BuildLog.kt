@@ -40,7 +40,7 @@ internal class BuildLog {
         updates.onNext(LogUpdate(null, 0, 0, removedCount))
     }
 
-    private fun append(chunk: List<List<LogSpan>>) {
+    fun append(chunk: List<List<LogSpan>>) {
         if (chunk.size == 1 && chunk.first().isEmpty()) return
 
         val previousCount = lineCount

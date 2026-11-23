@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
+import com.unhappychoice.norimaki.MainActivity
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
@@ -137,6 +138,9 @@ class BuildStepPresenterTest : DescribeSpec({
                     di = DI {
                         bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                         bind<BuildStepId>() with singleton { BuildStepId(5) }
+                        bind<MainActivity>() with singleton {
+                            mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                        }
                         bind<SessionService>() with singleton { testSession(api) }
                     }
                 }
@@ -286,6 +290,9 @@ class BuildStepPresenterTest : DescribeSpec({
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(5) }
+                bind<MainActivity>() with singleton {
+                    mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                }
                 bind<SessionService>() with singleton { testSession(api) }
             }
         }
@@ -337,6 +344,9 @@ class BuildStepPresenterTest : DescribeSpec({
                 di = DI {
                     bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                     bind<BuildStepId>() with singleton { BuildStepId(5) }
+                    bind<MainActivity>() with singleton {
+                        mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                    }
                     bind<SessionService>() with singleton { testSession(api) }
                 }
             }
@@ -389,6 +399,9 @@ class BuildStepPresenterTest : DescribeSpec({
                 di = DI {
                     bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                     bind<BuildStepId>() with singleton { BuildStepId(5) }
+                    bind<MainActivity>() with singleton {
+                        mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                    }
                     bind<SessionService>() with singleton { testSession(api) }
                 }
             }
@@ -426,6 +439,84 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 
+    it("pauses with the view attached and resumes live and final reads at the saved offsets") {
+        val scheduler = TestScheduler()
+        val activity = mockk<MainActivity>()
+        val lifecycle = PollingLifecycle(activity).apply { start() }
+        val runningStep = BuildStep("Run tests", listOf(action(5, null)))
+        val finishedStep = BuildStep("Run tests", listOf(action(5, Date())))
+        val running = build("running", listOf(runningStep))
+        val finished = build("finished", listOf(finishedStep))
+        var current = running
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } answers { Observable.just(current) }
+        }
+        val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
+        val beforeStop = "\u001B[32mfirst\u001B]8;;https://example.test\u001B".toByteArray()
+        val afterStart = "\\ next\u001B]8;;\u0007".toByteArray()
+        val finalOffset = beforeStop.size.toLong() + afterStart.size
+        val output = mockk<BuildOutputClient> {
+            every { fetchRawOutput(url, 0L) } returns Observable.just(RawOutputChunk(beforeStop))
+            every { fetchRawOutput(url, beforeStop.size.toLong()) } returns Observable.just(RawOutputChunk(afterStart))
+            every { fetchRawOutput(url, finalOffset) } returns Observable.just(RawOutputChunk(byteArrayOf()))
+            every { fetchFinalRawOutput(url, finalOffset, any()) } returns
+                Observable.just(RawOutputChunk(" done".toByteArray()))
+        }
+        val presenter = BuildStepPresenter { output }.apply {
+            di = DI {
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                bind<BuildStepId>() with singleton { BuildStepId(5) }
+                bind<MainActivity>() with singleton { activity }
+                bind<SessionService>() with singleton { testSession(api) }
+            }
+        }
+        val view = mockk<BuildStepView>(relaxUnitFun = true)
+        var scope: MortarScope? = null
+        try {
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            scope = presenter.attachToTestScope(view)
+            presenter.logLines() shouldBe listOf("first")
+
+            presenter.logSearchAvailable.value shouldBe false
+            lifecycle.stop()
+            scheduler.advanceTimeBy(30, SECONDS)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 1) { output.fetchRawOutput(any(), any()) }
+
+            lifecycle.start()
+            presenter.logLines() shouldBe listOf("first next")
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
+            scheduler.advanceTimeBy(1, SECONDS)
+            verify(exactly = 3) { output.fetchRawOutput(any(), any()) }
+            scheduler.advanceTimeBy(4, SECONDS)
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
+
+            lifecycle.stop()
+            current = finished
+            scheduler.advanceTimeBy(30, SECONDS)
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 7) { output.fetchRawOutput(any(), any()) }
+            verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
+
+            lifecycle.start()
+            verify(exactly = 1) { view.showStep(finishedStep) }
+            verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
+            presenter.logLines() shouldBe listOf("first next done")
+            presenter.log[0].map { it.color }.distinct() shouldBe listOf(0xFF00F000.toInt())
+            presenter.logSearchAvailable.value shouldBe true
+            scheduler.advanceTimeBy(30, SECONDS)
+            verify(exactly = 4) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 7) { output.fetchRawOutput(any(), any()) }
+        } finally {
+            scope?.destroy()
+            RxAndroidPlugins.reset()
+            RxJavaPlugins.reset()
+        }
+    }
+
     it("loads the selected step and its logs when the user retries after HTTP 503") {
         val scheduler = TestScheduler()
         val selectedUrl = "https://circleci.com/selected-output"
@@ -446,6 +537,9 @@ class BuildStepPresenterTest : DescribeSpec({
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(5) }
+                bind<MainActivity>() with singleton {
+                    mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                }
                 bind<SessionService>() with singleton { testSession(api) }
             }
         }

@@ -4,6 +4,7 @@ import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
+import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
@@ -44,6 +45,9 @@ class CompletedStepLogsTest {
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(null, legacyName = step.name) }
+                bind<MainActivity>() with singleton {
+                    mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                }
                 bind<SessionService>() with singleton { testSession(api) }
             }
         }
@@ -81,7 +85,7 @@ class CompletedStepLogsTest {
     fun returnsSuccessfulDownloadsAroundAnHttpFailure() {
         val urls = listOf("first", "failed", "last").map { "https://example.com/$it" }
 
-        completedActionLogs(urls, outputClient("token")::fetchOutput)
+        completedActionLogs(urls, fetchOutput = outputClient("token")::fetchOutput)
             .test()
             .assertResult("first output", "\n[Some output could not be loaded.]\n", "last output")
     }

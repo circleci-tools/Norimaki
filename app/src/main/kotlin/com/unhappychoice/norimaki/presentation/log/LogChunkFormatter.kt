@@ -32,16 +32,30 @@ internal class LogChunkFormatter {
 
     private fun applyEscape(escape: String) {
         if (escape.endsWith('m')) {
-            escape.substring(2, escape.lastIndex).split(';').forEach { code ->
-                when (code) {
-                    "", "0" -> color = null
-                    "39" -> color = null
-                    else -> ansiForegroundColor(code)?.let { color = it.substring(1).toInt(16) or 0xFF000000.toInt() }
-                }
-            }
+            applyColors(escape.substring(2, escape.lastIndex).split(';').iterator())
         } else if (incompleteEscape.matches(escape)) {
             pendingEscape = escape
         }
+    }
+
+    private fun applyColors(codes: Iterator<String>) {
+        while (codes.hasNext()) {
+            when (val code = codes.next()) {
+                "", "0", "39" -> color = null
+                "38", "48", "58" -> skipExtendedColor(codes)
+                else -> ansiForegroundColor(code)?.let { color = it.substring(1).toInt(16) or 0xFF000000.toInt() }
+            }
+        }
+    }
+
+    private fun skipExtendedColor(codes: Iterator<String>) {
+        if (!codes.hasNext()) return
+        val argumentCount = when (codes.next()) {
+            "5" -> 1
+            "2" -> 3
+            else -> 0
+        }
+        repeat(argumentCount) { if (codes.hasNext()) codes.next() }
     }
 
     private companion object {

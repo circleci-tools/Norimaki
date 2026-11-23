@@ -61,6 +61,43 @@ class BuildStepOutputTest : DescribeSpec({
             requests shouldBe listOf("capped" to 0L, "other" to 0L, "other" to 5L, "other" to 5L)
         }
 
+        it("skips a caught-up action after resuming and drains it from the saved offset") {
+            val scheduler = TestScheduler()
+            val snapshots = PublishSubject.create<ActionSnapshot>()
+            val progress = RawOutputProgress()
+            val liveOffsets = mutableListOf<Long>()
+            val finalOffsets = mutableListOf<Long>()
+            val logs = pollActionOutputs(
+                mapOf("action" to true),
+                snapshots,
+                { _, offset ->
+                    liveOffsets += offset
+                    Observable.empty()
+                },
+                scheduler,
+                progress = progress,
+                fetchFinalOutput = { _, offset ->
+                    finalOffsets += offset
+                    val log = if (offset == 0L) "first" else " last"
+                    Observable.just(RawOutputChunk(log.toByteArray()))
+                }
+            )
+
+            val active = logs.test()
+            scheduler.triggerActions()
+            active.assertValue("first")
+            active.dispose()
+
+            val resumed = logs.test()
+            scheduler.advanceTimeBy(2, TimeUnit.SECONDS)
+            resumed.assertNoValues()
+            snapshots.onNext(ActionSnapshot(emptyMap(), finished = true))
+
+            resumed.assertResult(" last")
+            liveOffsets shouldBe emptyList()
+            finalOffsets shouldBe listOf(0L, 5L)
+        }
+
         it("flushes a capped final read once and still drains the next action") {
             val finished = PublishSubject.create<ActionSnapshot>()
             val bytes = "é".toByteArray()
