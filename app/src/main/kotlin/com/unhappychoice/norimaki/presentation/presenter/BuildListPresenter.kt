@@ -33,6 +33,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private var hasStartedPolling = false
 
     val builds get() = buildList.builds
+    val canRetryPage get() = buildList.canRetryPage.asObservable()
     override val isLoading get() = buildList.isLoading
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
