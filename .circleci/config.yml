@@ -17,6 +17,9 @@ jobs:
       JVM_OPTS: -Xmx3200m
     steps:
       - checkout
+      - run:
+          name: Test Gradle Wrapper checksum verification
+          command: python3 scripts/test-gradle-wrapper.py
       - restore_gradle_cache
       - run:
           name: Download Dependencies
@@ -54,6 +57,8 @@ jobs:
       - run:
           name: Run Tests
           command: ./gradlew jacoco
+      - store_test_results:
+          path: app/build/test-results/testDebugUnitTest
       - run:
           name: Verify Kotest and Vintage execution
           command: python3 scripts/ci/check-unit-test-results.py
@@ -87,7 +92,11 @@ jobs:
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
     steps:
       - checkout
-      - restore_gradle_cache
+      - run:
+          name: Create release Gradle user home
+          command: |
+            release_gradle_home=$(mktemp -d)
+            printf 'export GRADLE_USER_HOME=%q\n' "$release_gradle_home" >> "$BASH_ENV"
       - run:
           name: Validate release tag
           command: ./gradlew :app:validateReleaseTag

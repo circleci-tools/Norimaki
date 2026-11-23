@@ -4,6 +4,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.github.unhappychoice.circleci.v1.response.Artifact
 import com.unhappychoice.norimaki.ArtifactDownloadState
+import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
@@ -22,7 +23,7 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
     override fun onAuthenticated() = load()
 
     override fun onSessionEnded() {
-        view?.setDownloading(false)
+        view?.setDownloadStatus(null)
         show(ArtifactListState.Failed)
     }
 
@@ -64,7 +65,13 @@ class ArtifactsPresenter : PresenterNeedsToken<ArtifactsView>() {
     }
 
     private fun renderDownload(artifacts: ArtifactsView, state: ArtifactDownloadState.Transfer) {
-        artifacts.setDownloading(state == ArtifactDownloadState.Transfer.Running(buildId))
+        artifacts.setDownloadStatus(
+            when {
+                state !is ArtifactDownloadState.Transfer.Running -> null
+                state.buildId == buildId -> R.string.artifact_downloading
+                else -> R.string.artifact_downloading_another_job
+            }
+        )
         if (state is ArtifactDownloadState.Transfer.Finished && state.buildId == buildId &&
             activity.artifactDownloads.consume(state)
         ) {

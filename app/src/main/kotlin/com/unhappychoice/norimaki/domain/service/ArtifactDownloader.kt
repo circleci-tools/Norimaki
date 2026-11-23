@@ -16,8 +16,10 @@ internal class ArtifactDownloader(client: OkHttpClient = OkHttpClient()) {
         url: String,
         token: String,
         onFailure: () -> Unit = {},
+        claimDestination: () -> Boolean = { true },
         openDestination: () -> OutputStream
     ): Single<Unit> = Single.create { emitter ->
+        if (emitter.isDisposed || !claimDestination()) return@create
         try {
             val source = url.toHttpUrlOrNull()?.takeIf(::isTrusted)
                 ?: throw IOException("Invalid CircleCI artifact URL")
