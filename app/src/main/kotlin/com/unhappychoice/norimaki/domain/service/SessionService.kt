@@ -33,6 +33,10 @@ class VerifiedSession(
             .doFinally(release)
     }
 
+    internal fun workflowApprovals(workflowId: String): WorkflowApprovals =
+        approvals.getOrPut(workflowId, ::WorkflowApprovals)
+
+    private val approvals = ConcurrentHashMap<String, WorkflowApprovals>()
     private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
 }
 
