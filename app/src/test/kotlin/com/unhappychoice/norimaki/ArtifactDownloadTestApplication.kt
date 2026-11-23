@@ -45,7 +45,9 @@ class ArtifactDownloadTestApplication : NorimakiApplication() {
         every { getProjects() } returns Observable.never()
         every { getRecentBuilds(any(), any()) } returns Observable.never()
         every { getBuild("github", "team", "repo", 42) } returns Observable.never()
-        every { getArtifacts("github", "team", "repo", 43) } returns Observable.just(emptyList())
+        every { getArtifacts("github", "team", "repo", 43) } returns Observable.just(
+            listOf(Artifact(0, "other.txt", "other.txt", "https://dl.circleci.com/other"))
+        )
         every { getArtifacts("github", "team", "repo", 42) } returns Observable.just(
             listOf(
                 Artifact(0, "reports/check.txt", "check.txt", "https://dl.circleci.com/file"),

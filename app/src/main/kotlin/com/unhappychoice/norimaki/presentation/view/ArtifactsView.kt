@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.core.view.isVisible
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ArtifactsViewBinding
@@ -45,9 +46,10 @@ class ArtifactsView(context: Context, attr: AttributeSet) : BaseView<ArtifactsVi
         }
     }
 
-    internal fun setDownloading(downloading: Boolean) {
-        binding.artifactList.isEnabled = !downloading
-        binding.artifactDownloading.isVisible = downloading
+    internal fun setDownloadStatus(@StringRes message: Int?) {
+        binding.artifactList.isEnabled = message == null
+        message?.let { binding.artifactDownloading.setText(it) }
+        binding.artifactDownloading.isVisible = message != null
     }
 
     internal fun showMessage(message: Int) {
