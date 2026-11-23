@@ -1,6 +1,7 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.github.unhappychoice.circleci.v1.response.Build
+import com.google.gson.Gson
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -13,6 +14,93 @@ import java.util.concurrent.TimeUnit.SECONDS
 
 class BuildListRequestsTest : DescribeSpec({
     describe("Build list requests") {
+        it("bounds polling history and pages through evicted builds while new builds arrive") {
+            val scheduler = TestScheduler()
+            val template = Gson().fromJson(
+                """{"username":"circleci-tools","reponame":"Norimaki"}""",
+                Build::class.java
+            )
+            fun historyBuild(number: Int, state: String = "success") = template.copy(
+                buildNum = number,
+                lifecycle = if (state == "running") "running" else "finished",
+                status = state,
+                queuedAt = Date(number.toLong())
+            )
+
+            val lastInitialBuild = 160
+            val runningNumber = lastInitialBuild + 60
+            val running = historyBuild(runningNumber, "running")
+            val finished = historyBuild(runningNumber)
+            val apiBuilds = (lastInitialBuild downTo 1).map { historyBuild(it) }.toMutableList()
+            var detailsReady = false
+            val detailRequests = mutableListOf<Build>()
+            val offsets = mutableListOf<Int>()
+            val requests = BuildListRequests(scheduler, scheduler, scheduler, { build ->
+                detailRequests.add(build)
+                if (detailsReady) Observable.just(finished) else Observable.empty()
+            }) { offset ->
+                offsets.add(offset)
+                Observable.just(apiBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+
+            val builds = requests.builds.test()
+            val initialLoad = requests.start()
+            val polling = requests.poll(10, resuming = false, clock = scheduler)
+            try {
+                scheduler.triggerActions()
+                val lastPolledBuild = lastInitialBuild + BUILD_HISTORY_LIMIT + 10
+                (lastInitialBuild + 1..lastPolledBuild).forEach { number ->
+                    apiBuilds.add(0, if (number == runningNumber) running else historyBuild(number))
+                    scheduler.advanceTimeBy(10, SECONDS)
+                    val expectedCount = minOf(BUILD_HISTORY_LIMIT, BUILD_LIST_PAGE_SIZE + number - lastInitialBuild)
+                    builds.values().last().map { it.buildNum } shouldBe
+                        (number downTo number - expectedCount + 1).toList()
+                }
+                offsets.toSet() shouldBe setOf(0)
+                detailRequests.isNotEmpty() shouldBe true
+                detailRequests.all { it === running } shouldBe true
+                detailsReady = true
+                scheduler.advanceTimeBy(10, SECONDS)
+                builds.values().last().single { it.buildNum == runningNumber }.status shouldBe "success"
+
+                var oldest = checkNotNull(builds.values().last().last().buildNum)
+                var nextNumber = lastPolledBuild
+                // Check each successive window against the API order, through the end of history.
+                while (requests.hasMore.value) {
+                    checkNotNull(requests.loadNextPage())
+                    scheduler.triggerActions()
+                    val window = builds.values().last().map { it.buildNum }
+                    val newOldest = checkNotNull(window.last())
+                    if (requests.hasMore.value) {
+                        (oldest - newOldest in 1..BUILD_LIST_PAGE_SIZE) shouldBe true
+                    }
+                    window shouldBe (newOldest + BUILD_HISTORY_LIMIT - 1 downTo newOldest).toList()
+                    oldest = newOldest
+
+                    apiBuilds.add(0, historyBuild(++nextNumber))
+                    scheduler.advanceTimeBy(10, SECONDS)
+                    builds.values().last().map { it.buildNum } shouldBe window
+                    builds.values().last().find { it.buildNum == runningNumber }?.status?.let {
+                        it shouldBe "success"
+                    }
+                }
+                oldest shouldBe 1
+                requests.loadNextPage() shouldBe null
+
+                polling.dispose()
+                initialLoad.dispose()
+                requests.reset()
+                val restarted = requests.start()
+                scheduler.triggerActions()
+                restarted.dispose()
+                builds.values().last().first().buildNum shouldBe nextNumber
+            } finally {
+                polling.dispose()
+                initialLoad.dispose()
+                builds.dispose()
+            }
+        }
+
         it("loads page zero once while polling waits for it to settle") {
             val scheduler = TestScheduler()
             val initialPage = PublishSubject.create<List<Build>>()
