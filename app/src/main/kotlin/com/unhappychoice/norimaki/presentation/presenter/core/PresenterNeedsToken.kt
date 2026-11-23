@@ -28,9 +28,7 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
 
     override fun onEnterScope(scope: MortarScope?) {
         super.onEnterScope(scope)
-        session.restore()
-            .subscribe(::useAccount, { goToAPITokenView() })
-            .addTo(lifecycle)
+        restoreSession()
     }
 
     override fun dropView(view: T) {
@@ -52,6 +50,12 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
 
     protected abstract fun onAuthenticated()
     protected open fun onSessionEnded() {}
+
+    protected fun restoreSession() {
+        session.restore()
+            .subscribe(::useAccount, { goToAPITokenView() })
+            .addTo(lifecycle)
+    }
 
     protected fun sessionEnded(verified: VerifiedSession) =
         session.changes.filter { it.toNullable() !== verified }.take(1)

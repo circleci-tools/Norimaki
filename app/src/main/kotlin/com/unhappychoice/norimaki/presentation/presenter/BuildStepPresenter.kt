@@ -107,15 +107,15 @@ class BuildStepPresenter internal constructor(
         progress: RawOutputProgress? = null,
         delivery: Scheduler = Schedulers.trampoline()
     ): Observable<String> {
-        val outputUrls = buildStep.actions.map { build.rawOutputUrl(it) }
+        val actions = build.actionCompletion(buildStep)
         val snapshots = if (build.isFinished() || buildStep.isFinished()) {
-            Observable.just(ActionSnapshot(outputUrls, finished = true))
+            Observable.just(ActionSnapshot(actions, finished = true))
         } else {
             actionSnapshots(client).observeOn(delivery)
         }
         // Deliver chunks on the same scheduler that commits their offsets and appends the log.
         return pollActionOutputs(
-            outputUrls,
+            actions,
             snapshots,
             { url, offset -> outputClient.fetchRawOutput(url, offset).observeOn(delivery, true) },
             progress = progress,
@@ -130,7 +130,7 @@ class BuildStepPresenter internal constructor(
         }.delaySubscription(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS).map { build ->
             val step = stepId.resolve(build.steps)
             ActionSnapshot(
-                step?.actions.orEmpty().map { build.rawOutputUrl(it) },
+                build.actionCompletion(step),
                 build.isFinished() || step?.isFinished() == true
             )
         }
@@ -184,7 +184,10 @@ internal fun completedActionLogs(
             .filter { it.isNotEmpty() }
     }
 
-internal data class ActionSnapshot(val outputUrls: List<String>, val finished: Boolean)
+private fun Build.actionCompletion(step: BuildStep?): Map<String, Boolean> =
+    step?.actions.orEmpty().associate { rawOutputUrl(it) to (it.endTime != null) }
+
+internal data class ActionSnapshot(val actionCompletion: Map<String, Boolean>, val finished: Boolean)
 
 private class StepOutputProgress {
     var step: BuildStep? = null
@@ -194,16 +197,22 @@ private class StepOutputProgress {
 }
 
 internal class RawOutputProgress {
-    val urls = AtomicReference(emptySet<String>())
+    val actions = AtomicReference(emptyMap<String, Boolean>())
+    val caughtUpUrls = mutableSetOf<String>()
     val decoders = mutableMapOf<String, Utf8StreamDecoder>()
     val ansiStreams = mutableMapOf<String, AnsiEscapeStream>()
     val finishedUrls = mutableSetOf<String>()
     val offsets = mutableMapOf<String, Long>()
-    val started get() = urls.get().isNotEmpty()
+    val started get() = actions.get().isNotEmpty()
+
+    fun rememberActions(completion: Map<String, Boolean>) {
+        val known = actions.get()
+        actions.set(known + completion.mapValues { (url, finished) -> finished || known[url] == true })
+    }
 }
 
 internal fun pollActionOutputs(
-    outputUrls: List<String>,
+    initialActionCompletion: Map<String, Boolean>,
     snapshots: Observable<ActionSnapshot>,
     fetchOutput: (String, Long) -> Observable<RawOutputChunk>,
     scheduler: Scheduler = Schedulers.computation(),
@@ -212,26 +221,27 @@ internal fun pollActionOutputs(
     fetchFinalOutput: (String, Long) -> Observable<RawOutputChunk> = fetchOutput
 ): Observable<String> = Observable.defer {
     val state = progress ?: RawOutputProgress()
-    val urls = state.urls
-    urls.set(urls.get() + outputUrls)
+    state.rememberActions(initialActionCompletion)
     val decoders = state.decoders
     val ansiStreams = state.ansiStreams
     val finishedUrls = state.finishedUrls
     val offsets = state.offsets
     val reading = AtomicBoolean()
     val stepFinished = snapshots
-        .doOnNext { snapshot -> urls.set(urls.get() + snapshot.outputUrls) }
+        .doOnNext { snapshot -> state.rememberActions(snapshot.actionCompletion) }
         .filter { it.finished }
     polling(BuildStepPresenter.LOG_POLLING_SECONDS, scheduler = scheduler) { Observable.just(false).observeOn(delivery) }
         .filter { reading.compareAndSet(false, true) }
         .takeUntil(stepFinished)
         .concatWith(Observable.just(true))
         .concatMap { finishing ->
-            val reads = urls.get().filterNot(finishedUrls::contains).map { url ->
+            val reads = state.actions.get().filterKeys { url ->
+                url !in finishedUrls && (finishing || url !in state.caughtUpUrls)
+            }.map { (url, finished) ->
                 val read = Observable.defer {
                     val decoder = decoders.getOrPut(url) { Utf8StreamDecoder() }
                     val offset = offsets.getOrDefault(url, 0L)
-                    val fetch = if (finishing) fetchFinalOutput else fetchOutput
+                    val fetch = if (finishing || finished) fetchFinalOutput else fetchOutput
                     val ansiStream = ansiStreams.getOrPut(url) { AnsiEscapeStream() }
                     val chunks = fetch(url, offset).map { chunk ->
                         offsets[url] = offsets.getOrDefault(url, 0L) + chunk.bytes.size
@@ -243,9 +253,13 @@ internal fun pollActionOutputs(
                             ansiStream.strip(log)
                         }
                     }
-                    if (finishing) chunks.concatWith(Observable.fromCallable {
-                        if (finishedUrls.add(url)) ansiStream.strip(decoder.finish()) else ""
-                    }) else chunks
+                    when {
+                        finishing -> chunks.concatWith(Observable.fromCallable {
+                            if (finishedUrls.add(url)) ansiStream.strip(decoder.finish()) else ""
+                        })
+                        finished -> chunks.doOnComplete { state.caughtUpUrls.add(url) }
+                        else -> chunks
+                    }
                 }
                 if (finishing) read else read.onErrorResumeNext(Observable.empty<String>())
             }

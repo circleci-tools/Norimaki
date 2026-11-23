@@ -193,6 +193,74 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 
+    listOf("initial load", "a later snapshot").forEach { completion ->
+        it("catches up an action completed at $completion and only revisits it at step completion") {
+            val scheduler = TestScheduler()
+            val initiallyCompleted = completion == "initial load"
+            val running = action(5, null, 1)
+            val completed = action(5, Date())
+            val initialStep = BuildStep("Run tests", listOf(if (initiallyCompleted) completed else action(5, null), running))
+            val updatedStep = BuildStep("Run tests", listOf(completed, running))
+            val finishedStep = BuildStep("Run tests", listOf(completed, action(5, Date(), 1)))
+            val api = mockk<CircleCIAPIClientV1_1> {
+                every { getBuild("github", "owner", "repo", 42) } returnsMany listOf(
+                    Observable.just(build("running", listOf(updatedStep))),
+                    Observable.just(build("finished", listOf(finishedStep)))
+                )
+            }
+            val firstUrl = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
+            val runningUrl = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/1/5"
+            val output = mockk<BuildOutputClient> {
+                every { fetchRawOutput(firstUrl, any()) } answers {
+                    Observable.just(RawOutputChunk("start".drop(secondArg<Long>().toInt()).toByteArray()))
+                }
+                every { fetchRawOutput(runningUrl, any()) } returns Observable.just(RawOutputChunk("x".toByteArray()))
+                val catchUpOffset = if (initiallyCompleted) 0L else 5L
+                every { fetchFinalRawOutput(firstUrl, catchUpOffset, any()) } returns
+                    Observable.just(RawOutputChunk("start done".drop(catchUpOffset.toInt()).toByteArray()))
+                every { fetchFinalRawOutput(firstUrl, 10L, any()) } returns
+                    Observable.just(RawOutputChunk(" late".toByteArray()))
+                every { fetchFinalRawOutput(runningUrl, any(), any()) } returns
+                    Observable.just(RawOutputChunk("y".toByteArray()))
+            }
+            val presenter = BuildStepPresenter().apply {
+                di = DI {
+                    bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                    bind<BuildStepId>() with singleton { BuildStepId(5) }
+                }
+            }
+
+            val previousScheduler = RxJavaPlugins.getComputationSchedulerHandler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            try {
+                val observer = presenter.runningOutput(build("running", listOf(initialStep)), initialStep, api, output).test()
+                try {
+                    scheduler.advanceTimeTo(6, SECONDS)
+                    val firstRequests = if (initiallyCompleted) 0 else 5
+                    verify(exactly = firstRequests) { output.fetchRawOutput(firstUrl, any()) }
+                    verify(exactly = 1) { output.fetchFinalRawOutput(firstUrl, any(), any()) }
+                    observer.values().filterNot { it == "x" }.joinToString("") shouldBe "start done"
+
+                    scheduler.advanceTimeTo(9, SECONDS)
+                    observer.assertNotComplete().assertNoErrors()
+                    verify(exactly = firstRequests) { output.fetchRawOutput(firstUrl, any()) }
+                    verify(exactly = 1) { output.fetchFinalRawOutput(firstUrl, any(), any()) }
+                    verify(exactly = 10) { output.fetchRawOutput(runningUrl, any()) }
+
+                    scheduler.advanceTimeTo(10, SECONDS)
+                    observer.assertComplete().assertNoErrors()
+                    verify(exactly = 1) { output.fetchFinalRawOutput(firstUrl, 10L, any()) }
+                    observer.values().filterNot { it == "x" || it == "y" }.joinToString("") shouldBe "start done late"
+                    observer.values().last() shouldBe "y"
+                } finally {
+                    observer.dispose()
+                }
+            } finally {
+                RxJavaPlugins.setComputationSchedulerHandler(previousScheduler)
+            }
+        }
+    }
+
     it("shows actions discovered during live polling and in the terminal snapshot without duplicates") {
         val scheduler = TestScheduler()
         val initialStep = BuildStep("Run tests", listOf(action(5, null)))

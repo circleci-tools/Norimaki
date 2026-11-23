@@ -14,6 +14,8 @@ internal fun refreshBuildList(
         .concatMap { build ->
             Observable.defer { fetchDetails(build) }.onErrorResumeNext(Observable.empty<Build>())
         }
-        .map { listOf(it) }
+        .toList()
+        .filter { it.isNotEmpty() }
+        .toObservable()
         .startWith(latest)
 }
