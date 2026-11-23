@@ -36,6 +36,15 @@ if [[ "$publish_command" != "./gradlew publishReleaseApk --track internal" ]]; t
     exit 1
 fi
 
+release_checklist=$(sed -n '/^## Release checklist$/,/^## /p' README.md)
+for variable in RELEASE_KEYSTORE_BASE64 RELEASE_KEYSTORE_PASSWORD RELEASE_KEYSTORE_KEY_ALIAS \
+    RELEASE_KEYSTORE_KEY_PASSWORD PLAY_ACCOUNT_JSON_BASE64; do
+    if ! grep -Fq "\`$variable\`" <<< "$release_checklist"; then
+        echo "Missing CircleCI credential in the README release checklist: $variable" >&2
+        exit 1
+    fi
+done
+
 track=${publish_command##* }
 notes_directory=app/src/main/play/release-notes/en-US
 for notes_file in "$notes_directory/$track.txt" "$notes_directory/production.txt"; do
