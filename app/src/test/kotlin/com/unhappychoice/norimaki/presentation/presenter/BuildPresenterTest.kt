@@ -45,6 +45,7 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var activity: MainActivity
     lateinit var session: SessionService
     lateinit var api: CircleCIAPIClientV1_1
+    lateinit var activityLifecycle: PollingLifecycle
     lateinit var initialBuild: PublishSubject<Build>
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
@@ -72,6 +73,7 @@ class BuildPresenterTest : DescribeSpec({
         }
         session = testSession(api)
         activity = mockk()
+        activityLifecycle = PollingLifecycle(activity).apply { start() }
         presenter = createPresenter()
         view = mockk(relaxUnitFun = true)
         scope = presenter.attachToTestScope(view)
@@ -92,6 +94,34 @@ class BuildPresenterTest : DescribeSpec({
     }
 
     describe("loading build details") {
+        it("refreshes after stop and restarts only one build detail loop") {
+            val scheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val running = pollResult(step("https://example.com/output"))
+            val finished = pollResult(step("https://example.com/output"), "finished")
+            every { api.getBuild("github", "owner", "repo", 123) } returnsMany listOf(
+                Observable.just(running), Observable.just(running), Observable.just(finished)
+            )
+            initialBuild.onNext(running)
+            initialBuild.onComplete()
+
+            activityLifecycle.stop()
+            scheduler.advanceTimeBy(30, TimeUnit.SECONDS)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            activityLifecycle.start()
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+            scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS, TimeUnit.SECONDS)
+            verify(exactly = 3) { api.getBuild("github", "owner", "repo", 123) }
+
+            activityLifecycle.stop()
+            scheduler.advanceTimeBy(30, TimeUnit.SECONDS)
+            activityLifecycle.start()
+            verify(exactly = 1) { view.showBuild(finished) }
+            scheduler.advanceTimeBy(30, TimeUnit.SECONDS)
+            verify(exactly = 4) { api.getBuild("github", "owner", "repo", 123) }
+        }
+
         it("should wait for build details before opening test results") {
             val flow = mockk<Flow>(relaxed = true)
             val screen = slot<TestResultsScreen>()
@@ -363,6 +393,7 @@ class BuildPresenterWorkflowTest : DescribeSpec({
         RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
         activity = mockk(relaxUnitFun = true)
+        PollingLifecycle(activity).start()
         flow = mockk(relaxed = true)
         mockkStatic(Flow::class)
         every { Flow.get(activity) } returns flow
@@ -438,6 +469,7 @@ class BuildPresenterPollingTest : DescribeSpec({
         )
 
         val activity = mockk<MainActivity>()
+        PollingLifecycle(activity).start()
         val presenter = BuildPresenter().apply {
             di = DI {
                 bind<BuildId>() with singleton { buildId }

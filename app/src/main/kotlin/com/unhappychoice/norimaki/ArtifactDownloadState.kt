@@ -16,6 +16,7 @@ import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal class ArtifactDownloadState : ViewModel() {
     sealed interface Transfer {
@@ -25,7 +26,7 @@ internal class ArtifactDownloadState : ViewModel() {
     }
 
     var selection: ArtifactSelection? = null
-    var destination: Pair<ArtifactSelection, Uri>? = null
+    var destination: Pair<ArtifactSelection, ArtifactDestination>? = null
     private val transfer = BehaviorSubject.createDefault<Transfer>(Transfer.Idle)
     private var reportedResult: Transfer.Finished? = null
     private val operation = CompositeDisposable()
@@ -35,12 +36,14 @@ internal class ArtifactDownloadState : ViewModel() {
 
     fun save(
         selection: ArtifactSelection,
-        destination: Uri,
-        resolver: ContentResolver,
+        destination: ArtifactDestination,
         session: SessionService,
         downloader: ArtifactDownloader
     ) {
-        if (isDownloading) return
+        if (isDownloading) {
+            destination.discard()
+            return
+        }
         operation.clear()
         reportedResult = null
         transfer.onNext(Transfer.Running(selection.buildId))
@@ -48,10 +51,11 @@ internal class ArtifactDownloadState : ViewModel() {
             .flatMapObservable { verified ->
                 if (!selection.matches(verified)) return@flatMapObservable Observable.empty<Transfer>()
                 val sessionEnded = session.changes.filter { it.toNullable() !== verified }
-                download(selection, destination, resolver, downloader, verified.token)
+                download(selection, destination, downloader, verified.token)
                     .concatWith(Observable.never<Transfer>())
                     .takeUntil(sessionEnded)
             }
+            .doFinally(destination::discard)
             .observeOn(AndroidSchedulers.mainThread())
             .subscribeBy(
                 onNext = transfer::onNext,
@@ -69,23 +73,41 @@ internal class ArtifactDownloadState : ViewModel() {
     }
 
     override fun onCleared() {
+        destination?.second?.discard()
         operation.dispose()
     }
 
     private fun download(
         selection: ArtifactSelection,
-        destination: Uri,
-        resolver: ContentResolver,
+        destination: ArtifactDestination,
         downloader: ArtifactDownloader,
         token: String
     ): Observable<Transfer> =
-        downloader.download(selection.url, token, {
-            runCatching { DocumentsContract.deleteDocument(resolver, destination) }
-        }) {
-            resolver.openOutputStream(destination, "w") ?: throw IOException("Could not open destination")
-        }
+        downloader.download(
+            selection.url,
+            token,
+            onFailure = destination::delete,
+            claimDestination = destination::claim,
+            openDestination = destination::open
+        )
             .subscribeOn(Schedulers.io())
             .map<Transfer> { Transfer.Finished(selection.buildId, R.string.artifact_saved) }
             .onErrorReturn { Transfer.Finished(selection.buildId, R.string.artifact_save_failed) }
             .toObservable()
+}
+
+internal class ArtifactDestination(private val resolver: ContentResolver, private val uri: Uri) {
+    private val pending = AtomicBoolean(true)
+
+    fun claim(): Boolean = pending.compareAndSet(true, false)
+
+    fun discard() {
+        if (claim()) delete()
+    }
+
+    fun delete() {
+        runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+    }
+
+    fun open() = resolver.openOutputStream(uri, "w") ?: throw IOException("Could not open destination")
 }

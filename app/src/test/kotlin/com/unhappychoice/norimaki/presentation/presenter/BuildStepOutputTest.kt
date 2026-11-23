@@ -19,7 +19,7 @@ class BuildStepOutputTest : DescribeSpec({
                 "second" to listOf("action two\n", "two more\n", "two done\n")
             )
             val available = logs.mapValues { (_, lines) -> lines.first() }.toMutableMap()
-            val observer = pollActionOutputs(logs.keys.toList(), finished, { url, offset ->
+            val observer = pollActionOutputs(logs.keys.associateWith { false }, finished, { url, offset ->
                 Observable.just(RawOutputChunk(available.getValue(url).toByteArray().drop(offset.toInt()).toByteArray()))
             }, scheduler).test()
 
@@ -29,7 +29,7 @@ class BuildStepOutputTest : DescribeSpec({
             observer.assertValues("one\n", "action two\n", "one more\n", "two more\n")
 
             logs.forEach { (url, lines) -> available[url] = lines.joinToString("") }
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
             scheduler.advanceTimeBy(10, TimeUnit.SECONDS)
 
             observer.assertResult("one\n", "action two\n", "one more\n", "two more\n", "one done\n", "two done\n")
@@ -39,7 +39,7 @@ class BuildStepOutputTest : DescribeSpec({
             val scheduler = TestScheduler()
             val finished = PublishSubject.create<ActionSnapshot>()
             val requests = mutableListOf<Pair<String, Long>>()
-            val observer = pollActionOutputs(listOf("capped"), finished, { url, offset ->
+            val observer = pollActionOutputs(mapOf("capped" to false), finished, { url, offset ->
                 requests += url to offset
                 val chunk = when {
                     url == "capped" -> RawOutputChunk("prefix".toByteArray(), limitReached = true)
@@ -53,19 +53,56 @@ class BuildStepOutputTest : DescribeSpec({
             }).test()
 
             observer.assertValues("prefix" + OUTPUT_LIMIT_MESSAGE).assertNotComplete()
-            finished.onNext(ActionSnapshot(listOf("capped", "other"), finished = false))
+            finished.onNext(ActionSnapshot(mapOf("capped" to false, "other" to false), finished = false))
             scheduler.advanceTimeBy(2, TimeUnit.SECONDS)
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
 
             observer.assertResult("prefix" + OUTPUT_LIMIT_MESSAGE, "other", " done")
             requests shouldBe listOf("capped" to 0L, "other" to 0L, "other" to 5L, "other" to 5L)
+        }
+
+        it("skips a caught-up action after resuming and drains it from the saved offset") {
+            val scheduler = TestScheduler()
+            val snapshots = PublishSubject.create<ActionSnapshot>()
+            val progress = RawOutputProgress()
+            val liveOffsets = mutableListOf<Long>()
+            val finalOffsets = mutableListOf<Long>()
+            val logs = pollActionOutputs(
+                mapOf("action" to true),
+                snapshots,
+                { _, offset ->
+                    liveOffsets += offset
+                    Observable.empty()
+                },
+                scheduler,
+                progress = progress,
+                fetchFinalOutput = { _, offset ->
+                    finalOffsets += offset
+                    val log = if (offset == 0L) "first" else " last"
+                    Observable.just(RawOutputChunk(log.toByteArray()))
+                }
+            )
+
+            val active = logs.test()
+            scheduler.triggerActions()
+            active.assertValue("first")
+            active.dispose()
+
+            val resumed = logs.test()
+            scheduler.advanceTimeBy(2, TimeUnit.SECONDS)
+            resumed.assertNoValues()
+            snapshots.onNext(ActionSnapshot(emptyMap(), finished = true))
+
+            resumed.assertResult(" last")
+            liveOffsets shouldBe emptyList()
+            finalOffsets shouldBe listOf(0L, 5L)
         }
 
         it("flushes a capped final read once and still drains the next action") {
             val finished = PublishSubject.create<ActionSnapshot>()
             val bytes = "é".toByteArray()
             val observer = pollActionOutputs(
-                listOf("capped", "other"),
+                mapOf("capped" to false, "other" to false),
                 finished,
                 { _, _ -> Observable.just(RawOutputChunk(byteArrayOf())) },
                 TestScheduler(),
@@ -79,7 +116,7 @@ class BuildStepOutputTest : DescribeSpec({
                 }
             ).test()
 
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
 
             observer.assertResult("\uFFFD" + OUTPUT_LIMIT_MESSAGE, "last line")
         }
@@ -92,7 +129,7 @@ class BuildStepOutputTest : DescribeSpec({
             val logs = mapOf("first" to first, "second" to second)
             val finalOffsets = mutableListOf<Pair<String, Long>>()
 
-            val observer = pollActionOutputs(logs.keys.toList(), finished, { url, _ ->
+            val observer = pollActionOutputs(logs.keys.associateWith { false }, finished, { url, _ ->
                 Observable.just(RawOutputChunk(prefixes.getValue(url).toByteArray()))
             }, TestScheduler(), fetchFinalOutput = { url, offset ->
                 finalOffsets += url to offset
@@ -100,7 +137,7 @@ class BuildStepOutputTest : DescribeSpec({
             }).test()
 
             observer.assertNoValues().assertNotComplete()
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
 
             observer.assertResult("é", "あ")
             finalOffsets shouldBe listOf("first" to 1L, "second" to 2L)
@@ -114,7 +151,7 @@ class BuildStepOutputTest : DescribeSpec({
                 "second" to listOf("other output\n", "still running\n", "done\n")
             ).mapValues { (_, parts) -> parts.map { it.toByteArray() } }
             var poll = 0
-            val observer = pollActionOutputs(chunks.keys.toList(), finished, { url, _ ->
+            val observer = pollActionOutputs(chunks.keys.associateWith { false }, finished, { url, _ ->
                 Observable.just(RawOutputChunk(chunks.getValue(url)[poll]))
             }, scheduler, fetchFinalOutput = { url, offset ->
                 val parts = chunks.getValue(url)
@@ -127,7 +164,7 @@ class BuildStepOutputTest : DescribeSpec({
             scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
             observer.assertValues("before ", "other output\n", "still running\n").assertNotComplete()
 
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
             observer.assertResult("before ", "other output\n", "still running\n", "Report", "done\n")
         }
 
@@ -135,10 +172,10 @@ class BuildStepOutputTest : DescribeSpec({
             val finished = PublishSubject.create<ActionSnapshot>()
             val requestedOffsets = mutableListOf<Pair<String, Long>>()
             val finalOffsets = mutableListOf<Pair<String, Long>>()
-            val observer = pollActionOutputs(listOf("first", "second"), finished, { url, offset ->
+            val observer = pollActionOutputs(mapOf("first" to false, "second" to false), finished, { url, offset ->
                 Observable.fromCallable {
                     requestedOffsets += url to offset
-                    if (url == "first" && offset == 0L) finished.onNext(ActionSnapshot(emptyList(), finished = true))
+                    if (url == "first" && offset == 0L) finished.onNext(ActionSnapshot(emptyMap(), finished = true))
                     RawOutputChunk("$url\n".toByteArray())
                 }
             }, TestScheduler(), fetchFinalOutput = { url, offset ->
@@ -157,7 +194,7 @@ class BuildStepOutputTest : DescribeSpec({
             val log = "abcdefghijklmnopqrstuvwxyz0123456789"
             val requestedOffsets = mutableListOf<Long>()
             val finalOffsets = mutableListOf<Long>()
-            val observer = pollActionOutputs(listOf("action"), finished, { _, offset ->
+            val observer = pollActionOutputs(mapOf("action" to false), finished, { _, offset ->
                 requestedOffsets += offset
                 Observable.timer(2_500, TimeUnit.MILLISECONDS, scheduler)
                     .map { RawOutputChunk(log.substring(offset.toInt(), offset.toInt() + 1).toByteArray()) }
@@ -167,7 +204,7 @@ class BuildStepOutputTest : DescribeSpec({
             }).test()
 
             scheduler.advanceTimeTo(61, TimeUnit.SECONDS)
-            finished.onNext(ActionSnapshot(emptyList(), finished = true))
+            finished.onNext(ActionSnapshot(emptyMap(), finished = true))
             observer.assertNotComplete()
             finalOffsets shouldBe emptyList()
 

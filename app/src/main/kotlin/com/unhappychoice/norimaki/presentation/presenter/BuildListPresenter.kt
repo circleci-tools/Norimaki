@@ -32,8 +32,8 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private var pollingRegistration: Disposable? = null
     private var hasStartedPolling = false
 
-    val canRetryPage get() = buildList.canRetryPage
     val builds get() = buildList.builds
+    val canRetryPage get() = buildList.canRetryPage.asObservable()
     override val isLoading get() = buildList.isLoading
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
@@ -80,6 +80,15 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
             pollingRegistration = registration
             lifecycle.addObserver(observer)
         }
+    }
+
+    fun showLatestBuilds() {
+        if (account == null || !buildList.browsingOlderBuilds) return
+        bag.clear()
+        buildList.reset()
+        hasStartedPolling = false
+        onAuthenticated()
+        observePolling()
     }
 
     fun goToBuildView(build: Build) {

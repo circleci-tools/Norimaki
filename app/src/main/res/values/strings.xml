@@ -12,7 +12,6 @@
     <string name="project_load_error">Could not load projects.</string>
     <string name="project_load_retry">Retry</string>
     <string name="build_load_error">Could not load the build details.</string>
-    <string name="build_list_retry_page">Retry</string>
     <string name="build_load_retry">Retry</string>
     <string name="build_log_load_error">Could not load the build log.</string>
     <string name="build_log_find">Find in log</string>
@@ -37,6 +36,7 @@
     <string name="artifacts_empty">No artifacts for this job.</string>
     <string name="artifacts_load_failed">Could not load artifacts.</string>
     <string name="artifact_downloading">Saving artifact…</string>
+    <string name="artifact_downloading_another_job">An artifact from another job is being saved. You can save an artifact here when it finishes.</string>
     <string name="artifact_saved">Artifact saved.</string>
     <string name="artifact_save_failed">Could not save the artifact.</string>
     <string name="build_rebuild_error">Could not rebuild. Try again.</string>

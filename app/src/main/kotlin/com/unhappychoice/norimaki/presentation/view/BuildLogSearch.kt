@@ -20,12 +20,11 @@ import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
 import io.reactivex.schedulers.Schedulers
 import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 
 internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
     private lateinit var search: SerialDisposable
     private val highlight = BackgroundColorSpan(0x805285C9.toInt())
-    private var matches = emptyList<IntRange>()
+    private var matches = LogMatchIndex.EMPTY
     private var selected = 0
 
     fun bind(bag: CompositeDisposable) = with(binding) {
@@ -71,7 +70,7 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
 
     private fun refresh() = with(binding) {
         search.set(null)
-        matches = emptyList()
+        matches = LogMatchIndex.EMPTY
         updateMatch(null)
         val query = logQuery.text.toString()
         if (query.isEmpty() || logSearchPanel.visibility != View.VISIBLE) return@with
@@ -80,19 +79,19 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
         val snapshot = logText.text
         search.set(
             Observable.timer(150, TimeUnit.MILLISECONDS, Schedulers.computation())
-                .flatMap { findLogMatches(snapshot, query) }
+                .flatMap { LogMatchIndex.find(snapshot, query) }
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribeNext {
                     matches = it
                     selected = 0
-                    updateMatch(it.firstOrNull())
-                    if (it.isEmpty()) logMatchCount.setText(R.string.build_log_no_matches)
+                    updateMatch(if (it.size == 0) null else it[0])
+                    if (it.size == 0) logMatchCount.setText(R.string.build_log_no_matches)
                 }
         )
     }
 
     private fun move(delta: Int) {
-        if (matches.isEmpty()) return
+        if (matches.size == 0) return
         selected = (selected + delta + matches.size) % matches.size
         updateMatch(matches[selected])
     }
@@ -128,13 +127,4 @@ internal class BuildLogSearch(private val binding: BuildStepViewBinding) {
 
     private fun keyboard(): InputMethodManager =
         binding.root.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-}
-
-private fun findLogMatches(text: CharSequence, query: String): Observable<List<IntRange>> {
-    val matcher = Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
-        .matcher(text.toString())
-    return Observable.generate<IntRange> { emitter ->
-        if (matcher.find()) emitter.onNext(matcher.start() until matcher.end())
-        else emitter.onComplete()
-    }.toList().toObservable()
 }

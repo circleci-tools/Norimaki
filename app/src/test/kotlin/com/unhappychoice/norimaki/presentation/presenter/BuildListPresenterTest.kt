@@ -77,13 +77,14 @@ class BuildListPresenterTest : DescribeSpec({
         scheduler.triggerActions()
     }
 
-    fun build(number: Int, state: String = "finished"): Build = mockk {
+    fun build(number: Int, state: String = "finished", result: String = state): Build = mockk {
         every { vcsUrl } returns "https://github.com/owner/repo"
         every { username } returns "owner"
         every { reponame } returns "repo"
         every { buildNum } returns number
         every { queuedAt } returns Date(number.toLong())
         every { lifecycle } returns state
+        every { status } returns result
     }
 
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
@@ -366,6 +367,35 @@ class BuildListPresenterTest : DescribeSpec({
             verify(exactly = 0) { api.getBuild("github", "owner", "repo", 1) }
         }
 
+        it("publishes ten changed build statuses in one history update when the latest page is unchanged") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val latest = listOf(build(11))
+            val running = (1..10).map { build(it, state = "running") }
+            val finished = (1..10).map { number ->
+                build(number, result = "success").also { response ->
+                    every { api.getBuild("github", "owner", "repo", number) } returns Observable.just(response)
+                }
+            }
+            every { api.pageAt(0) } returns Observable.just(latest)
+            every { api.pageAt(20) } returns Observable.just(running)
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+
+            try {
+                scheduler.triggerActions()
+                presenter.getBuilds()
+                scheduler.triggerActions()
+
+                startPolling(presenter)
+                advanceRefresh()
+
+                builds.assertValues(emptyList(), latest, latest + running.reversed(), latest + finished.reversed())
+                builds.values().last().drop(1).map { it.status } shouldBe List(10) { "success" }
+            } finally {
+                builds.dispose()
+            }
+        }
+
         it("keeps refreshed build details when an older page arrives late") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val newest = build(3)
@@ -509,12 +539,13 @@ class BuildListPresenterTest : DescribeSpec({
                 )
                 val presenter = presenter(api, projectName = projectName)
                 val builds = presenter.builds.test()
+                val retry = presenter.canRetryPage.distinctUntilChanged().test()
                 startPolling(presenter)
 
                 presenter.getBuilds()
                 advanceRefresh()
 
-                presenter.canRetryPage.value shouldBe true
+                retry.assertValues(false, true)
                 presenter.page.value shouldBe 1
                 builds.assertValues(emptyList(), firstPage)
                 verify(exactly = 2) { requestPage(0) }
@@ -523,10 +554,11 @@ class BuildListPresenterTest : DescribeSpec({
                 presenter.getBuilds()
                 scheduler.triggerActions()
 
-                presenter.canRetryPage.value shouldBe false
+                retry.assertValues(false, true, false)
                 presenter.page.value shouldBe 2
                 builds.assertValues(emptyList(), firstPage, firstPage + older)
                 verify(exactly = 2) { requestPage(20) }
+                retry.dispose()
                 builds.dispose()
             }
         }
