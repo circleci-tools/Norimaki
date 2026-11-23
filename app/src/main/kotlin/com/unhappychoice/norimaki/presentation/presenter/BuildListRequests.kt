@@ -26,7 +26,7 @@ internal class BuildListRequests(
     private val computation: Scheduler,
     private val ui: Scheduler,
     private val fetchDetails: (Build) -> Observable<Build>,
-    private val fetch: (Int) -> Observable<List<Build>>
+    private var fetch: (Int) -> Observable<List<Build>>
 ) : Loadable, Paginatable {
     override val isLoading = Variable(false)
     override val page = Variable(0)
@@ -77,7 +77,8 @@ internal class BuildListRequests(
         return request(source, paginated = true).subscribeNext { anchorOffset = pageOffset }
     }
 
-    fun reset() {
+    fun reset(fetch: (Int) -> Observable<List<Build>> = this.fetch) {
+        this.fetch = fetch
         initialLoadSettled = CompletableSubject.create()
         buildPolling = BuildListPolling(fetch)
         lastPollIds = emptySet()
@@ -106,8 +107,10 @@ internal class BuildListRequests(
         return request(refreshed, paginated = false) { pollIds.also { pollIds = null } }
     }
 
-    private fun requestPage(offset: Int): Observable<Unit> =
-        request(Observable.defer { fetch(offset) }.singleOrError().toObservable(), paginated = true)
+    private fun requestPage(offset: Int): Observable<Unit> {
+        val fetchPage = fetch
+        return request(Observable.defer { fetchPage(offset) }.singleOrError().toObservable(), paginated = true)
+    }
 
     private fun request(
         source: Observable<List<Build>>,

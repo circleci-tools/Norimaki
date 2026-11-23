@@ -59,12 +59,13 @@ class BuildListPresenterTest : DescribeSpec({
     fun presenter(
         api: CircleCIAPIClientV1_1,
         session: SessionService = testSession(api),
-        view: BuildListView = mockk()
+        view: BuildListView = mockk(),
+        projectName: String = "github/owner/repo"
     ) = BuildListPresenter().apply {
         di = DI {
             bind<SessionService>() with singleton { session }
             bind<MainActivity>() with singleton { activity }
-            bind<String>() with singleton { "github/owner/repo" }
+            bind<String>() with singleton { projectName }
         }
         scope = attachToTestScope(view)
     }
@@ -76,7 +77,8 @@ class BuildListPresenterTest : DescribeSpec({
         scheduler.triggerActions()
     }
 
-    fun build(number: Int, state: String = "finished", result: String = state): Build = mockk {
+    fun build(number: Int, state: String = "finished", result: String = state, branchName: String? = null): Build = mockk {
+        every { branch } returns branchName
         every { vcsUrl } returns "https://github.com/owner/repo"
         every { username } returns "owner"
         every { reponame } returns "repo"
@@ -89,8 +91,129 @@ class BuildListPresenterTest : DescribeSpec({
     fun CircleCIAPIClientV1_1.pageAt(offset: Int) =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
+    fun CircleCIAPIClientV1_1.branchPageAt(branch: String, offset: Int) =
+        getBranchBuilds("github", "owner", "repo", branch, offset = offset, limit = 20)
+
     fun advanceRefresh() =
         scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
+
+    describe("project branch filtering") {
+        it("loads, paginates and polls the exact branch before restoring all branches") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val branch = "release/Next"
+            val main = build(40, branchName = "main")
+            val first = build(30, branchName = branch)
+            val older = build(2, branchName = branch)
+            val latest = build(45, branchName = branch)
+            listOf(older, first, main, latest).forEachIndexed { index, row ->
+                every { row.queuedAt } returns Date(index.toLong())
+            }
+            every { api.pageAt(0) } returns Observable.just(listOf(main, first))
+            every { api.branchPageAt(branch, 0) } returnsMany listOf(
+                Observable.just(listOf(first)),
+                Observable.just(listOf(latest, first))
+            )
+            every { api.branchPageAt(branch, 20) } returns Observable.just(listOf(older))
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            val selection = presenter.selectedBranch.test()
+            startPolling(presenter)
+            presenter.recentBranches shouldBe listOf("main", branch)
+
+            presenter.selectBranch(branch)
+            presenter.page.value shouldBe 0
+            builds.values().last() shouldBe emptyList()
+            scheduler.triggerActions()
+            builds.values().last() shouldBe listOf(first)
+            presenter.recentBranches.toSet() shouldBe setOf("main", branch)
+
+            presenter.getBuilds()
+            scheduler.triggerActions()
+            builds.values().last() shouldBe listOf(first, older)
+
+            advanceRefresh()
+            builds.values().last() shouldBe listOf(latest, first, older)
+
+            presenter.selectBranch(null)
+            scheduler.triggerActions()
+            builds.values().last() shouldBe listOf(main, first)
+            presenter.page.value shouldBe 1
+            selection.assertValues("", branch, "")
+            verify(exactly = 2) { api.pageAt(0) }
+            verify(exactly = 2) { api.branchPageAt(branch, 0) }
+            verify(exactly = 1) { api.branchPageAt(branch, 20) }
+        }
+
+        it("disposes the previous poll and page when the branch changes") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val stalePage = PublishSubject.create<List<Build>>()
+            val stalePoll = PublishSubject.create<List<Build>>()
+            val main = build(40, branchName = "main")
+            val branch = "quiet/feature"
+            every { api.pageAt(0) } returnsMany listOf(Observable.just(listOf(main)), stalePoll)
+            every { api.pageAt(20) } returns stalePage
+            every { api.branchPageAt(branch, 0) } returns Observable.just(emptyList())
+            val presenter = presenter(api)
+            val builds = presenter.builds.test()
+            startPolling(presenter)
+
+            presenter.getBuilds()
+            advanceRefresh()
+            stalePage.hasObservers() shouldBe true
+            stalePoll.hasObservers() shouldBe true
+
+            presenter.selectBranch(branch)
+            scheduler.triggerActions()
+            stalePage.hasObservers() shouldBe false
+            stalePoll.hasObservers() shouldBe false
+            stalePage.onNext(listOf(main))
+            stalePage.onComplete()
+            stalePoll.onNext(listOf(main))
+            scheduler.triggerActions()
+            builds.values().last() shouldBe emptyList()
+            presenter.page.value shouldBe 1
+            presenter.hasMore.value shouldBe false
+        }
+
+        it("keeps Recent Builds scoped to all projects") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            every { api.getRecentBuilds(offset = 0, limit = 20) } returns Observable.just(emptyList())
+            val presenter = presenter(api, projectName = "")
+            presenter.canFilterByBranch shouldBe false
+            presenter.selectBranch("main")
+            scheduler.triggerActions()
+            presenter.selectedBranch.test().assertValue("")
+            verify(exactly = 1) { api.getRecentBuilds(offset = 0, limit = 20) }
+        }
+
+        it("reloads the selected branch from page zero when reattached") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val view = mockk<BuildListView>()
+            val branch = "release/Next"
+            val first = build(2, branchName = branch)
+            val refreshed = build(3, branchName = branch)
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            every { api.branchPageAt(branch, 0) } returnsMany listOf(
+                Observable.just(listOf(first)),
+                Observable.just(listOf(refreshed))
+            )
+            val presenter = presenter(api, view = view)
+            scheduler.triggerActions()
+            presenter.selectBranch(branch)
+            scheduler.triggerActions()
+            presenter.builds.take(1).test().assertResult(listOf(first))
+
+            presenter.dropView(view)
+            presenter.takeView(view)
+            scheduler.triggerActions()
+
+            presenter.selectedBranch.take(1).test().assertResult(branch)
+            presenter.builds.take(1).test().assertResult(listOf(refreshed))
+            presenter.page.value shouldBe 1
+            verify(exactly = 1) { api.pageAt(0) }
+            verify(exactly = 2) { api.branchPageAt(branch, 0) }
+        }
+    }
 
     describe("polling lifecycle") {
         it("pauses while stopped and resumes immediately with a single loop") {
