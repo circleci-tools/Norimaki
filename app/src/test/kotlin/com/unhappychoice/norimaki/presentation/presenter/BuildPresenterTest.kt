@@ -16,7 +16,6 @@ import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
-import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
@@ -198,28 +197,15 @@ class BuildPresenterTest : DescribeSpec({
             }
         }
 
-        listOf(false, true).forEach { clearsCache ->
-            val action = if (clearsCache) "cache-free rebuild" else "regular rebuild"
-            it("completes a $action without navigating when no view is registered") {
-                presenter.dropView(view)
-                // Restore the session without attaching a replacement view.
-                PresenterNeedsToken::class.java.getDeclaredMethod("onEnterScope", MortarScope::class.java)
-                    .apply { isAccessible = true }
-                    .invoke(presenter, scope)
+        it("does not submit a rebuild after the view detaches") {
+            presenter.dropView(view)
 
-                if (clearsCache) {
-                    presenter.rebuildWithoutCache()
-                    deleteCache.onNext(Unit)
-                    deleteCache.onComplete()
-                } else {
-                    presenter.rebuild()
-                }
-                retry.hasObservers() shouldBe true
-                retry.onNext(mockk())
-                retry.onComplete()
+            presenter.rebuild()
+            presenter.rebuildWithoutCache()
 
-                verify { activity wasNot Called }
-            }
+            verify(exactly = 0) { api.retryBuild(any(), any(), any(), any()) }
+            verify(exactly = 0) { api.deleteCache(any(), any(), any()) }
+            verify { activity wasNot Called }
         }
 
         it("identifies the cache project before build details load") {

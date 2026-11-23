@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
+import android.os.Bundle
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -49,6 +50,12 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
 
+    override fun onLoad(savedInstanceState: Bundle?) {
+        hasStartedPolling = false
+        buildList.reset()
+        super.onLoad(savedInstanceState)
+    }
+
     override fun onAuthenticated() {
         pageRequests = CompositeDisposable().also { it.addTo(bag) }
         buildList.start().addTo(pageRequests)
@@ -90,7 +97,6 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     }
 
     override fun onViewDropped() {
-        pollingRegistration?.let(bag::remove)
         pollingRegistration = null
         pollingLifecycle = null
     }
