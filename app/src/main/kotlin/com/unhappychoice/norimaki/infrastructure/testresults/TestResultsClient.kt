@@ -16,37 +16,41 @@ internal class TestResultsClient(
     private val token: String,
     private val client: OkHttpClient = OkHttpClient()
 ) {
-    fun fetch(buildId: BuildId): Observable<TestResults> = Observable.create<TestResults> { emitter ->
+    fun fetch(
+        buildId: BuildId,
+        resumeFrom: TestResultsCursor? = null
+    ): Observable<TestResults> = Observable.create<TestResults> { emitter ->
         try {
             val url = buildId.testResultsUrl()
             if (url == null) emitter.onNext(TestResults.Unavailable)
-            else fetchPages(url, emitter)
+            else fetchPages(url, resumeFrom, emitter)
             emitter.onComplete()
         } catch (error: Exception) {
             emitter.tryOnError(error)
         }
     }.subscribeOn(Schedulers.io())
 
-    private fun fetchPages(url: HttpUrl, emitter: ObservableEmitter<TestResults>) {
-        val seenTokens = mutableSetOf<String>()
-        var hasResults = false
-        var pageToken: String? = null
+    private fun fetchPages(url: HttpUrl, resumeFrom: TestResultsCursor?, emitter: ObservableEmitter<TestResults>) {
+        val seenTokens = generateSequence(resumeFrom) { it.previous }.map { it.token }.toMutableSet()
+        var cursor = resumeFrom
+        var hasResults = resumeFrom?.hasResults ?: false
         do {
             if (emitter.isDisposed) return
-            val page = fetchPage(url, pageToken, emitter)
+            val page = fetchPage(url, cursor?.token, emitter)
             if (page == null) {
                 emitter.onNext(TestResults.Unavailable)
                 return
             }
             val items = page.getAsJsonArray("items")
-            hasResults = hasResults || items.size() > 0
             val failures = items.mapNotNull { it.asJsonObject.toFailure() }
-            pageToken = page.stringOrNull("next_page_token")?.takeIf { it.isNotEmpty() }
-            if (pageToken != null && !seenTokens.add(pageToken)) {
+            hasResults = hasResults || items.size() > 0
+            val nextToken = page.stringOrNull("next_page_token")?.takeIf { it.isNotEmpty() }
+            if (nextToken != null && !seenTokens.add(nextToken)) {
                 throw IOException("Repeated test results page token")
             }
-            if (failures.isNotEmpty() || pageToken != null) emitter.onNext(TestResults.FailurePage(failures))
-        } while (pageToken != null)
+            cursor = nextToken?.let { TestResultsCursor(it, hasResults, cursor) }
+            if (failures.isNotEmpty() || cursor != null) emitter.onNext(TestResults.FailurePage(failures, cursor))
+        } while (cursor != null)
         emitter.onNext(if (hasResults) TestResults.Reported else TestResults.Unavailable)
     }
 
@@ -68,8 +72,14 @@ internal class TestResultsClient(
 internal sealed interface TestResults {
     data object Unavailable : TestResults
     data object Reported : TestResults
-    data class FailurePage(val failures: List<TestFailure>) : TestResults
+    data class FailurePage(val failures: List<TestFailure>, val nextCursor: TestResultsCursor? = null) : TestResults
 }
+
+internal data class TestResultsCursor(
+    val token: String,
+    val hasResults: Boolean,
+    val previous: TestResultsCursor?
+)
 
 internal data class TestFailure(val name: String, val className: String?, val message: String?)
 

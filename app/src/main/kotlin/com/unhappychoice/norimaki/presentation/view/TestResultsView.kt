@@ -22,6 +22,7 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
         presenter.takeView(this)
         binding.failures.layoutManager = LinearLayoutManager(context)
         binding.retry.setOnClickListener { load() }
+        clearFailures()
         load()
     }
 
@@ -50,9 +51,12 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
         else binding.status.isVisible = false
     }
 
-    private fun load() {
+    internal fun clearFailures() {
         receivedPage = false
         binding.failures.adapter = null
+    }
+
+    private fun load() {
         showStatus(R.string.test_results_loading)
         presenter.load(this)
     }

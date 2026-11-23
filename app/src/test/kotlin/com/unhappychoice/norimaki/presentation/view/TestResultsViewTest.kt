@@ -13,6 +13,8 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.testresults.TestFailure
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
+import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsCursor
+import com.unhappychoice.norimaki.presentation.adapter.TestFailureAdapter
 import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import io.mockk.every
@@ -80,6 +82,77 @@ class TestResultsViewTest {
             assertEquals(View.GONE, view.findViewById<TextView>(R.id.status).visibility)
             val list = view.findViewById<RecyclerView>(R.id.failures)
             assertEquals(1, requireNotNull(list.adapter).itemCount)
+        }
+    }
+
+    @Test
+    fun retriesFromTheFailedPageAndAppendsEachFailureOnce() {
+        val requests = mutableListOf<String?>()
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            val cursor = request.url.queryParameter("page-token")
+            requests.add(cursor)
+            val (code, body) = when (cursor) {
+                null -> 200 to """{"items":[{"result":"failure","name":"first"}],"next_page_token":"second"}"""
+                "second" -> if (requests.count { it == cursor } == 1) 500 to "{}" else
+                    200 to """{"items":[{"result":"failure","name":"second"}],"next_page_token":"third"}"""
+                "third" -> 200 to """{"items":[{"result":"error","name":"third"}]}"""
+                else -> error("Unexpected cursor")
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(code).message("Test response").body(body.toResponseBody()).build()
+        }.build()
+
+        withClient({ TestResultsClient(it, http) }) { view ->
+            scheduler.triggerActions()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertStatus(view, R.string.test_results_incomplete)
+            assertEquals(listOf(null, "second"), requests)
+
+            val list = view.findViewById<RecyclerView>(R.id.failures)
+            val adapter = list.adapter as TestFailureAdapter
+            assertEquals(1, adapter.itemCount)
+            view.findViewById<Button>(R.id.retry).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertStatus(view, R.string.test_results_loading)
+            assertEquals(adapter, list.adapter)
+            assertEquals(1, adapter.itemCount)
+
+            scheduler.triggerActions()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(listOf(null, "second", "second", "third"), requests)
+            assertEquals(adapter, list.adapter)
+            val names = (0 until adapter.itemCount).map { position ->
+                val holder = adapter.onCreateViewHolder(list, adapter.getItemViewType(position))
+                adapter.onBindViewHolder(holder, position)
+                holder.itemView.findViewById<TextView>(R.id.testName).text.toString()
+            }
+            assertEquals(listOf("first", "second", "third"), names)
+            assertEquals(View.GONE, view.findViewById<TextView>(R.id.status).visibility)
+        }
+    }
+
+    @Test
+    fun startsFromTheFirstPageWhenRetryingAfterSessionReplacement() {
+        val pages = PublishSubject.create<TestResults>()
+        val session = testSession(mockk())
+        val client = mockk<TestResultsClient> {
+            every { fetch(buildId, null) } returnsMany listOf(pages, Observable.just(TestResults.Reported))
+        }
+
+        withClient({ client }, session) { view ->
+            val cursor = TestResultsCursor("next", true, null)
+            pages.onNext(TestResults.FailurePage(listOf(TestFailure("first", null, null)), cursor))
+            pages.onError(IOException("Second page failed"))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertStatus(view, R.string.test_results_incomplete)
+
+            session.replace("test-token").blockingGet()
+            view.findViewById<Button>(R.id.retry).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+
+            assertStatus(view, R.string.test_results_no_failures)
+            assertEquals(null, view.findViewById<RecyclerView>(R.id.failures).adapter)
         }
     }
 
@@ -193,7 +266,7 @@ class TestResultsViewTest {
                 .code(200).message("OK").body(body.toResponseBody()).build()
         }.build()
         val client = TestResultsClient("test-token", http)
-        withResults(client.fetch(buildId)) { view ->
+        withClient({ client }) { view ->
             val worker = thread(isDaemon = true) { scheduler.triggerActions() }
             try {
                 assertTrue(secondRequested.await(5, SECONDS))
@@ -218,8 +291,16 @@ class TestResultsViewTest {
         verify: (TestResultsView) -> Unit
     ) {
         val client = mockk<TestResultsClient> {
-            every { fetch(buildId) } returnsMany responses.toList()
+            every { fetch(buildId, null) } returnsMany responses.toList()
         }
+        withClient({ client }, session, verify)
+    }
+
+    private fun withClient(
+        createClient: (String) -> TestResultsClient,
+        session: SessionService = testSession(mockk()),
+        verify: (TestResultsView) -> Unit
+    ) {
         val screen = TestResultsScreen(buildId)
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             val activity = controller.setup().get()
@@ -229,7 +310,7 @@ class TestResultsViewTest {
                 bind<SessionService>() with singleton { session }
                 bind<TestResultsClient>() with factory { token: String ->
                     assertEquals("test-token", token)
-                    client
+                    createClient(token)
                 }
             })
             view.presenter.di = view.di

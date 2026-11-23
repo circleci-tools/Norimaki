@@ -27,9 +27,11 @@ class TestResultsClientTest : DescribeSpec({
                 }
             }
 
+            val second = TestResultsCursor("a+/=", true, null)
+            val last = TestResultsCursor("last", true, second)
             client.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(
-                TestResults.FailurePage(emptyList()),
-                TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>"))),
+                TestResults.FailurePage(emptyList(), second),
+                TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>")), last),
                 TestResults.FailurePage(listOf(TestFailure("throws", null, null))),
                 TestResults.Reported
             )
@@ -75,13 +77,25 @@ class TestResultsClientTest : DescribeSpec({
                 if (request.url.query == null) 200 to """{"items":[],"next_page_token":"next"}"""
                 else 404 to "{}"
             }.fetch(buildId).test().awaitDone(5, SECONDS)
-                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList()))
+                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList(), TestResultsCursor("next", false, null)))
         }
 
         it("rejects a repeated pagination token") {
             client { 200 to """{"items":[],"next_page_token":"next"}""" }
                 .fetch(buildId).test().awaitDone(5, SECONDS)
-                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList()))
+                .assertFailure(IOException::class.java, TestResults.FailurePage(emptyList(), TestResultsCursor("next", false, null)))
+        }
+
+        it("keeps earlier passing results when the resumed page is empty") {
+            val cursor = TestResultsCursor("next", true, null)
+            client { 200 to """{"items":[]}""" }
+                .fetch(buildId, cursor).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported)
+        }
+
+        it("rejects a token from before the resumed page") {
+            val cursor = TestResultsCursor("last", true, TestResultsCursor("earlier", true, null))
+            client { 200 to """{"items":[],"next_page_token":"earlier"}""" }
+                .fetch(buildId, cursor).test().awaitDone(5, SECONDS).assertFailure(IOException::class.java)
         }
 
         it("keeps emitted failures when a later page contains invalid JSON") {
@@ -94,7 +108,7 @@ class TestResultsClientTest : DescribeSpec({
                 200 to body
             }.fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(
                 JsonSyntaxException::class.java,
-                TestResults.FailurePage(listOf(TestFailure("asserts", null, null)))
+                TestResults.FailurePage(listOf(TestFailure("asserts", null, null)), TestResultsCursor("next", true, null))
             )
         }
     }
