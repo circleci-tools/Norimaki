@@ -54,6 +54,8 @@ jobs:
       - run:
           name: Run Tests
           command: ./gradlew jacoco
+      - store_test_results:
+          path: app/build/test-results/testDebugUnitTest
       - run:
           name: Verify Kotest and Vintage execution
           command: python3 scripts/ci/check-unit-test-results.py
