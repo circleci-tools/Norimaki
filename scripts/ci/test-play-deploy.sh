@@ -1,11 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-publish_command=$(awk '
+deploy_job=$(awk '
     /^  deploy:$/ { deploy = 1; next }
     /^  [^ ]|^[^ ]/ { deploy = 0 }
-    deploy && /publishReleaseApk/ { sub(/^ +command: /, ""); print }
+    deploy { print }
 ' .circleci/config.yml)
+
+if grep -Eq '^[[:space:]]*- (restore_gradle_cache|restore_cache|attach_workspace|with_tool_cache)(:|[[:space:]]|$)' <<< "$deploy_job"; then
+    echo "Expected the deploy job to build from its checkout without restoring cached files." >&2
+    exit 1
+fi
+
+setup_command=$(awk '
+    /^      - run:/ { setup = 0 }
+    /name: Create release Gradle user home$/ { setup = 1 }
+    /command: .*gradlew/ { exit }
+    setup && /^            / { sub(/^            /, ""); print }
+' <<< "$deploy_job")
+
+fixture=$(mktemp -d)
+trap 'rm -rf "$fixture"' EXIT
+mkdir "$fixture/shared"
+export TMPDIR="$fixture" BASH_ENV="$fixture/bash_env" GRADLE_USER_HOME="$fixture/shared"
+bash -eo pipefail -c "$setup_command"
+if ! bash -ec '[[ "$GRADLE_USER_HOME" == "$TMPDIR/"* && "$GRADLE_USER_HOME" != "$TMPDIR/shared" && -d "$GRADLE_USER_HOME" && -z "$(ls -A "$GRADLE_USER_HOME")" ]]'; then
+    echo "Expected release Gradle steps to inherit a fresh Gradle user home." >&2
+    exit 1
+fi
+
+publish_command=$(sed -n 's/^ *command: \(.*publishReleaseApk.*\)$/\1/p' <<< "$deploy_job")
 
 if [[ "$publish_command" != "./gradlew publishReleaseApk --track internal" ]]; then
     echo "Expected the deploy job to publish explicitly to the internal Play track." >&2
