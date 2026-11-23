@@ -4,9 +4,11 @@ import com.unhappychoice.norimaki.extension.ansiForegroundColor
 
 internal data class LogSpan(val text: String, val color: Int?)
 
-internal class LogChunkFormatter {
-    private var color: Int? = null
-    private var pendingEscape = ""
+internal class LogChunkFormatter(
+    private var color: Int? = null,
+    private var pendingEscape: String = ""
+) {
+    fun copy(): LogChunkFormatter = LogChunkFormatter(color, pendingEscape)
 
     fun format(chunk: String): List<List<LogSpan>> {
         val input = pendingEscape + chunk

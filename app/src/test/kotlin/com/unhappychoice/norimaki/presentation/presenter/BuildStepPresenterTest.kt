@@ -11,6 +11,7 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
+import com.unhappychoice.norimaki.presentation.log.LogChunkFormatter
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -441,6 +442,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
     it("pauses with the view attached and resumes live and final reads at the saved offsets") {
         val scheduler = TestScheduler()
+        val formatting = TestScheduler()
         val activity = mockk<MainActivity>()
         val lifecycle = PollingLifecycle(activity).apply { start() }
         val runningStep = BuildStep("Run tests", listOf(action(5, null)))
@@ -462,7 +464,7 @@ class BuildStepPresenterTest : DescribeSpec({
             every { fetchFinalRawOutput(url, finalOffset, any()) } returns
                 Observable.just(RawOutputChunk(" done".toByteArray()))
         }
-        val presenter = BuildStepPresenter { output }.apply {
+        val presenter = BuildStepPresenter({ formatting }, LogChunkFormatter::format) { output }.apply {
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(5) }
@@ -478,7 +480,7 @@ class BuildStepPresenterTest : DescribeSpec({
             RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
             scope = presenter.attachToTestScope(view)
-            presenter.logLines() shouldBe listOf("first")
+            presenter.logLines() shouldBe emptyList()
 
             presenter.logSearchAvailable.value shouldBe false
             lifecycle.stop()
@@ -486,7 +488,12 @@ class BuildStepPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
             verify(exactly = 1) { output.fetchRawOutput(any(), any()) }
 
+            formatting.triggerActions()
+            presenter.logLines() shouldBe emptyList()
+
             lifecycle.start()
+            verify(exactly = 1) { output.fetchRawOutput(url, beforeStop.size.toLong()) }
+            formatting.triggerActions()
             presenter.logLines() shouldBe listOf("first next")
             verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
             scheduler.advanceTimeBy(1, SECONDS)
@@ -504,6 +511,7 @@ class BuildStepPresenterTest : DescribeSpec({
             lifecycle.start()
             verify(exactly = 1) { view.showStep(finishedStep) }
             verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
+            formatting.triggerActions()
             presenter.logLines() shouldBe listOf("first next done")
             presenter.log[0].map { it.color }.distinct() shouldBe listOf(0xFF00F000.toInt())
             presenter.logSearchAvailable.value shouldBe true

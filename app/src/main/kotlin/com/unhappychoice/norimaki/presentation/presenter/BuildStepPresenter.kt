@@ -17,6 +17,7 @@ import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
 import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.log.LogChunkFormatter
+import com.unhappychoice.norimaki.presentation.log.LogSpan
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.presenter.core.StartedPolling
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
@@ -32,9 +33,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class BuildStepPresenter internal constructor(
+    private val outputFormattingScheduler: () -> Scheduler = Schedulers::io,
+    private val formatChunk: (LogChunkFormatter, String) -> List<List<LogSpan>> = LogChunkFormatter::format,
     private val createOutputClient: (String) -> BuildOutputClient
 ) : PresenterNeedsToken<BuildStepView>() {
-    constructor() : this({ BuildOutputClient(it) })
+    constructor() : this(createOutputClient = { BuildOutputClient(it) })
 
     private val buildId: BuildId by instance()
     private val stepId: BuildStepId by instance()
@@ -71,7 +74,9 @@ class BuildStepPresenter internal constructor(
         logLoadFailed.value = false
         canRetryStepLoad.value = false
         if (!progress.complete) logSearchAvailable.value = false
-        return pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
+        val display = AndroidSchedulers.mainThread()
+        val formatter = progress.formatter.copy()
+        val output = pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
             .doOnError { canRetryStepLoad.value = true }
             .concatMap { (build, step) ->
@@ -80,11 +85,22 @@ class BuildStepPresenter internal constructor(
                 when {
                     progress.complete -> Observable.empty()
                     !progress.raw.started && step.isFinished() -> completedOutput(step, outputClient, progress)
-                    else -> runningOutput(build, step, client, outputClient, progress.raw, AndroidSchedulers.mainThread())
+                    else -> runningOutput(build, step, client, outputClient, progress.raw, display)
                 }.doOnComplete { progress.complete = true }
             }
+            .doOnNext { progress.pending.addLast(it) }
+        // Fetch progress includes pending chunks. Replay those chunks if delivery is cancelled.
+        return Observable.fromIterable(progress.pending.toList())
+            .concatWith(output)
+            .observeOn(outputFormattingScheduler(), true)
+            .map { formatChunk(formatter, it) to formatter.copy() }
+            .observeOn(display, true)
             .subscribeBy(
-                onNext = { log.append(progress.formatter.format(it)) },
+                onNext = { (lines, nextFormatter) ->
+                    progress.pending.removeFirst()
+                    progress.formatter = nextFormatter
+                    log.append(lines)
+                },
                 onComplete = ::allowLogSearch,
                 onError = {
                     logLoadFailed.value = true
@@ -192,7 +208,8 @@ private fun Build.actionCompletion(step: BuildStep?): Map<String, Boolean> =
 internal data class ActionSnapshot(val actionCompletion: Map<String, Boolean>, val finished: Boolean)
 
 private class StepOutputProgress {
-    val formatter = LogChunkFormatter()
+    var formatter = LogChunkFormatter()
+    val pending = ArrayDeque<String>()
     var step: BuildStep? = null
     var complete = false
     var completedActions = 0
