@@ -193,6 +193,26 @@ class BuildOutputClientTest : DescribeSpec({
             }
         }
 
+        it("retries a truncated final range without emitting its partial bytes") {
+            val scheduler = TestScheduler()
+            val ranges = mutableListOf<String?>()
+            val client = outputClient { request ->
+                ranges.add(request.header("Range"))
+                val body = if (ranges.size == 1) "lo" else "log"
+                response(request, 206, body, "bytes 42-44/45")
+            }
+            val observer = client.fetchFinalRawOutput(url, offset, scheduler)
+                .map { it.bytes.decodeToString() }.test()
+
+            observer.assertEmpty()
+            ranges shouldBe listOf("bytes=42-")
+
+            scheduler.advanceTimeBy(1, SECONDS)
+
+            observer.assertResult("log")
+            ranges shouldBe listOf("bytes=42-", "bytes=42-")
+        }
+
         it("should report persistent failure after two retries") {
             val scheduler = TestScheduler()
             var requests = 0
