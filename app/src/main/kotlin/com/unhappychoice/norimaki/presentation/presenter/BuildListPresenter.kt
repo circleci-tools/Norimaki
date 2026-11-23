@@ -5,7 +5,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.goTo
+import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
@@ -14,6 +16,7 @@ import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
 import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
@@ -26,36 +29,74 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private val buildList by lazy {
         BuildListRequests(
             Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
-            ::getBuildDetails, ::getBuildsAPI
+            ::getBuildDetails, projectBuilds(branch = null)
         )
     }
+    private var pageRequests = CompositeDisposable()
+    private var pollingLifecycle: Lifecycle? = null
     private var pollingRegistration: Disposable? = null
     private var hasStartedPolling = false
 
+    val canFilterByBranch get() = projectName.isNotEmpty()
+    private val branchSelection = Variable("")
+    val selectedBranch = branchSelection.asObservable()
+    var recentBranches: List<String> = emptyList()
+        private set
+
     val builds get() = buildList.builds
+    val canRetryPage get() = buildList.canRetryPage.asObservable()
     override val isLoading get() = buildList.isLoading
     override val page get() = buildList.page
     override val hasMore get() = buildList.hasMore
 
     override fun onAuthenticated() {
-        buildList.start().addTo(bag)
+        pageRequests = CompositeDisposable().also { it.addTo(bag) }
+        buildList.start().addTo(pageRequests)
+        if (canFilterByBranch) {
+            builds.subscribeNext { rows ->
+                recentBranches = rows.asSequence()
+                    .mapNotNull { it.branch?.takeIf(String::isNotBlank) }
+                    .plus(recentBranches)
+                    .distinct()
+                    .take(BUILD_LIST_PAGE_SIZE)
+                    .toList()
+            }.addTo(bag)
+        }
     }
 
     override fun onSessionEnded() {
         hasStartedPolling = false
-        buildList.reset()
+        recentBranches = emptyList()
+        branchSelection.value = ""
+        buildList.reset(projectBuilds(branch = null))
     }
 
     fun getBuilds() {
-        if (account != null) buildList.loadNextPage()?.addTo(bag)
+        if (account != null) buildList.loadNextPage()?.addTo(pageRequests)
+    }
+
+    fun selectBranch(branch: String?) {
+        val selection = branch.orEmpty()
+        if (!canFilterByBranch || account == null || selection == branchSelection.value) return
+
+        pollingRegistration?.let(bag::remove)
+        pollingRegistration = null
+        pageRequests.clear()
+        buildList.reset(projectBuilds(branch?.takeUnless(String::isEmpty)))
+        branchSelection.value = selection
+        buildList.start().addTo(pageRequests)
+        hasStartedPolling = false
+        pollingLifecycle?.let { observePolling(it) }
     }
 
     override fun onViewDropped() {
         pollingRegistration?.let(bag::remove)
         pollingRegistration = null
+        pollingLifecycle = null
     }
 
     internal fun observePolling(lifecycle: Lifecycle = activity.lifecycle) {
+        pollingLifecycle = lifecycle
         pollingRegistration?.let(bag::remove)
         val pollingSubscription = SerialDisposable()
         val observer = object : DefaultLifecycleObserver {
@@ -81,6 +122,15 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
         }
     }
 
+    fun showLatestBuilds() {
+        if (account == null || !buildList.browsingOlderBuilds) return
+        bag.clear()
+        buildList.reset()
+        hasStartedPolling = false
+        onAuthenticated()
+        observePolling()
+    }
+
     fun goToBuildView(build: Build) {
         if (account == null) return
         val buildId = BuildId.from(build) ?: return
@@ -99,10 +149,18 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
         }
     }
 
-    private fun getBuildsAPI(offset: Int): Observable<List<Build>> {
-        val client = account?.client ?: return Observable.empty()
-        return when (projectName) {
-            "" -> client.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
+    private fun projectBuilds(branch: String?): (Int) -> Observable<List<Build>> = fetch@{ offset ->
+        val client = account?.client ?: return@fetch Observable.empty()
+        when {
+            projectName.isEmpty() -> client.getRecentBuilds(offset = offset, limit = BUILD_LIST_PAGE_SIZE)
+            branch != null -> client.getBranchBuilds(
+                vcsType = vcsType(),
+                userName = userName(),
+                project = repoName(),
+                branch = branch,
+                offset = offset,
+                limit = BUILD_LIST_PAGE_SIZE
+            )
             else -> client.getProjectBuilds(
                 vcsType = vcsType(),
                 userName = userName(),

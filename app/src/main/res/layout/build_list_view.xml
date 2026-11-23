@@ -5,8 +5,25 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
+    <Button
+        android:id="@+id/branchFilter"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAllCaps="false"
+        android:visibility="gone"/>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/buildsView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <Button
+        android:id="@+id/retryBuildPage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/build_load_retry"
+        android:visibility="gone"/>
 </com.unhappychoice.norimaki.presentation.view.BuildListView>
