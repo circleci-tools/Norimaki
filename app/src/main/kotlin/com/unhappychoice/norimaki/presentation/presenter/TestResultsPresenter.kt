@@ -4,6 +4,7 @@ import android.os.Bundle
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
+import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsCursor
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.TestResultsView
 import io.reactivex.android.schedulers.AndroidSchedulers
@@ -16,6 +17,7 @@ class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
     private val buildId: BuildId by instance()
     private val createClient: (String) -> TestResultsClient by factory()
     private var needsSessionRestore = false
+    private var nextCursor: TestResultsCursor? = null
 
     override fun onAuthenticated() = load()
 
@@ -28,6 +30,7 @@ class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
 
     override fun onViewDropped() {
         needsSessionRestore = true
+        nextCursor = null
         super.onViewDropped()
     }
 
@@ -36,7 +39,7 @@ class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
         val view = view ?: return
         bag.clear()
         view.showLoading()
-        createClient(verified.token).fetch(buildId)
+        createClient(verified.token).fetch(buildId, nextCursor)
             .observeOn(AndroidSchedulers.mainThread(), true)
             .takeUntil(sessionEnded(verified))
             .subscribeBy(
@@ -44,7 +47,10 @@ class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
                     when (results) {
                         TestResults.Unavailable -> view.showUnavailable()
                         TestResults.Reported -> view.finishLoading()
-                        is TestResults.FailurePage -> view.appendFailures(results.failures)
+                        is TestResults.FailurePage -> {
+                            view.appendFailures(results.failures)
+                            nextCursor = results.nextCursor
+                        }
                     }
                 },
                 onError = { view.showLoadError() }
