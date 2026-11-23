@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Looper
 import android.view.View
 import android.widget.ListView
+import android.widget.TextView
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
@@ -23,6 +24,7 @@ import okio.buffer
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -102,6 +104,56 @@ class MainActivityArtifactDownloadTest {
         }
     }
 
+    @Test
+    fun anotherJobsArtifactsCanBeSavedAfterTheDownloadSucceeds() =
+        assertAnotherJobCanSaveAfterDownload(failOnFinish = false)
+
+    @Test
+    fun anotherJobsArtifactsCanBeSavedAfterTheDownloadFails() =
+        assertAnotherJobCanSaveAfterDownload(failOnFinish = true)
+
+    private fun assertAnotherJobCanSaveAfterDownload(failOnFinish: Boolean) {
+        Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
+            val activity = controller.get()
+            val application = activity.application as ArtifactDownloadTestApplication
+            val response = HeldArtifactResponse(application.bytes, failOnFinish)
+            activity.startSaving(application, response)
+
+            try {
+                // Load the second job independently of the worker holding the download open.
+                RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                Flow.get(activity).set(ArtifactsScreen(build.copy(number = 43)))
+                shadowOf(Looper.getMainLooper()).idleFor(ScreenTransition.DURATION_MILLIS * 2, TimeUnit.MILLISECONDS)
+
+                val list = activity.findViewById<ListView>(R.id.artifact_list)
+                val status = activity.findViewById<TextView>(R.id.artifact_downloading)
+                assertEquals(View.VISIBLE, list.visibility)
+                assertEquals("other.txt", list.adapter.getItem(0))
+                assertFalse(list.isEnabled)
+                assertEquals(View.VISIBLE, status.visibility)
+                assertEquals(activity.getString(R.string.artifact_downloading_another_job), status.text)
+                list.performItemClick(View(activity), 0, 0L)
+                assertNull(shadowOf(activity).nextStartedActivityForResult)
+
+                response.finish.countDown()
+                drainWorker()
+
+                val result = activity.artifactDownloads.changes.blockingFirst() as ArtifactDownloadState.Transfer.Finished
+                val expected = if (failOnFinish) R.string.artifact_save_failed else R.string.artifact_saved
+                assertEquals(expected, result.message)
+                assertTrue(list.isEnabled)
+                assertEquals(View.GONE, status.visibility)
+                assertNull(ShadowToast.getTextOfLatestToast())
+                assertTrue(list.performItemClick(View(activity), 0, 0L))
+                val picker = shadowOf(activity).nextStartedActivityForResult
+                assertEquals(Intent.ACTION_CREATE_DOCUMENT, picker.intent.action)
+                assertEquals("other.txt", picker.intent.getStringExtra(Intent.EXTRA_TITLE))
+            } finally {
+                response.finish.countDown()
+            }
+        }
+    }
+
     private fun MainActivity.startSaving(
         application: ArtifactDownloadTestApplication,
         response: HeldArtifactResponse
@@ -133,7 +185,10 @@ class MainActivityArtifactDownloadTest {
     }
 }
 
-private class HeldArtifactResponse(private val bytes: ByteArray) {
+private class HeldArtifactResponse(
+    private val bytes: ByteArray,
+    private val failOnFinish: Boolean = false
+) {
     val started = CountDownLatch(1)
     val finish = CountDownLatch(1)
     lateinit var call: Call
@@ -149,7 +204,7 @@ private class HeldArtifactResponse(private val bytes: ByteArray) {
                     if (offset == bytes.size) return -1
                     val count = if (offset == 0) 1 else {
                         started.countDown()
-                        if (!finish.await(15, TimeUnit.SECONDS) || download.isCanceled()) {
+                        if (!finish.await(15, TimeUnit.SECONDS) || download.isCanceled() || failOnFinish) {
                             throw IOException("Response interrupted")
                         }
                         bytes.size - offset
