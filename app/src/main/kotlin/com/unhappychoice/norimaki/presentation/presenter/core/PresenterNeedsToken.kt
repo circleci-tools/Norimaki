@@ -28,9 +28,7 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
 
     override fun onLoad(savedInstanceState: Bundle?) {
         super.onLoad(savedInstanceState)
-        session.restore()
-            .subscribe(::useAccount, { goToAPITokenView() })
-            .addTo(lifecycle)
+        restoreSession()
     }
 
     final override fun dropView(view: T) {
@@ -55,6 +53,12 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
 
     protected fun sessionEnded(verified: VerifiedSession) =
         session.changes.filter { it.toNullable() !== verified }.take(1)
+
+    private fun restoreSession() {
+        session.restore()
+            .subscribe(::useAccount, { goToAPITokenView() })
+            .addTo(lifecycle)
+    }
 
     private fun useAccount(verified: VerifiedSession) {
         account = verified
