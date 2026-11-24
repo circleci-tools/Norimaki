@@ -194,6 +194,30 @@ class WorkflowPresenterTest : DescribeSpec({
             verify(exactly = 1) { client.approve("run", "request") }
         }
 
+        it("releases retained approval state once an unapproved workflow screen closes") {
+            val session = testSession(mockk())
+            val client = mockk<WorkflowClient> {
+                every { jobs(any()) } returns Single.just(listOf(hold))
+            }
+            val verified = session.restore().blockingGet()
+
+            repeat(1000) { index ->
+                val view = mockk<WorkflowView>()
+                val visited = WorkflowPresenter(WorkflowScreen("github/owner/repo", "workflow-$index", "deploy")) { client }
+                    .apply {
+                        di = DI {
+                            bind<MainActivity>() with singleton { mockk<MainActivity>() }
+                            bind<SessionService>() with singleton { session }
+                        }
+                    }
+                val visitScope = visited.attachToTestScope(view)
+                visited.dropView(view)
+                visitScope.destroy()
+            }
+
+            verified.workflowApprovalCount shouldBe 0
+        }
+
         it("retries a failed refresh without resubmitting an accepted approval") {
             val client = mockk<WorkflowClient> {
                 every { jobs("run") } returnsMany listOf(
