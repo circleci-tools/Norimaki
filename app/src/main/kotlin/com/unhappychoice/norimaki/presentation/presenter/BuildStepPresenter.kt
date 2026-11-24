@@ -67,7 +67,6 @@ class BuildStepPresenter internal constructor(
         if (!progress.complete) logSearchAvailable.value = false
         return pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
             .subscribeOnIoObserveOnUI()
-            .doOnError { canRetryStepLoad.value = true }
             .concatMap { (build, step) ->
                 view?.showStep(step)
                 progress.step = step
@@ -81,6 +80,7 @@ class BuildStepPresenter internal constructor(
                 onNext = ::appendLog,
                 onComplete = ::allowLogSearch,
                 onError = {
+                    canRetryStepLoad.value = true
                     logLoadFailed.value = true
                     allowLogSearch()
                 }
