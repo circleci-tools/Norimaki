@@ -48,8 +48,8 @@ class BuildListRefreshTest : DescribeSpec({
             val requested = mutableListOf<Int>()
 
             val updates = refreshBuildList(running, emptyList()) { build ->
-                requested.add(build.buildNum)
-                pending.getValue(build.buildNum)
+                requested.add(build.buildNum!!)
+                pending.getValue(build.buildNum!!)
             }.test()
 
             requested shouldBe (1..BUILD_DETAIL_FETCH_CONCURRENCY).toList()
