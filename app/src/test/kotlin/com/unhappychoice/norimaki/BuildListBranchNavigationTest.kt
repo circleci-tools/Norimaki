@@ -15,7 +15,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import io.reactivex.plugins.RxJavaPlugins
-import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.TestScheduler
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -31,11 +31,12 @@ import org.robolectric.annotation.Config
 @Config(application = BranchFilterTestApplication::class, sdk = [34])
 class BuildListBranchNavigationTest {
     private val branch = "release/Next"
+    private val scheduler = TestScheduler()
 
     @Before
-    fun useSynchronousRequests() {
-        RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
+    fun useControlledSchedulers() {
+        RxJavaPlugins.setIoSchedulerHandler { scheduler }
+        RxJavaPlugins.setComputationSchedulerHandler { scheduler }
     }
 
     @After
@@ -118,6 +119,11 @@ class BuildListBranchNavigationTest {
         currentBuildListView(activity).findViewById<Button>(R.id.branchFilter).text.toString()
 
     private fun finishTransition() {
-        shadowOf(Looper.getMainLooper()).idleFor(ScreenTransition.DURATION_MILLIS * 2, TimeUnit.MILLISECONDS)
+        val mainLooper = shadowOf(Looper.getMainLooper())
+        repeat(3) {
+            scheduler.triggerActions()
+            mainLooper.idle()
+        }
+        mainLooper.idleFor(ScreenTransition.DURATION_MILLIS * 2, TimeUnit.MILLISECONDS)
     }
 }
