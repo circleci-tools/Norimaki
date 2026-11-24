@@ -214,7 +214,9 @@ class WorkflowPresenterTest : DescribeSpec({
 
             presenter.refresh()
 
-            updates.values().last() shouldBe WorkflowState(listOf(resolved))
+            updates.values().last() shouldBe WorkflowState(
+                listOf(resolved), message = R.string.workflow_approval_submitted
+            )
             verify(exactly = 3) { client.jobs("run") }
             verify(exactly = 1) { client.approve("run", "request") }
         }
