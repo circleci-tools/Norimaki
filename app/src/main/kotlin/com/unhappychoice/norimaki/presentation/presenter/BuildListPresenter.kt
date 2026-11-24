@@ -13,6 +13,7 @@ import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
 import com.unhappychoice.norimaki.presentation.presenter.core.Paginatable
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
@@ -24,13 +25,16 @@ import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.instance
+import org.kodein.di.instanceOrNull
 
 class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Paginatable {
     val projectName: String by instance()
+    private val screen: BuildListScreen? by instanceOrNull()
+    private val restoredBranch get() = screen?.selectedBranch?.takeIf(String::isNotEmpty)
     private val buildList by lazy {
         BuildListRequests(
             Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
-            ::getBuildDetails, projectBuilds(branch = null)
+            ::getBuildDetails, projectBuilds(branch = restoredBranch)
         )
     }
     private var pageRequests = CompositeDisposable()
@@ -39,8 +43,8 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private var hasStartedPolling = false
 
     val canFilterByBranch get() = projectName.isNotEmpty()
-    private val branchSelection = Variable("")
-    val selectedBranch = branchSelection.asObservable()
+    private val branchSelection by lazy { Variable(restoredBranch.orEmpty()) }
+    val selectedBranch by lazy { branchSelection.asObservable() }
     var recentBranches: List<String> = emptyList()
         private set
 
@@ -75,6 +79,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
         hasStartedPolling = false
         recentBranches = emptyList()
         branchSelection.value = ""
+        screen?.selectedBranch = ""
         buildList.reset(projectBuilds(branch = null))
     }
 
@@ -91,6 +96,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
         pageRequests.clear()
         buildList.reset(projectBuilds(branch?.takeUnless(String::isEmpty)))
         branchSelection.value = selection
+        screen?.selectedBranch = selection
         buildList.start().addTo(pageRequests)
         hasStartedPolling = false
         pollingLifecycle?.let { observePolling(it) }

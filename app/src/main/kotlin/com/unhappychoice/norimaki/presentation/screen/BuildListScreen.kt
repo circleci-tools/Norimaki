@@ -6,13 +6,14 @@ import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 
-class BuildListScreen(val projectName: String) : Screen() {
+class BuildListScreen(val projectName: String, var selectedBranch: String = "") : Screen() {
     override fun getTitle(): String = if (projectName == "") "Recent Builds" else projectName
     override fun getLayoutResource() = R.layout.build_list_view
 
     override fun module(activityModule: DI) = DI {
         extend(activityModule)
         bind<String>() with singleton  { projectName }
+        bind<BuildListScreen>() with singleton { this@BuildListScreen }
     }
 
     override fun equals(other: Any?): Boolean {
