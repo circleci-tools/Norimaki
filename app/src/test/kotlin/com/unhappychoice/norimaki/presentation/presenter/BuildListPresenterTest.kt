@@ -111,9 +111,9 @@ class BuildListPresenterTest : DescribeSpec({
             every { api.pageAt(0) } returns Observable.just(listOf(main, first))
             every { api.branchPageAt(branch, 0) } returnsMany listOf(
                 Observable.just(listOf(first)),
+                Observable.just(listOf(first, older)),
                 Observable.just(listOf(latest, first))
             )
-            every { api.branchPageAt(branch, 20) } returns Observable.just(listOf(older))
             val presenter = presenter(api)
             val builds = presenter.builds.test()
             val selection = presenter.selectedBranch.test()
@@ -140,8 +140,7 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.page.value shouldBe 1
             selection.assertValues("", branch, "")
             verify(exactly = 2) { api.pageAt(0) }
-            verify(exactly = 2) { api.branchPageAt(branch, 0) }
-            verify(exactly = 1) { api.branchPageAt(branch, 20) }
+            verify(exactly = 3) { api.branchPageAt(branch, 0) }
         }
 
         it("disposes the previous poll and page when the branch changes") {
@@ -150,8 +149,7 @@ class BuildListPresenterTest : DescribeSpec({
             val stalePoll = PublishSubject.create<List<Build>>()
             val main = build(40, branchName = "main")
             val branch = "quiet/feature"
-            every { api.pageAt(0) } returnsMany listOf(Observable.just(listOf(main)), stalePoll)
-            every { api.pageAt(20) } returns stalePage
+            every { api.pageAt(0) } returnsMany listOf(Observable.just(listOf(main)), stalePage, stalePoll)
             every { api.branchPageAt(branch, 0) } returns Observable.just(emptyList())
             val presenter = presenter(api)
             val builds = presenter.builds.test()
@@ -498,8 +496,11 @@ class BuildListPresenterTest : DescribeSpec({
                     every { api.getBuild("github", "owner", "repo", number) } returns Observable.just(response)
                 }
             }
-            every { api.pageAt(0) } returns Observable.just(latest)
-            every { api.pageAt(20) } returns Observable.just(running)
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(latest),
+                Observable.just(latest + running.reversed()),
+                Observable.just(latest)
+            )
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
@@ -525,9 +526,12 @@ class BuildListPresenterTest : DescribeSpec({
             val finished = build(1)
             val unseen = build(0)
             val latePage = PublishSubject.create<List<Build>>()
-            every { api.pageAt(0) } returns Observable.just(listOf(newest))
-            every { api.pageAt(20) } returns Observable.just(listOf(running))
-            every { api.pageAt(40) } returns latePage
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(newest)),
+                Observable.just(listOf(newest, running)),
+                latePage,
+                Observable.just(listOf(newest))
+            )
             every { api.getBuild("github", "owner", "repo", 1) } returns Observable.just(finished)
             val presenter = presenter(api)
             val builds = presenter.builds.test()
@@ -539,7 +543,7 @@ class BuildListPresenterTest : DescribeSpec({
                 builds.assertValues(emptyList(), listOf(newest), listOf(newest, running))
                 presenter.getBuilds()
                 scheduler.triggerActions()
-                verify(exactly = 1) { api.pageAt(40) }
+                latePage.hasObservers() shouldBe true
 
                 startPolling(presenter)
                 advanceRefresh()
@@ -604,11 +608,11 @@ class BuildListPresenterTest : DescribeSpec({
             val firstPage = (22 downTo 3).map { build(it) }
             every { api.pageAt(0) } returnsMany listOf(
                 Observable.just(listOf(known)),
+                Observable.just(listOf(known)),
                 Observable.just(firstPage),
                 Observable.just(firstPage)
             )
             every { api.pageAt(20) } returnsMany listOf(
-                Observable.just(emptyList()),
                 Observable.error(IllegalStateException("Backfill request failed")),
                 Observable.just(listOf(missed, known))
             )
@@ -635,7 +639,7 @@ class BuildListPresenterTest : DescribeSpec({
             scheduler.triggerActions()
 
             builds.assertValues(emptyList(), listOf(known), firstPage + known, firstPage + listOf(missed, known))
-            verify(exactly = 3) { api.pageAt(20) }
+            verify(exactly = 2) { api.pageAt(20) }
             verify(exactly = 0) { api.pageAt(40) }
             presenter.page.value shouldBe 2
             presenter.hasMore.value shouldBe false
@@ -649,9 +653,9 @@ class BuildListPresenterTest : DescribeSpec({
             val newest = build(2)
             val older = build(1)
             val inFlight = PublishSubject.create<List<Build>>()
-            every { api.pageAt(0) } returns Observable.just(listOf(newest))
-            every { api.pageAt(20) } returns inFlight
-            every { api.pageAt(40) } returns Observable.just(emptyList())
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(newest)), inFlight, Observable.just(listOf(newest, older))
+            )
             val presenter = presenter(api)
             scheduler.triggerActions()
             presenter.getBuilds()
@@ -660,14 +664,15 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.dropView(mockk<BuildListView>())
 
             inFlight.hasObservers() shouldBe true
-            inFlight.onNext(listOf(older))
+            inFlight.onNext(listOf(newest, older))
             inFlight.onComplete()
             scheduler.triggerActions()
             presenter.builds.take(1).test().assertResult(listOf(newest, older))
 
             presenter.getBuilds()
             scheduler.triggerActions()
-            verify(exactly = 1) { api.pageAt(40) }
+            presenter.hasMore.value shouldBe false
+            verify(exactly = 3) { api.pageAt(0) }
         }
 
         it("cancels pagination on detach and starts a fresh list on reattach") {
@@ -676,8 +681,7 @@ class BuildListPresenterTest : DescribeSpec({
             val older = build(1)
             val inFlight = PublishSubject.create<List<Build>>()
             val view = mockk<BuildListView>()
-            every { api.pageAt(0) } returns Observable.just(listOf(newest))
-            every { api.pageAt(20) } returns inFlight
+            every { api.pageAt(0) } returnsMany listOf(Observable.just(listOf(newest)), inFlight)
             val presenter = presenter(api, view = view)
             scheduler.triggerActions()
 
@@ -699,7 +703,7 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.takeView(view)
             scheduler.triggerActions()
 
-            verify(exactly = 2) { api.pageAt(0) }
+            verify(exactly = 3) { api.pageAt(0) }
             presenter.page.value shouldBe 1
             presenter.builds.take(1).test().assertResult(listOf(refreshed))
         }
@@ -708,9 +712,9 @@ class BuildListPresenterTest : DescribeSpec({
             val api = mockk<CircleCIAPIClientV1_1>()
             val latest = build(2)
             val older = build(1)
-            every { api.pageAt(0) } returns Observable.just(listOf(latest))
-            every { api.pageAt(20) } returns Observable.just(listOf(older))
-            every { api.pageAt(40) } returns Observable.just(emptyList())
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(latest)), Observable.just(listOf(latest, older))
+            )
             val presenter = presenter(api)
             val builds = presenter.builds.test()
 
@@ -722,7 +726,7 @@ class BuildListPresenterTest : DescribeSpec({
 
             builds.values().last().toSet() shouldBe setOf(latest, older)
             presenter.hasMore.value shouldBe false
-            verify(exactly = 0) { api.pageAt(60) }
+            verify(exactly = 3) { api.pageAt(0) }
         }
 
         it("clears loaded builds and discards queued updates when the session changes") {
@@ -731,8 +735,9 @@ class BuildListPresenterTest : DescribeSpec({
             val api = mockk<CircleCIAPIClientV1_1>()
             val session = testSession(api)
             val first = build(2)
-            every { api.pageAt(0) } returns Observable.just(listOf(first))
-            every { api.pageAt(20) } returns Observable.just(listOf(build(1)))
+            every { api.pageAt(0) } returnsMany listOf(
+                Observable.just(listOf(first)), Observable.just(listOf(first, build(1)))
+            )
             val presenter = presenter(api, session = session)
             val builds = presenter.builds.test()
             scheduler.triggerActions()
@@ -752,8 +757,7 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.hasMore.value shouldBe true
             presenter.getBuilds()
             scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, TimeUnit.SECONDS)
-            verify(exactly = 1) { api.pageAt(0) }
-            verify(exactly = 1) { api.pageAt(20) }
+            verify(exactly = 2) { api.pageAt(0) }
         }
     }
 })
