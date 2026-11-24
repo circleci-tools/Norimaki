@@ -18,7 +18,8 @@ class BuildStepTest : DescribeSpec({
         end: Date? = Date(),
         isCanceled: Boolean? = null,
         isFailed: Boolean? = null,
-        isTimedout: Boolean? = null
+        isTimedout: Boolean? = null,
+        isInfrastructureFail: Boolean? = null
     ): BuildAction = mockk {
         every { runTimeMillis } returns millis
         every { step } returns stepNumber
@@ -26,6 +27,7 @@ class BuildStepTest : DescribeSpec({
         every { canceled } returns isCanceled
         every { failed } returns isFailed
         every { timedout } returns isTimedout
+        every { infrastructureFail } returns isInfrastructureFail
     }
 
     describe("BuildStep.runTime()") {
@@ -59,6 +61,15 @@ class BuildStepTest : DescribeSpec({
         it("should be red when an action failed or timed out") {
             BuildStep("test", listOf(action(isFailed = true))).statusColor() shouldBe 0xED5C5C
             BuildStep("test", listOf(action(isTimedout = true))).statusColor() shouldBe 0xED5C5C
+        }
+        it("should be red when an action is an infrastructure failure") {
+            BuildStep("test", listOf(action(isInfrastructureFail = true))).statusColor() shouldBe 0xED5C5C
+        }
+        it("should be gray when an action is canceled and infrastructure failed") {
+            BuildStep(
+                "test",
+                listOf(action(isCanceled = true, isInfrastructureFail = true))
+            ).statusColor() shouldBe 0x898989
         }
         it("should be green when every action finished") {
             BuildStep("test", listOf(action(), action())).statusColor() shouldBe 0x42C88A
