@@ -3,6 +3,10 @@ package com.unhappychoice.norimaki.presentation.screen
 import com.unhappychoice.norimaki.R
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
+import org.kodein.di.DI
+import org.kodein.di.direct
+import org.kodein.di.instance
 
 class BuildListScreenTest : DescribeSpec({
     val subject = BuildListScreen("")
@@ -17,9 +21,9 @@ class BuildListScreenTest : DescribeSpec({
             }
         }
         describe(".equals()") {
-            it("should be equal for the same project") {
-                (BuildListScreen("a/b") == BuildListScreen("a/b")) shouldBe true
-                BuildListScreen("a/b").hashCode() shouldBe BuildListScreen("a/b").hashCode()
+            it("should be equal for the same project regardless of the selected branch") {
+                (BuildListScreen("a/b") == BuildListScreen("a/b", "main")) shouldBe true
+                BuildListScreen("a/b").hashCode() shouldBe BuildListScreen("a/b", "main").hashCode()
             }
             it("should not be equal for another project") {
                 (BuildListScreen("a/b") == BuildListScreen("a/c")) shouldBe false
@@ -28,6 +32,23 @@ class BuildListScreenTest : DescribeSpec({
         describe(".getLayoutResource()") {
             it("should return view resource") {
                 subject.getLayoutResource() shouldBe R.layout.build_list_view
+            }
+        }
+        describe("selectedBranch") {
+            it("defaults to all branches") {
+                BuildListScreen("a/b").selectedBranch shouldBe ""
+            }
+            it("keeps the branch chosen after construction") {
+                val screen = BuildListScreen("a/b")
+                screen.selectedBranch = "release/Next"
+                screen.selectedBranch shouldBe "release/Next"
+            }
+        }
+        describe(".module()") {
+            it("binds itself so the presenter can read and persist the selected branch") {
+                val screen = BuildListScreen("a/b", "release/Next")
+                val dependencies = screen.module(DI {}).direct
+                dependencies.instance<BuildListScreen>() shouldBeSameInstanceAs screen
             }
         }
     }
