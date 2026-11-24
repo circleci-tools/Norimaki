@@ -43,8 +43,8 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private var hasStartedPolling = false
 
     val canFilterByBranch get() = projectName.isNotEmpty()
-    private val branchSelection = Variable(restoredBranch.orEmpty())
-    val selectedBranch = branchSelection.asObservable()
+    private val branchSelection by lazy { Variable(restoredBranch.orEmpty()) }
+    val selectedBranch by lazy { branchSelection.asObservable() }
     var recentBranches: List<String> = emptyList()
         private set
 
