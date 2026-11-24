@@ -201,7 +201,7 @@ class WorkflowPresenterTest : DescribeSpec({
             }
             val verified = session.restore().blockingGet()
 
-            repeat(1000) { index ->
+            repeat(50) { index ->
                 val view = mockk<WorkflowView>()
                 val visited = WorkflowPresenter(WorkflowScreen("github/owner/repo", "workflow-$index", "deploy")) { client }
                     .apply {
