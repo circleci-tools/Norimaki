@@ -77,8 +77,14 @@ jobs:
           name: Test release credential cleanup
           command: bash scripts/ci/test-release-credentials.sh
       - run:
+          name: Test release credential verification
+          command: bash scripts/ci/test-verify-release-credentials.sh
+      - run:
           name: Test tagged Play deployment
           command: bash scripts/ci/test-play-deploy.sh
+      - run:
+          name: Test release context restriction
+          command: bash scripts/ci/test-release-context.sh
       - run:
           name: Send coverage
           command: ./scripts/ci/send-coverage-info.sh
@@ -92,6 +98,9 @@ jobs:
       GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
     steps:
       - checkout
+      - run:
+          name: Verify release credentials
+          command: bash scripts/ci/verify-release-credentials.sh
       - run:
           name: Create release Gradle user home
           command: |
@@ -115,3 +124,4 @@ workflows:
       - deploy:
           filters: pipeline.git.tag matches /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
           requires: [test]
+          context: norimaki-release
