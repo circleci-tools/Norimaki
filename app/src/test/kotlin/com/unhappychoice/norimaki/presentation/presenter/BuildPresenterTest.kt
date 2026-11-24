@@ -121,6 +121,27 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 4) { api.getBuild("github", "owner", "repo", 123) }
         }
 
+        it("skips the automatic refresh when reopening an attached finished build but still allows manual retry") {
+            val scheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val finished = pollResult(step("https://example.com/output"), "finished")
+            initialBuild.onNext(finished)
+            initialBuild.onComplete()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            activityLifecycle.stop()
+            activityLifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            activityLifecycle.stop()
+            activityLifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            every { api.getBuild("github", "owner", "repo", 123) } returns Observable.just(finished)
+            presenter.pollBuild()
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+        }
+
         it("should wait for build details before opening test results") {
             val flow = mockk<Flow>(relaxed = true)
             val screen = slot<TestResultsScreen>()

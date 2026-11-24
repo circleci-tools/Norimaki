@@ -321,6 +321,55 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 
+    it("skips the automatic refresh when reopening a step with fully loaded logs") {
+        val expectedUrl = "https://circleci.com/output"
+        val finishedAction = action(5, Date()).apply {
+            every { outputUrl } returns expectedUrl
+        }
+        val finishedStep = BuildStep("Run tests", listOf(finishedAction))
+        val finishedBuild = build("finished", listOf(finishedStep))
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } returns Observable.just(finishedBuild)
+        }
+        val output = mockk<BuildOutputClient> {
+            every { fetchOutput(expectedUrl) } returns Observable.just("done")
+        }
+        val activity = mockk<MainActivity>()
+        val lifecycle = PollingLifecycle(activity).apply { start() }
+        val presenter = BuildStepPresenter { output }.apply {
+            di = DI {
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                bind<BuildStepId>() with singleton { BuildStepId(5) }
+                bind<MainActivity>() with singleton { activity }
+                bind<SessionService>() with singleton { testSession(api) }
+            }
+        }
+        val view = mockk<BuildStepView>(relaxUnitFun = true)
+        var scope: MortarScope? = null
+
+        try {
+            RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+
+            scope = presenter.attachToTestScope(view)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+            presenter.logString.value shouldBe "done"
+
+            lifecycle.stop()
+            lifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+
+            lifecycle.stop()
+            lifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+        } finally {
+            scope?.destroy()
+            RxAndroidPlugins.reset()
+            RxJavaPlugins.reset()
+        }
+    }
+
     listOf(false, true).forEach { outputFails ->
         it("reports the finished step output result when output fails: $outputFails") {
             val expectedUrl = "https://circleci.com/output"
