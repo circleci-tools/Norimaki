@@ -80,8 +80,45 @@ class CompletedStepLogsTest {
             .assertResult("first output", "\n[Some output could not be loaded.]\n", "last output")
     }
 
-    private fun action(path: String): BuildAction = mockk {
-        every { step } returns null
+    @Test
+    fun opensTheTappedStepWhenStepNumbersRepeat() {
+        val first = BuildStep("Run first", listOf(action("first", stepNumber = 1)))
+        val second = BuildStep("Run second", listOf(action("second", stepNumber = 1)))
+        val build = mockk<Build> { every { steps } returns listOf(first, second) }
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
+        }
+
+        mapOf(0 to "first output", 1 to "second output").forEach { (position, expectedLog) ->
+            val presenter = BuildStepPresenter(::outputClient).apply {
+                di = DI {
+                    bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                    bind<BuildStepId>() with singleton { BuildStepId(1, position) }
+                    bind<MainActivity>() with singleton {
+                        mockk<MainActivity>().also { PollingLifecycle(it).start() }
+                    }
+                    bind<SessionService>() with singleton { testSession(api) }
+                }
+            }
+            val previousIo = RxJavaPlugins.getIoSchedulerHandler()
+            val previousMain = RxAndroidPlugins.getOnMainThreadSchedulerHandler()
+            RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            var scope: MortarScope? = null
+            try {
+                scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))
+
+                assertEquals(expectedLog, presenter.logString.value)
+            } finally {
+                scope?.destroy()
+                RxAndroidPlugins.setMainThreadSchedulerHandler(previousMain)
+                RxJavaPlugins.setIoSchedulerHandler(previousIo)
+            }
+        }
+    }
+
+    private fun action(path: String, stepNumber: Int? = null): BuildAction = mockk {
+        every { step } returns stepNumber
         every { endTime } returns Date(0)
         every { outputUrl } returns "https://example.com/$path"
     }

@@ -22,8 +22,15 @@ fun BuildStep.step(): Int? = actions.firstOrNull()?.step
 fun BuildStep.isFinished() =
     actions.fold(true) { acc, action -> acc && action.endTime != null }
 
-fun List<BuildStep>.findByStepNumber(stepNumber: Int?): BuildStep? =
-    stepNumber?.let { number -> firstOrNull { it.step() == number } }
+fun List<BuildStep>.findByStepNumber(stepNumber: Int?, position: Int? = null): BuildStep? =
+    stepNumber?.let { number ->
+        val matches = withIndex().filter { it.value.step() == number }
+        when (matches.size) {
+            0 -> null
+            1 -> matches.single().value
+            else -> matches.firstOrNull { it.index == position }?.value ?: matches.first().value
+        }
+    }
 
 private fun BuildStep.isCanceled() =
     actions.fold(false) { acc, action -> acc || (action.canceled ?: false) }
