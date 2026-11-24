@@ -35,7 +35,8 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private var buildPolling: StartedPolling? = null
 
     override fun onAuthenticated() {
-        buildPolling = StartedPolling(::subscribeToBuild).also { it.observe(activity.lifecycle, bag) }
+        buildPolling = StartedPolling(shouldSkip = { build?.isFinished() == true }, subscribe = ::subscribeToBuild)
+            .also { it.observe(activity.lifecycle, bag) }
     }
 
     fun pollBuild() {
