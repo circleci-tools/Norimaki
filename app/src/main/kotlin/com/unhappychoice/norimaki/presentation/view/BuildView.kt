@@ -5,6 +5,7 @@ import android.util.AttributeSet
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -85,6 +86,9 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
         binding.testResults.isEnabled = true
         updateScreenTitle(presenter.activity, build.revisionString())
     }
+
+    internal fun isCurrentlyDisplayed(): Boolean =
+        isAttachedToWindow && (parent as? ViewGroup)?.childCount == 1
 
     override fun onDetachedFromWindow() {
         cacheClearDialog?.dismiss()
