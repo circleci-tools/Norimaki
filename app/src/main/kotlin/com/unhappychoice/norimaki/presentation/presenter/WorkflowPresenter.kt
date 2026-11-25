@@ -81,8 +81,7 @@ class WorkflowPresenter(
     fun openBuild(job: WorkflowJob) {
         if (account == null || state.value.busy) return
         val number = job.jobNumber ?: return
-        val (vcs, owner, repo) = screen.projectName.split('/')
-        goTo(activity, BuildScreen(BuildId(vcs, owner, repo, number)))
+        goTo(activity, BuildScreen(BuildId(screen.projectId, number)))
     }
 
     fun changeAPIToken() {

@@ -15,6 +15,7 @@ import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
@@ -230,7 +231,7 @@ class BuildPresenterTest : DescribeSpec({
         }
 
         it("identifies the cache project before build details load") {
-            presenter.projectName shouldBe "github/owner/repo"
+            presenter.projectId shouldBe ProjectId("github", "owner", "repo")
             verify(exactly = 0) { view.showBuild(any()) }
         }
 

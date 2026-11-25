@@ -95,7 +95,7 @@ class BuildView(context: Context, attr: AttributeSet) : BaseView<BuildView>(cont
     private fun confirmCacheClearAndRebuild() {
         if (cacheClearDialog != null) return
 
-        val message = context.getString(R.string.clear_project_cache_message, presenter.projectName)
+        val message = context.getString(R.string.clear_project_cache_message, presenter.projectId.toPathString())
         cacheClearDialog = AlertDialog.Builder(context)
             .setTitle(R.string.clear_project_cache_and_rebuild)
             .setMessage(message)
