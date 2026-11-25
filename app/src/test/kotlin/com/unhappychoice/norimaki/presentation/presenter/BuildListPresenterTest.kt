@@ -8,6 +8,7 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
@@ -61,13 +62,13 @@ class BuildListPresenterTest : DescribeSpec({
         api: CircleCIAPIClientV1_1,
         session: SessionService = testSession(api),
         view: BuildListView = mockk(),
-        projectName: String = "github/owner/repo",
+        projectId: ProjectId? = ProjectId("github", "owner", "repo"),
         screen: BuildListScreen? = null
     ) = BuildListPresenter().apply {
         di = DI {
             bind<SessionService>() with singleton { session }
             bind<MainActivity>() with singleton { activity }
-            bind<String>() with singleton { projectName }
+            if (projectId != null) bind<ProjectId>() with singleton { projectId }
             if (screen != null) bind<BuildListScreen>() with singleton { screen }
         }
         scope = attachToTestScope(view)
@@ -181,7 +182,7 @@ class BuildListPresenterTest : DescribeSpec({
         it("keeps Recent Builds scoped to all projects") {
             val api = mockk<CircleCIAPIClientV1_1>()
             every { api.getRecentBuilds(offset = 0, limit = 20) } returns Observable.just(emptyList())
-            val presenter = presenter(api, projectName = "")
+            val presenter = presenter(api, projectId = null)
             presenter.canFilterByBranch shouldBe false
             presenter.selectBranch("main")
             scheduler.triggerActions()
@@ -221,7 +222,7 @@ class BuildListPresenterTest : DescribeSpec({
             val api = mockk<CircleCIAPIClientV1_1>()
             val branch = "release/Next"
             every { api.branchPageAt(branch, 0) } returns Observable.just(emptyList())
-            val screen = BuildListScreen("github/owner/repo", branch)
+            val screen = BuildListScreen(ProjectId("github", "owner", "repo"), branch)
             val presenter = presenter(api, screen = screen)
             scheduler.triggerActions()
 
@@ -235,7 +236,7 @@ class BuildListPresenterTest : DescribeSpec({
             val branch = "release/Next"
             every { api.pageAt(0) } returns Observable.just(emptyList())
             every { api.branchPageAt(branch, 0) } returns Observable.just(emptyList())
-            val screen = BuildListScreen("github/owner/repo")
+            val screen = BuildListScreen(ProjectId("github", "owner", "repo"))
             val presenter = presenter(api, screen = screen)
             scheduler.triggerActions()
 

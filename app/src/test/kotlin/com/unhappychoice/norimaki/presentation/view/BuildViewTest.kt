@@ -12,6 +12,7 @@ import androidx.appcompat.app.ActionBar
 import androidx.appcompat.app.AlertDialog
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.MainActivity
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.presentation.presenter.BuildPresenter
@@ -40,7 +41,7 @@ class BuildViewTest {
     private val presenter = mockk<BuildPresenter>(relaxUnitFun = true) {
         every { hasWorkflow() } returns false
         every { steps } returns Variable(emptyList())
-        every { projectName } returns "github/owner/repo"
+        every { projectId } returns ProjectId("github", "owner", "repo")
         every { rebuildFailed } returns Variable(false)
         every { buildLoadFailed } returns Variable(false)
     }
