@@ -4,6 +4,10 @@ import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 
 data class BuildId(val vcsType: String, val owner: String, val repository: String, val number: Int) {
+    constructor(projectId: ProjectId, number: Int) : this(projectId.vcsType, projectId.owner, projectId.repository, number)
+
+    val projectId: ProjectId get() = ProjectId(vcsType, owner, repository)
+
     fun load(api: CircleCIAPIClientV1_1) = api.getBuild(vcsType, owner, repository, number)
 
     companion object {

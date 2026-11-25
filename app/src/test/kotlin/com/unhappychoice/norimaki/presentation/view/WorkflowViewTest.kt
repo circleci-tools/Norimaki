@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.menu.MenuBuilder
 import com.unhappychoice.norimaki.R
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.presentation.presenter.WorkflowPresenter
 import com.unhappychoice.norimaki.presentation.presenter.WorkflowState
@@ -114,7 +115,7 @@ class WorkflowViewTest {
     fun identifiesTheRunAndOnlyApprovesAfterConfirmation() {
         val hold = WorkflowJob("hold-job", "release", "approval", "on_hold", null, "approval-id")
         val presenter = mockk<WorkflowPresenter>(relaxUnitFun = true) {
-            every { screen } returns WorkflowScreen("github/owner/repo", "workflow-run-id", "deploy")
+            every { screen } returns WorkflowScreen(ProjectId("github", "owner", "repo"), "workflow-run-id", "deploy")
             every { updates } returns Observable.just(WorkflowState(listOf(hold)))
             every { canApprove(hold) } returns true
         }

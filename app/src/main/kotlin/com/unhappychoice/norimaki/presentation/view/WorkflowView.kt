@@ -65,7 +65,7 @@ class WorkflowView(context: Context, attr: AttributeSet) : BaseView<WorkflowView
         confirmation = AlertDialog.Builder(context)
             .setTitle(R.string.workflow_approve_title)
             .setMessage(resources.getString(
-                R.string.workflow_approve_confirmation, job.name, screen.projectName, screen.getTitle(), screen.workflowId
+                R.string.workflow_approve_confirmation, job.name, screen.projectId.toPathString(), screen.getTitle(), screen.workflowId
             ))
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.workflow_approve) { _, _ -> presenter.approve(job) }

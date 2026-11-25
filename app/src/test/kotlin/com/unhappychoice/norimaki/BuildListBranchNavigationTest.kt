@@ -4,6 +4,7 @@ import android.os.Looper
 import android.widget.Button
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
 import com.unhappychoice.norimaki.presentation.presenter.BUILD_LIST_PAGE_SIZE
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
@@ -49,7 +50,7 @@ class BuildListBranchNavigationTest {
         Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
             val activity = controller.get()
             val app = activity.application as BranchFilterTestApplication
-            Flow.get(activity).set(BuildListScreen("github/owner/repo"))
+            Flow.get(activity).set(BuildListScreen(ProjectId("github", "owner", "repo")))
             finishTransition()
 
             currentBuildListView(activity).presenter.selectBranch(branch)
@@ -70,7 +71,7 @@ class BuildListBranchNavigationTest {
             activity.onBackPressedDispatcher.onBackPressed()
             finishTransition()
 
-            assertEquals(BuildListScreen("github/owner/repo"), Flow.get(activity).history.top<Any>())
+            assertEquals(BuildListScreen(ProjectId("github", "owner", "repo")), Flow.get(activity).history.top<Any>())
             assertEquals("Branch: $branch", branchFilterText(activity))
             verify(exactly = 1) {
                 app.api.getBranchBuilds(
@@ -92,7 +93,7 @@ class BuildListBranchNavigationTest {
         Robolectric.buildActivity(MainActivity::class.java).setup().use { controller ->
             val activity = controller.get()
             val app = activity.application as BranchFilterTestApplication
-            Flow.get(activity).set(BuildListScreen("github/owner/other-repo"))
+            Flow.get(activity).set(BuildListScreen(ProjectId("github", "owner", "other-repo")))
             finishTransition()
 
             assertEquals("Branch: All branches", branchFilterText(activity))

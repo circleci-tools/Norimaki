@@ -4,8 +4,9 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.model.isFinished
-import com.unhappychoice.norimaki.domain.model.projectName
+import com.unhappychoice.norimaki.domain.model.projectId
 import com.unhappychoice.norimaki.extension.*
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.presenter.core.StartedPolling
@@ -26,8 +27,8 @@ import org.kodein.di.instance
 class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private val buildId: BuildId by instance()
     private var build: Build? = null
-    val projectName: String
-        get() = with(buildId) { "$vcsType/$owner/$repository" }
+    val projectId: ProjectId
+        get() = buildId.projectId
     val steps = Variable<List<BuildStep>>(listOf())
     val buildLoadFailed = Variable(false)
     val rebuildFailed = Variable(false)
@@ -86,7 +87,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     fun goToWorkflowScreen() {
         val build = build ?: return
         val workflowId = build.nonBlankWorkflowId ?: return
-        goTo(activity, WorkflowScreen(build.projectName(), workflowId, build.workflows?.workflowName ?: "Workflow"))
+        goTo(activity, WorkflowScreen(build.projectId(), workflowId, build.workflows?.workflowName ?: "Workflow"))
     }
 
     fun rebuild() = submitRebuild(clearCache = false)
