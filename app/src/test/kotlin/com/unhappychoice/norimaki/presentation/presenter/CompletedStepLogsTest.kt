@@ -73,7 +73,7 @@ class CompletedStepLogsTest {
 
     @Test
     fun returnsSuccessfulDownloadsAroundAnHttpFailure() {
-        val urls = listOf("first", "failed", "last").map { "https://example.com/$it" }
+        val urls = listOf("first", "failed", "last").map { "https://circleci.com/$it" }
 
         completedActionLogs(urls, fetchOutput = outputClient("token")::fetchOutput)
             .test()
@@ -83,7 +83,7 @@ class CompletedStepLogsTest {
     private fun action(path: String): BuildAction = mockk {
         every { step } returns null
         every { endTime } returns Date(0)
-        every { outputUrl } returns "https://example.com/$path"
+        every { outputUrl } returns "https://circleci.com/$path"
     }
 
     private fun outputClient(token: String): BuildOutputClient {
