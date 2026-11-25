@@ -113,8 +113,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         get() = workflows?.workflowId?.takeUnless { it.isBlank() }
 
     private fun goBackFrom(origin: BuildView) {
-        val container = activity.binding.containerView
-        if (origin.isAttachedToWindow && container.childCount == 1 && container.getChildAt(0) === origin) {
+        if (origin.isCurrentlyDisplayed()) {
             goBack(activity)
         }
     }
