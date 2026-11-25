@@ -22,6 +22,7 @@ CircleCI runs the same unit tests with coverage. To reproduce that part of CI lo
 
 ```sh
 ./gradlew jacoco
+python3 scripts/ci/test-check-unit-test-results.py
 python3 scripts/ci/check-unit-test-results.py
 python3 scripts/ci/test-check-line-coverage.py
 python3 scripts/ci/check-line-coverage.py app/build/reports/coverage/test/debug/report.xml 89
