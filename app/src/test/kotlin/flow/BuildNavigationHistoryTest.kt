@@ -79,10 +79,12 @@ class BuildNavigationHistoryTest : DescribeSpec({
             val savedStep = gson.toJson(build.steps!![1])
             val savedBuildWithoutSteps = gson.toJson(build.copy(steps = null))
             restore(keys[0], """{"${BuildScreen::class.java.name}":{"build":$savedBuild}}""") shouldBe keys[0]
-            restore(
+            val restoredStep = restore(
                 keys[1],
                 """{"${BuildStepScreen::class.java.name}":{"build":$savedBuildWithoutSteps,"buildStep":$savedStep}}"""
-            ) shouldBe keys[1]
+            ) as BuildStepScreen
+            restoredStep.buildId shouldBe (keys[1] as BuildStepScreen).buildId
+            restoredStep.stepId.resolve(build.steps!!) shouldBe build.steps!![1]
         }
 
         it("returns to the build list when a legacy route has an incomplete build identifier") {

@@ -52,7 +52,7 @@ class BuildStepAdapterTest {
             requireNotNull(rows.findViewHolderForAdapterPosition(0)).itemView.performClick()
             adapter.onViewRecycled(holder)
             holder.itemView.performClick()
-            selection.assertValues(BuildStepId(5), BuildStepId(null, position = 2))
+            selection.assertValues(BuildStepId(5, position = 1), BuildStepId(null, position = 2))
         }
     }
 
