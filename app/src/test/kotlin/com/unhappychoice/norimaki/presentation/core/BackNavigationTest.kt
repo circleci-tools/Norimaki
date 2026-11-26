@@ -74,7 +74,7 @@ private class BackNavigationFixture {
         }
     )
     val flow = mockk<Flow> {
-        every { history } returns History.single(BuildListScreen("")).buildUpon().push(APITokenScreen()).build()
+        every { history } returns History.single(BuildListScreen(null)).buildUpon().push(APITokenScreen()).build()
         every { goBack() } answers {
             session.restore().blockingGet()
             true

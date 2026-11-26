@@ -228,7 +228,7 @@ class MainActivity : AppCompatActivity() {
     private fun getFlowContext(baseContext: Context): Context =
         Flow.configure(baseContext, this)
             .dispatcher(KeyDispatcher.configure(this, ScreenChanger(this)).build())
-            .defaultKey(BuildListScreen(""))
+            .defaultKey(BuildListScreen(null))
             .keyParceler(GsonParceler())
             .install()
 

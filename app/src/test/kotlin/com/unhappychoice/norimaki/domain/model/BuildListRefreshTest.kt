@@ -41,6 +41,38 @@ class BuildListRefreshTest : DescribeSpec({
             pending.onComplete()
             updates.assertResult(latest, listOf(firstFinished, lastFinished))
         }
+
+        it("runs detail requests concurrently up to the configured limit and batches successes around a failure") {
+            val running = (1..5).map { build(it, "running") }
+            val pending = (1..5).associateWith { PublishSubject.create<Build>() }
+            val requested = mutableListOf<Int>()
+
+            val updates = refreshBuildList(running, emptyList()) { build ->
+                requested.add(build.buildNum!!)
+                pending.getValue(build.buildNum!!)
+            }.test()
+
+            requested shouldBe (1..BUILD_DETAIL_FETCH_CONCURRENCY).toList()
+
+            val finished = (1..5).associateWith { build(it, "finished", "success") }
+            pending.getValue(1).onNext(finished.getValue(1))
+            pending.getValue(1).onComplete()
+
+            requested shouldBe (1..5).toList()
+
+            pending.getValue(2).onError(IllegalStateException())
+            pending.getValue(3).onNext(finished.getValue(3))
+            pending.getValue(3).onComplete()
+            pending.getValue(4).onNext(finished.getValue(4))
+            pending.getValue(4).onComplete()
+            pending.getValue(5).onNext(finished.getValue(5))
+            pending.getValue(5).onComplete()
+
+            updates.assertResult(
+                emptyList(),
+                listOf(finished.getValue(1), finished.getValue(3), finished.getValue(4), finished.getValue(5))
+            )
+        }
     }
 })
 

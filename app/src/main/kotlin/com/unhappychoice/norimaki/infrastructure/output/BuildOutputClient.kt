@@ -28,11 +28,27 @@ class BuildOutputClient(
 ) {
     private val rawClient = client.newBuilder().followRedirects(false).build()
 
-    fun fetchOutput(outputUrl: String): Observable<String> =
-        execute({ client.newCall(Request.Builder().url(outputUrl).build()) }) { response ->
-            if (!response.isSuccessful) throw IOException("Action output request failed with HTTP ${response.code}")
-            completedOutput(response.body)
-        }
+    fun fetchOutput(outputUrl: String): Observable<String> = Observable.defer {
+        val url = outputUrl.toHttpUrl()
+        require(url.isCircleCiOrigin()) { "Action output requests require the CircleCI HTTPS origin" }
+        fetchOutput(url, 0)
+    }
+
+    private fun fetchOutput(url: HttpUrl, redirects: Int): Observable<String> =
+        execute({ rawClient.newCall(Request.Builder().url(url).build()) }) { response ->
+            val target = response.rawRedirectTarget()
+            when {
+                target == null -> {
+                    if (!response.isSuccessful) {
+                        throw IOException("Action output request failed with HTTP ${response.code}")
+                    }
+                    Observable.just(completedOutput(response.body))
+                }
+                !target.isCircleCiOrigin() || redirects == MAX_RAW_REDIRECTS ->
+                    throw IOException("Action output redirected to an untrusted host: $target")
+                else -> fetchOutput(target, redirects + 1)
+            }
+        }.flatMap { it }
 
     fun fetchRawOutput(rawOutputUrl: String, offset: Long): Observable<RawOutputChunk> =
         fetchRawResponse(rawOutputUrl, offset).map { it.chunk }

@@ -55,6 +55,7 @@ Set `CODECOV_TOKEN` in the CircleCI project environment variables. The test job 
 
 ## Release checklist
 
+- Add an entry to [CHANGELOG.md](CHANGELOG.md) for the new version before tagging it.
 - When upgrading the Gradle Wrapper, update `distributionSha256Sum` in `gradle/wrapper/gradle-wrapper.properties` with the [official SHA-256 checksum](https://gradle.org/release-checksums/) for the exact distribution in `distributionUrl`.
 - When updating `versionName` in `app/build.gradle`, update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before tagging it.
 - Before pushing the tag, create a [CircleCI context](https://circleci.com/docs/guides/security/contexts/) named `norimaki-release`, restrict it to this project and to the maintainers authorized to cut a release, and set these environment variables on that context:
