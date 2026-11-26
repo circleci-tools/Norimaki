@@ -125,6 +125,41 @@ class BuildOutputClientTest : DescribeSpec({
                 .assertError { it is IOException && it.message == "Action output request failed with HTTP 503" }
                 .assertNoValues()
         }
+
+        it("should reject an untrusted initial URL before making a request") {
+            val client = outputClient { error("Unexpected action output request") }
+
+            client.fetchOutput("https://example.com/log").test()
+                .assertFailure(IllegalArgumentException::class.java)
+        }
+
+        it("should follow a same-origin redirect") {
+            val requests = mutableListOf<Request>()
+            val body = """[{"message":"complete"}]"""
+            val client = outputClient { request ->
+                requests.add(request)
+                when (request.url.encodedPath) {
+                    "/log" -> redirect(request, "/next")
+                    else -> response(request, 200, body)
+                }
+            }
+
+            client.fetchOutput(url).test().assertResult("complete")
+            requests.map { it.url.toString() } shouldBe listOf(url, "https://circleci.com/next")
+        }
+
+        listOf("https://example.com/log", "http://circleci.com/log", "https://circleci.com:8443/log").forEach { target ->
+            it("should reject a redirect to $target instead of following it") {
+                val requests = mutableListOf<Request>()
+                val client = outputClient { request ->
+                    requests.add(request)
+                    redirect(request, target)
+                }
+
+                client.fetchOutput(url).test().assertFailure(IOException::class.java)
+                requests.map { it.url.toString() } shouldBe listOf(url)
+            }
+        }
     }
 
     describe("fetchFinalRawOutput()") {

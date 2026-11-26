@@ -30,6 +30,6 @@ class APITokenPresenter : Presenter<APITokenView>() {
 
     fun goToBuildList() {
         model.reset()
-        Flow.get(activity).replaceHistory(BuildListScreen(""), Direction.REPLACE)
+        Flow.get(activity).replaceHistory(BuildListScreen(null), Direction.REPLACE)
     }
 }

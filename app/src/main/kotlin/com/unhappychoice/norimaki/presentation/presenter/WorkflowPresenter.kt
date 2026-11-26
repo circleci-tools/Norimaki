@@ -3,6 +3,7 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
+import com.unhappychoice.norimaki.domain.service.VerifiedSession
 import com.unhappychoice.norimaki.domain.service.WorkflowApprovalOutcome
 import com.unhappychoice.norimaki.domain.service.WorkflowApprovals
 import com.unhappychoice.norimaki.extension.Variable
@@ -24,6 +25,7 @@ class WorkflowPresenter(
     private val createClient: (String) -> WorkflowClient = { WorkflowClient(it) }
 ) : PresenterNeedsToken<WorkflowView>() {
     private var approvals: WorkflowApprovals? = null
+    private var approvalsSession: VerifiedSession? = null
     private lateinit var client: WorkflowClient
     private lateinit var jobsRequest: SerialDisposable
     private val state = Variable(WorkflowState())
@@ -31,6 +33,7 @@ class WorkflowPresenter(
 
     override fun onAuthenticated() {
         val verified = account ?: return
+        approvalsSession = verified
         val workflowApprovals = verified.workflowApprovals(screen.workflowId)
         approvals = workflowApprovals
         client = createClient(verified.token)
@@ -50,8 +53,13 @@ class WorkflowPresenter(
     }
 
     override fun onSessionEnded() {
+        approvalsSession?.releaseWorkflowApprovals(screen.workflowId)
         approvals = null
         state.value = WorkflowState()
+    }
+
+    override fun onViewDropped() {
+        approvalsSession?.releaseWorkflowApprovals(screen.workflowId)
     }
 
     fun refresh() {
@@ -73,8 +81,7 @@ class WorkflowPresenter(
     fun openBuild(job: WorkflowJob) {
         if (account == null || state.value.busy) return
         val number = job.jobNumber ?: return
-        val (vcs, owner, repo) = screen.projectName.split('/')
-        goTo(activity, BuildScreen(BuildId(vcs, owner, repo, number)))
+        goTo(activity, BuildScreen(BuildId(screen.projectId, number)))
     }
 
     fun changeAPIToken() {
