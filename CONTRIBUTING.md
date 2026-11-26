@@ -30,6 +30,15 @@ python3 scripts/ci/check-line-coverage.py app/build/reports/coverage/test/debug/
 
 The CircleCI test job reports overall line coverage and requires at least 89%.
 
+`scripts/test-release-badge.py` checks that the README version badge and its link match the
+latest stable GitHub release. It calls the GitHub API and Shields.io over the network, so it is
+not wired into CircleCI and must be run manually whenever you edit the badge markup in
+`README.md` or the release process it points at.
+
+```sh
+python3 scripts/test-release-badge.py
+```
+
 ## Open a pull request
 
 1. Create a branch in your fork and keep the change focused on one issue or feature.
