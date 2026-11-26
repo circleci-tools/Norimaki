@@ -28,4 +28,6 @@ private fun BuildStep.isCanceled() =
     actions.fold(false) { acc, action -> acc || (action.canceled ?: false) }
 
 private fun BuildStep.isFailed() =
-    actions.fold(false) { acc, action -> acc || (action.failed ?: false) || (action.timedout ?: false) }
+    actions.fold(false) { acc, action ->
+        acc || (action.failed ?: false) || (action.timedout ?: false) || (action.infrastructureFail ?: false)
+    }
