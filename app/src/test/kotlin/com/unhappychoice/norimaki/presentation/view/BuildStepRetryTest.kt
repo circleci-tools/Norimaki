@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.view.View
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
@@ -89,18 +90,18 @@ class BuildStepRetryTest {
                 })
                 presenter.di = view.di
                 container.addView(view)
-                val output = view.findViewById<TextView>(R.id.logText)
+                val output = view.findViewById<RecyclerView>(R.id.logLines)
                 val retry = view.findViewById<View>(R.id.retryStepLoad)
                 val error = view.findViewById<View>(R.id.logLoadError)
 
                 scheduler.triggerActions()
-                assertEquals("live", output.text.toString())
+                assertEquals("live", lineText(output))
                 assertEquals(View.GONE, retry.visibility)
 
                 nextBuild = finishedBuild
                 scheduler.advanceTimeBy(BuildPresenter.BUILD_POLLING_SECONDS + 2, SECONDS)
                 assertEquals(listOf("bytes=4-", "bytes=9-", "bytes=9-", "bytes=9-"), finalRanges)
-                assertEquals("live part", output.text.toString())
+                assertEquals("live part", lineText(output))
                 assertEquals(View.VISIBLE, error.visibility)
                 assertEquals(View.VISIBLE, retry.visibility)
 
@@ -108,7 +109,7 @@ class BuildStepRetryTest {
                 assertTrue(retry.performClick())
                 scheduler.triggerActions()
                 assertEquals(listOf("bytes=4-", "bytes=9-", "bytes=9-", "bytes=9-", "bytes=9-"), finalRanges)
-                assertEquals("live part end", output.text.toString())
+                assertEquals("live part end", lineText(output))
                 assertEquals(View.GONE, error.visibility)
                 assertEquals(View.GONE, retry.visibility)
             }
@@ -116,6 +117,14 @@ class BuildStepRetryTest {
             RxAndroidPlugins.reset()
             RxJavaPlugins.reset()
         }
+    }
+
+    private fun lineText(output: RecyclerView): String {
+        val width = View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.EXACTLY)
+        val height = View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY)
+        output.measure(width, height)
+        output.layout(0, 0, 480, 320)
+        return (output.findViewHolderForAdapterPosition(0)?.itemView as? TextView)?.text.toString()
     }
 
     private fun build(finished: Boolean): Build {
