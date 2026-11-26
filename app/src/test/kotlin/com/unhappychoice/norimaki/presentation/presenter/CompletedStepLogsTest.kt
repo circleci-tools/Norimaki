@@ -126,7 +126,7 @@ class CompletedStepLogsTest {
         }
 
         mapOf(0 to "first output", 1 to "second output").forEach { (position, expectedLog) ->
-            val presenter = BuildStepPresenter(::outputClient).apply {
+            val presenter = BuildStepPresenter(createOutputClient = ::outputClient).apply {
                 di = DI {
                     bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                     bind<BuildStepId>() with singleton { BuildStepId(1, position) }
@@ -144,7 +144,10 @@ class CompletedStepLogsTest {
             try {
                 scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))
 
-                assertEquals(expectedLog, presenter.logString.value)
+                assertEquals(
+                    listOf(expectedLog),
+                    (0 until presenter.log.lineCount).map { line -> presenter.log[line].joinToString("") { it.text } }
+                )
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.setMainThreadSchedulerHandler(previousMain)
