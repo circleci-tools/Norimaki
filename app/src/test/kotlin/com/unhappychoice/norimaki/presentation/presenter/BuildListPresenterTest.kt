@@ -12,6 +12,7 @@ import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
+import com.unhappychoice.norimaki.presentation.screen.FlakyTestsScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
@@ -501,6 +502,44 @@ class BuildListPresenterTest : DescribeSpec({
 
                 verify(exactly = 1) { flow.set(any()) }
                 verify { flow.set(BuildScreen(BuildId("github", "owner", "repo", 42))) }
+            } finally {
+                unmockkStatic(Flow::class)
+            }
+        }
+    }
+
+    describe("flaky tests navigation") {
+        it("opens the project's flaky tests screen when a session is active") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            val session = testSession(api)
+            val presenter = presenter(api, session = session)
+            val flow = mockk<Flow>(relaxed = true)
+
+            mockkStatic(Flow::class)
+            try {
+                every { Flow.get(activity) } returns flow
+                presenter.goToFlakyTests()
+
+                verify(exactly = 1) { flow.set(any()) }
+                verify { flow.set(FlakyTestsScreen(ProjectId("github", "owner", "repo"))) }
+            } finally {
+                unmockkStatic(Flow::class)
+            }
+        }
+
+        it("does nothing for the aggregated Recent Builds feed which has no project") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            every { api.getRecentBuilds(offset = 0, limit = 20) } returns Observable.just(emptyList())
+            val presenter = presenter(api, projectId = null)
+            val flow = mockk<Flow>(relaxed = true)
+
+            mockkStatic(Flow::class)
+            try {
+                every { Flow.get(activity) } returns flow
+                presenter.goToFlakyTests()
+
+                verify(exactly = 0) { flow.set(any()) }
             } finally {
                 unmockkStatic(Flow::class)
             }

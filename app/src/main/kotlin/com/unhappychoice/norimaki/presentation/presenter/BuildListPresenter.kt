@@ -16,6 +16,7 @@ import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToke
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
+import com.unhappychoice.norimaki.presentation.screen.FlakyTestsScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
@@ -151,6 +152,12 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
 
     fun changeAPIToken() {
         goTo(activity, APITokenScreen())
+    }
+
+    fun goToFlakyTests() {
+        val project = projectId ?: return
+        if (account == null) return
+        goTo(activity, FlakyTestsScreen(project))
     }
 
     internal fun getBuildDetails(build: Build): Observable<Build> {
