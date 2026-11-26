@@ -42,6 +42,7 @@ class BuildPresenterTest : DescribeSpec({
     lateinit var initialBuild: PublishSubject<Build>
     lateinit var retry: PublishSubject<Build>
     lateinit var deleteCache: PublishSubject<Unit>
+    lateinit var cancelBuild: PublishSubject<Build>
 
     fun createPresenter(number: Int = 123) = BuildPresenter().apply {
         di = DI {
@@ -59,10 +60,12 @@ class BuildPresenterTest : DescribeSpec({
         initialBuild = PublishSubject.create()
         retry = PublishSubject.create()
         deleteCache = PublishSubject.create()
+        cancelBuild = PublishSubject.create()
         api = mockk {
             every { getBuild("github", "owner", "repo", 123) } returns initialBuild
             every { retryBuild("github", "owner", "repo", 123) } answers { retry }
             every { deleteCache("github", "owner", "repo") } answers { deleteCache }
+            every { cancelBuild("github", "owner", "repo", 123) } answers { cancelBuild }
         }
         session = testSession(api)
         activity = mockk()
@@ -349,6 +352,63 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.retryBuild(any(), any(), any(), any()) }
         }
     }
+
+    describe("cancel submissions") {
+        it("hides the cancel action until the build loads as active") {
+            presenter.isActive() shouldBe false
+
+            val active = pollResult(step("https://example.com/output"), buildStatus = "running")
+            initialBuild.onNext(active)
+            presenter.isActive() shouldBe true
+
+            val finished = pollResult(step("https://example.com/output"), buildStatus = "success")
+            initialBuild.onNext(finished)
+            presenter.isActive() shouldBe false
+        }
+
+        it("cancels the running build and refreshes it on success") {
+            presenter.cancel()
+            cancelBuild.hasObservers() shouldBe true
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            cancelBuild.onNext(mockk())
+            cancelBuild.onComplete()
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+            presenter.cancelFailed.value shouldBe false
+        }
+
+        it("blocks duplicate submissions and reports failure") {
+            presenter.cancel()
+            presenter.cancel()
+
+            verify(exactly = 1) { api.cancelBuild(any(), any(), any(), any()) }
+
+            cancelBuild.onError(IllegalStateException("Cancel failed"))
+            presenter.cancelFailed.value shouldBe true
+
+            cancelBuild = PublishSubject.create()
+            presenter.cancel()
+            presenter.cancelFailed.value shouldBe false
+            verify(exactly = 2) { api.cancelBuild(any(), any(), any(), any()) }
+        }
+
+        it("does not submit a cancel after the view detaches") {
+            presenter.dropView(view)
+
+            presenter.cancel()
+
+            verify(exactly = 0) { api.cancelBuild(any(), any(), any(), any()) }
+            verify { activity wasNot Called }
+        }
+
+        it("blocks cancellation when the session changes") {
+            session.replace("replacement-token").test().assertComplete()
+
+            presenter.cancel()
+
+            verify(exactly = 0) { api.cancelBuild(any(), any(), any(), any()) }
+        }
+    }
 })
 
 class BuildPresenterWorkflowTest : DescribeSpec({
@@ -516,8 +576,9 @@ private fun step(outputUrl: String): BuildStep = GsonBuilder()
         BuildStep::class.java
     )
 
-private fun pollResult(step: BuildStep, state: String = "running"): Build = mockk {
+private fun pollResult(step: BuildStep, state: String = "running", buildStatus: String = "running"): Build = mockk {
     every { lifecycle } returns state
+    every { status } returns buildStatus
     every { steps } returns listOf(step)
     every { workflows } returns null
 }

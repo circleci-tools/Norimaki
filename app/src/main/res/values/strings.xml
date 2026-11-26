@@ -40,6 +40,8 @@
     <string name="artifact_saved">Artifact saved.</string>
     <string name="artifact_save_failed">Could not save the artifact.</string>
     <string name="build_rebuild_error">Could not rebuild. Try again.</string>
+    <string name="cancel_build">Cancel build</string>
+    <string name="build_cancel_error">Could not cancel the build. Try again.</string>
     <string name="build_list_all_branches">All branches</string>
     <string name="build_list_branch_filter">Branch: %1$s</string>
     <string name="build_list_filter_by_branch">Filter by branch</string>

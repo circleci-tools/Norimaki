@@ -33,6 +33,19 @@ class VerifiedSession(
             .doFinally(release)
     }
 
+    internal fun startCancel(buildId: BuildId, cancel: Observable<*>): Observable<Build>? {
+        if (!pendingCancels.add(buildId)) return null
+        val release: () -> Unit = { pendingCancels.remove(buildId) }
+
+        return Observable.defer {
+            client.cancelBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
+        }
+            .subscribeOn(Schedulers.io())
+            .takeUntil(cancel)
+            .doOnError { it.printStackTrace() }
+            .doFinally(release)
+    }
+
     internal fun workflowApprovals(workflowId: String): WorkflowApprovals =
         approvals.getOrPut(workflowId, ::WorkflowApprovals)
 
@@ -44,6 +57,7 @@ class VerifiedSession(
 
     private val approvals = ConcurrentHashMap<String, WorkflowApprovals>()
     private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
+    private val pendingCancels = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
 }
 
 class SessionService(
