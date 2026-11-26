@@ -54,12 +54,19 @@ Kodein modules are layered, matching the Mortar scopes:
   app-wide singletons: `SessionService`, `EventBusService`, `ArtifactDownloader`, and a shared
   `Gson` instance configured for the CircleCI API's JSON conventions.
 - `activityModule` (`di/ActivityModule.kt`), built once in `MainActivity` and extending the
-  application module, binds the activity instance and one presenter instance per screen type
-  (singleton for `APITokenPresenter`, provider for the rest, so each navigation gets a fresh
-  presenter bound to the current screen's arguments).
+  application module, binds the activity instance and most presenters (singleton for
+  `APITokenPresenter`, provider for the rest, so each navigation gets a fresh presenter). Presenters
+  bound here that need the current screen's arguments (for example `BuildPresenter`'s `BuildId`)
+  read them with `by instance()`, which resolves against the screen module below even though the
+  `bind<...>()` call itself lives in `activityModule`.
 - Each `Screen.module()` extends the activity module with screen-scoped bindings, most often the
-  screen's own arguments (project name, build ID, workflow ID, ...) bound via `instance()` so the
-  presenter can read them with `by instance()`.
+  screen's own arguments (project name, build ID, workflow ID, ...) bound via `instance()`.
+- A couple of presenters are bound in their own `Screen.module()` instead of `activityModule`:
+  `WorkflowScreen` binds `WorkflowPresenter` there because the presenter's constructor takes the
+  screen instance itself (`WorkflowPresenter(this@WorkflowScreen)`), which only `this@WorkflowScreen`
+  can supply; `TestResultsScreen` binds `TestResultsPresenter` the same way even though it only
+  needs `BuildId` via `by instance()`. When adding a new presenter, bind it in `activityModule`
+  unless it needs the screen instance itself, in which case bind it in that screen's `module()`.
 
 ## Session and authentication
 
