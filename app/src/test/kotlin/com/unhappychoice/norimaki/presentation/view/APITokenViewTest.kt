@@ -54,7 +54,7 @@ class APITokenViewTest {
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             val activity = controller.setup().get()
             val flow = Flow.get(activity)
-            assertEquals(BuildListScreen(""), flow.history.top<Any>())
+            assertEquals(BuildListScreen(null), flow.history.top<Any>())
             flow.set(APITokenScreen())
             shadowOf(Looper.getMainLooper()).idle()
             val field = activity.findViewById<EditText>(R.id.accessTokenTextView)

@@ -1,9 +1,5 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
-import android.view.View
-import android.widget.FrameLayout
-import androidx.appcompat.widget.Toolbar
-import androidx.drawerlayout.widget.DrawerLayout
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
@@ -11,16 +7,14 @@ import com.github.unhappychoice.circleci.v1.response.Workflow
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
-import com.unhappychoice.norimaki.R
-import com.unhappychoice.norimaki.databinding.ActivityMainBinding
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.BuildView
-import com.unhappychoice.norimaki.presentation.view.NavigationView
 import flow.Flow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -121,6 +115,27 @@ class BuildPresenterTest : DescribeSpec({
             verify(exactly = 4) { api.getBuild("github", "owner", "repo", 123) }
         }
 
+        it("skips the automatic refresh when reopening an attached finished build but still allows manual retry") {
+            val scheduler = TestScheduler()
+            RxJavaPlugins.setComputationSchedulerHandler { scheduler }
+            val finished = pollResult(step("https://example.com/output"), "finished")
+            initialBuild.onNext(finished)
+            initialBuild.onComplete()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            activityLifecycle.stop()
+            activityLifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            activityLifecycle.stop()
+            activityLifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 123) }
+
+            every { api.getBuild("github", "owner", "repo", 123) } returns Observable.just(finished)
+            presenter.pollBuild()
+            verify(exactly = 2) { api.getBuild("github", "owner", "repo", 123) }
+        }
+
         it("should wait for build details before opening test results") {
             val flow = mockk<Flow>(relaxed = true)
             val screen = slot<TestResultsScreen>()
@@ -173,11 +188,7 @@ class BuildPresenterTest : DescribeSpec({
             "keeps the workflow screen open while the originating build is still attached" to true
         ).forEach { (description, opensWorkflow) ->
             it(description) {
-                val container = mockk<FrameLayout>()
-                every { container.childCount } returns 1
-                every { container.getChildAt(0) } returns view
-                every { activity.binding } returns bindingWithContainer(container)
-                every { view.isAttachedToWindow } returns true
+                every { view.isCurrentlyDisplayed() } returns true
                 val flow = mockk<Flow>(relaxed = true)
 
                 mockkStatic(Flow::class)
@@ -186,7 +197,7 @@ class BuildPresenterTest : DescribeSpec({
                     presenter.rebuild()
                     retry.hasObservers() shouldBe true
 
-                    if (opensWorkflow) every { container.childCount } returns 2
+                    if (opensWorkflow) every { view.isCurrentlyDisplayed() } returns false
                     retry.onNext(mockk())
                     retry.onComplete()
 
@@ -209,7 +220,7 @@ class BuildPresenterTest : DescribeSpec({
         }
 
         it("identifies the cache project before build details load") {
-            presenter.projectName shouldBe "github/owner/repo"
+            presenter.projectId shouldBe ProjectId("github", "owner", "repo")
             verify(exactly = 0) { view.showBuild(any()) }
         }
 
@@ -339,19 +350,6 @@ class BuildPresenterTest : DescribeSpec({
         }
     }
 })
-
-private fun bindingWithContainer(container: FrameLayout): ActivityMainBinding {
-    val child = mockk<View> {
-        every { findViewById<View>(R.id.containerView) } returns container
-        every { findViewById<View>(R.id.navigationView) } returns mockk<NavigationView>()
-        every { findViewById<View>(R.id.toolbar) } returns mockk<Toolbar>()
-    }
-    val drawer = mockk<DrawerLayout> {
-        every { childCount } returns 1
-        every { getChildAt(0) } returns child
-    }
-    return ActivityMainBinding.bind(drawer)
-}
 
 class BuildPresenterWorkflowTest : DescribeSpec({
     lateinit var activity: MainActivity

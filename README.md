@@ -55,9 +55,10 @@ Set `CODECOV_TOKEN` in the CircleCI project environment variables to enable cove
 
 ## Release checklist
 
+- Add an entry to [CHANGELOG.md](CHANGELOG.md) for the new version before tagging it.
 - When upgrading the Gradle Wrapper, update `distributionSha256Sum` in `gradle/wrapper/gradle-wrapper.properties` with the [official SHA-256 checksum](https://gradle.org/release-checksums/) for the exact distribution in `distributionUrl`.
 - When updating `versionName` in `app/build.gradle`, update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before tagging it.
-- Before pushing the tag, set these environment variables in the CircleCI project's settings for the deploy job:
+- Before pushing the tag, create a [CircleCI context](https://circleci.com/docs/guides/security/contexts/) named `norimaki-release`, restrict it to this project and to the maintainers authorized to cut a release, and set these environment variables on that context:
 
   | Variable | Value |
   | --- | --- |
@@ -66,6 +67,8 @@ Set `CODECOV_TOKEN` in the CircleCI project environment variables to enable cove
   | `RELEASE_KEYSTORE_KEY_ALIAS` | Alias of the signing key in the keystore. |
   | `RELEASE_KEYSTORE_KEY_PASSWORD` | Password for the signing key. |
   | `PLAY_ACCOUNT_JSON_BASE64` | Base64-encoded contents of the Google Play service account JSON key file. |
+
+  The `norimaki-release` context is attached only to the `deploy` job (see `.circleci/config.yml`), so the `build` and `test` jobs never see these credentials, even on tagged pipelines. If any of these variables were previously set in the CircleCI project's own settings, remove them there now so branch builds can't read them.
 
 - Before pushing the matching `v<versionName>` tag, update `app/src/main/play/release-notes/en-US/internal.txt` for internal testers and run `bash scripts/ci/test-play-deploy.sh`. The tagged CircleCI job publishes the APK to the `internal` track with those notes. The check runs without Play credentials or an APK upload.
 - After internal testing passes, promote the tested APK in [Play Console](https://support.google.com/googleplay/android-developer/answer/9859348). Create a Production release and use **Add from library** to select the same APK by version code. Paste the tagged version's `production.txt` into the English (United States) release notes before reviewing and rolling out the production release.

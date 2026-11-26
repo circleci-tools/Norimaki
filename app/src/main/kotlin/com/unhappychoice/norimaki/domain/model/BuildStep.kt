@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.domain.model
 
-import android.graphics.Color
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 
 
@@ -10,11 +9,11 @@ fun BuildStep.runTime(): String {
     return String.format("%02d:%02d", seconds / 60, seconds % 60)
 }
 
-fun BuildStep.statusColor(): Int = when {
-    isCanceled() -> Color.rgb(137, 137, 137)
-    isFailed() -> Color.rgb(237, 92, 92)
-    isFinished() -> Color.rgb(66, 200, 138)
-    else -> Color.rgb(92, 211, 228)
+fun BuildStep.buildStatus(): BuildStatus = when {
+    isCanceled() -> BuildStatus.CANCELED
+    isFailed() -> BuildStatus.FAILED
+    isFinished() -> BuildStatus.SUCCESS
+    else -> BuildStatus.ACTIVE
 }
 
 fun BuildStep.step(): Int? = actions.firstOrNull()?.step

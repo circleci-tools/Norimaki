@@ -20,6 +20,7 @@ import com.google.gson.GsonBuilder
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.BuildListViewBinding
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.getTimeAgo
@@ -161,15 +162,15 @@ class BuildListViewTest {
 
     @Test
     fun retriesFailedRecentBuildsPageWithoutScrolling() {
-        assertPageRetry("")
+        assertPageRetry(null)
     }
 
     @Test
     fun retriesFailedProjectHistoryPageWithoutScrolling() {
-        assertPageRetry("github/owner/repo")
+        assertPageRetry(ProjectId("github", "owner", "repo"))
     }
 
-    private fun assertPageRetry(project: String) {
+    private fun assertPageRetry(projectId: ProjectId?) {
         val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create()
         val builds = (21 downTo 1).map { number ->
             gson.fromJson(
@@ -179,8 +180,8 @@ class BuildListViewTest {
         }
         val firstPage = builds.take(20)
         val api = mockk<CircleCIAPIClientV1_1>()
-        every { api.historyPage(project, 0) } returns Observable.just(firstPage)
-        every { api.historyPage(project, 20) } returnsMany listOf(
+        every { api.historyPage(projectId, 0) } returns Observable.just(firstPage)
+        every { api.historyPage(projectId, 20) } returnsMany listOf(
             Observable.error(IllegalStateException("Page fetch failed")),
             Observable.just(builds.drop(20))
         )
@@ -194,7 +195,7 @@ class BuildListViewTest {
         try {
             Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
                 val activity = controller.get()
-                val view = buildListForReattachment(activity, scope, api, project)
+                val view = buildListForReattachment(activity, scope, api, projectId)
                 activity.setContentView(view)
                 val binding = BuildListViewBinding.bind(view)
                 val adapter = binding.buildsView.adapter as BuildAdapter
@@ -216,14 +217,14 @@ class BuildListViewTest {
                 dispatchScroll(binding, 0, 0)
                 scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, SECONDS)
                 drainRequests(scheduler)
-                verify(exactly = 2) { api.historyPage(project, 0) }
-                verify(exactly = 1) { api.historyPage(project, 20) }
+                verify(exactly = 2) { api.historyPage(projectId, 0) }
+                verify(exactly = 1) { api.historyPage(projectId, 20) }
                 assertTrue(binding.retryBuildPage.isVisible)
 
                 layout.lastVisible = 0
                 assertTrue(binding.retryBuildPage.performClick())
                 drainRequests(scheduler)
-                verify(exactly = 2) { api.historyPage(project, 20) }
+                verify(exactly = 2) { api.historyPage(projectId, 20) }
                 history.assertValues(emptyList(), firstPage, builds)
                 assertFalse(binding.retryBuildPage.isVisible)
                 history.dispose()
@@ -293,13 +294,13 @@ class BuildListViewTest {
         activity: ComponentActivity,
         scope: MortarScope,
         api: CircleCIAPIClientV1_1,
-        project: String = "github/owner/repo"
+        projectId: ProjectId? = ProjectId("github", "owner", "repo")
     ): BuildListView {
         val context = scope.createContext(activity)
         val presenter = BuildListPresenter().apply {
             di = DI {
                 bind<SessionService>() with singleton { testSession(api) }
-                bind<String>() with singleton { project }
+                if (projectId != null) bind<ProjectId>() with singleton { projectId }
                 bind<MainActivity>() with singleton {
                     mockk { every { lifecycle } returns activity.lifecycle }
                 }
@@ -313,8 +314,8 @@ class BuildListViewTest {
     private fun CircleCIAPIClientV1_1.firstBuildPage() =
         getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = 0, limit = 20)
 
-    private fun CircleCIAPIClientV1_1.historyPage(project: String, offset: Int) =
-        if (project.isEmpty()) getRecentBuilds(offset = offset, limit = 20)
+    private fun CircleCIAPIClientV1_1.historyPage(projectId: ProjectId?, offset: Int) =
+        if (projectId == null) getRecentBuilds(offset = offset, limit = 20)
         else getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = offset, limit = 20)
 
     private fun dispatchScroll(binding: BuildListViewBinding, dx: Int, dy: Int) {

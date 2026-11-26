@@ -13,8 +13,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import com.unhappychoice.norimaki.domain.model.buildStatus
 import com.unhappychoice.norimaki.domain.model.runTime
-import com.unhappychoice.norimaki.domain.model.statusColor
+import com.unhappychoice.norimaki.extension.color
 import io.reactivex.subjects.PublishSubject
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -64,7 +65,7 @@ class BuildStepAdapter internal constructor(
             boundItem = step
             buildTitle.text = step.name
             time.text = step.runTime()
-            indicator.setBackgroundColor(step.statusColor())
+            indicator.setBackgroundColor(step.buildStatus().color())
         }
 
         fun clearBoundItem() {
