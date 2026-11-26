@@ -25,6 +25,7 @@ class WorkflowPresenter(
     private val createClient: (String) -> WorkflowClient = { WorkflowClient(it) }
 ) : PresenterNeedsToken<WorkflowView>() {
     private var approvals: WorkflowApprovals? = null
+    private var pendingOutcome: WorkflowApprovalOutcome? = null
     private var approvalsSession: VerifiedSession? = null
     private lateinit var client: WorkflowClient
     private lateinit var jobsRequest: SerialDisposable
@@ -64,7 +65,7 @@ class WorkflowPresenter(
 
     fun refresh() {
         if (account == null || state.value.busy) return
-        loadJobs()
+        loadJobs(pendingOutcome)
     }
 
     fun canApprove(job: WorkflowJob): Boolean =
@@ -89,12 +90,14 @@ class WorkflowPresenter(
     }
 
     private fun loadJobs(outcome: WorkflowApprovalOutcome? = null) {
+        pendingOutcome = outcome
         jobsRequest.set(null)
         state.value = state.value.copy(busy = true, message = outcome?.let { approvalMessage(it) }, refreshFailed = false)
         val request = client.jobs(screen.workflowId)
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({ jobs ->
+                pendingOutcome = null
                 state.value = WorkflowState(jobs, message = outcome?.let { approvalMessage(it, jobs) })
             }, {
                 state.value = state.value.copy(
