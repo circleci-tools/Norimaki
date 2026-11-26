@@ -12,6 +12,7 @@ import com.bumptech.glide.Glide
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.*
+import com.unhappychoice.norimaki.extension.color
 import com.unhappychoice.norimaki.extension.getTimeAgo
 import de.hdodenhof.circleimageview.CircleImageView
 import io.reactivex.subjects.PublishSubject
@@ -45,7 +46,7 @@ class BuildAdapter(val context: Context) : ListAdapter<Build, BuildAdapter.ViewH
             branchTitle.text = build.revisionString()
             commitTitle.text = build.subject
             refreshElapsedTime()
-            indicator.setBackgroundColor(build.statusColor())
+            indicator.setBackgroundColor(build.buildStatus().color())
 
             Glide.with(context).load(build.avatarUrl())
                 .placeholder(R.drawable.ic_avatar_placeholder)
