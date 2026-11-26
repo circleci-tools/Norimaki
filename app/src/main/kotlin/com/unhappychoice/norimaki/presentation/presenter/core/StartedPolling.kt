@@ -8,7 +8,10 @@ import io.reactivex.disposables.Disposable
 import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
 
-internal class StartedPolling(private val subscribe: () -> Disposable) : DefaultLifecycleObserver {
+internal class StartedPolling(
+    private val shouldSkip: () -> Boolean = { false },
+    private val subscribe: () -> Disposable
+) : DefaultLifecycleObserver {
     private val subscription = SerialDisposable()
     private var started = false
 
@@ -28,7 +31,7 @@ internal class StartedPolling(private val subscribe: () -> Disposable) : Default
 
     override fun onStart(owner: LifecycleOwner) {
         started = true
-        refresh()
+        if (!shouldSkip()) refresh()
     }
 
     override fun onStop(owner: LifecycleOwner) {

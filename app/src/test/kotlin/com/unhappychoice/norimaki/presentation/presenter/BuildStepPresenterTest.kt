@@ -11,6 +11,7 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.infrastructure.output.OUTPUT_LIMIT_MESSAGE
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
+import com.unhappychoice.norimaki.presentation.log.LogChunkFormatter
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -169,7 +170,7 @@ class BuildStepPresenterTest : DescribeSpec({
                         "failure without output" -> ""
                         else -> "0123456789"
                     }
-                    presenter.logString.value shouldBe retainedLog
+                    presenter.logLines().joinToString("\n") shouldBe retainedLog
                     presenter.logSearchAvailable.value shouldBe false
                     presenter.logLoadFailed.value shouldBe false
 
@@ -182,7 +183,7 @@ class BuildStepPresenterTest : DescribeSpec({
                         scenario == "split hyperlink" -> "before Report"
                         else -> retainedLog + "done"
                     }
-                    presenter.logString.value shouldBe expectedFinalLog
+                    presenter.logLines().joinToString("\n") shouldBe expectedFinalLog
                     presenter.logSearchAvailable.value shouldBe hasOutput
                 } finally {
                     scope?.destroy()
@@ -305,15 +306,65 @@ class BuildStepPresenterTest : DescribeSpec({
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
             scope = presenter.attachToTestScope(view)
 
-            presenter.logString.value shouldBe "first"
+            scheduler.triggerActions()
+            presenter.logLines() shouldBe listOf("first")
             scheduler.advanceTimeTo(6, SECONDS)
-            presenter.logString.value shouldBe "first second"
+            presenter.logLines() shouldBe listOf("first second")
             scheduler.advanceTimeTo(10, SECONDS)
-            presenter.logString.value shouldBe "first second done third"
+            presenter.logLines() shouldBe listOf("first second done third")
             presenter.logSearchAvailable.value shouldBe true
             presenter.logLoadFailed.value shouldBe false
             verify(exactly = 1) { view.showStep(initialStep) }
             verify(exactly = 3) { api.getBuild("github", "owner", "repo", 42) }
+        } finally {
+            scope?.destroy()
+            RxAndroidPlugins.reset()
+            RxJavaPlugins.reset()
+        }
+    }
+
+    it("skips the automatic refresh when reopening a step with fully loaded logs") {
+        val expectedUrl = "https://circleci.com/output"
+        val finishedAction = action(5, Date()).apply {
+            every { outputUrl } returns expectedUrl
+        }
+        val finishedStep = BuildStep("Run tests", listOf(finishedAction))
+        val finishedBuild = build("finished", listOf(finishedStep))
+        val api = mockk<CircleCIAPIClientV1_1> {
+            every { getBuild("github", "owner", "repo", 42) } returns Observable.just(finishedBuild)
+        }
+        val output = mockk<BuildOutputClient> {
+            every { fetchOutput(expectedUrl) } returns Observable.just("done")
+        }
+        val activity = mockk<MainActivity>()
+        val lifecycle = PollingLifecycle(activity).apply { start() }
+        val presenter = BuildStepPresenter { output }.apply {
+            di = DI {
+                bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
+                bind<BuildStepId>() with singleton { BuildStepId(5) }
+                bind<MainActivity>() with singleton { activity }
+                bind<SessionService>() with singleton { testSession(api) }
+            }
+        }
+        val view = mockk<BuildStepView>(relaxUnitFun = true)
+        var scope: MortarScope? = null
+
+        try {
+            RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+
+            scope = presenter.attachToTestScope(view)
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+            presenter.logLines() shouldBe listOf("done")
+
+            lifecycle.stop()
+            lifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+
+            lifecycle.stop()
+            lifecycle.start()
+            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
         } finally {
             scope?.destroy()
             RxAndroidPlugins.reset()
@@ -354,6 +405,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
             try {
                 RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
+                RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
                 RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
                 RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
 
@@ -361,9 +413,9 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 verify(exactly = 1) { view.showStep(finishedStep) }
                 presenter.logLoadFailed.value shouldBe false
+                presenter.logLines() shouldBe if (outputFails) listOf("", "[Some output could not be loaded.]", "") else listOf("done")
                 presenter.logSearchAvailable.value shouldBe true
                 verify(exactly = 1) { output.fetchOutput(expectedUrl) }
-                presenter.logString.value shouldBe (if (outputFails) "<br>[Some output could not be loaded.]<br>" else "done")
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
@@ -414,8 +466,9 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 scope = presenter.attachToTestScope(view)
                 verify(exactly = 1) { view.showStep(runningStep) }
+                scheduler.triggerActions()
                 verify(exactly = 1) { output.fetchRawOutput(url, 0L) }
-                presenter.logString.value shouldBe "first"
+                presenter.logLines() shouldBe listOf("first")
                 scheduler.advanceTimeTo(4_999, MILLISECONDS)
                 verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
                 verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
@@ -425,9 +478,9 @@ class BuildStepPresenterTest : DescribeSpec({
 
                 verify(exactly = 1) { output.fetchFinalRawOutput(url, 5L, any()) }
                 presenter.logLoadFailed.value shouldBe outputFails
+                val expected = if (outputFails) "first" else "first last" + OUTPUT_LIMIT_MESSAGE
+                presenter.logLines() shouldBe expected.split('\n')
                 presenter.logSearchAvailable.value shouldBe true
-                val expected = if (outputFails) "first" else "first last" + OUTPUT_LIMIT_MESSAGE.replace("\n", "<br>")
-                presenter.logString.value shouldBe expected
             } finally {
                 scope?.destroy()
                 RxAndroidPlugins.reset()
@@ -438,6 +491,7 @@ class BuildStepPresenterTest : DescribeSpec({
 
     it("pauses with the view attached and resumes live and final reads at the saved offsets") {
         val scheduler = TestScheduler()
+        val formatting = TestScheduler()
         val activity = mockk<MainActivity>()
         val lifecycle = PollingLifecycle(activity).apply { start() }
         val runningStep = BuildStep("Run tests", listOf(action(5, null)))
@@ -449,7 +503,7 @@ class BuildStepPresenterTest : DescribeSpec({
             every { getBuild("github", "owner", "repo", 42) } answers { Observable.just(current) }
         }
         val url = "https://circleci.com/api/private/output/raw/github/owner/repo/42/output/0/5"
-        val beforeStop = "first\u001B]8;;https://example.test\u001B".toByteArray()
+        val beforeStop = "\u001B[32mfirst\u001B]8;;https://example.test\u001B".toByteArray()
         val afterStart = "\\ next\u001B]8;;\u0007".toByteArray()
         val finalOffset = beforeStop.size.toLong() + afterStart.size
         val output = mockk<BuildOutputClient> {
@@ -459,7 +513,7 @@ class BuildStepPresenterTest : DescribeSpec({
             every { fetchFinalRawOutput(url, finalOffset, any()) } returns
                 Observable.just(RawOutputChunk(" done".toByteArray()))
         }
-        val presenter = BuildStepPresenter { output }.apply {
+        val presenter = BuildStepPresenter({ formatting }, LogChunkFormatter::format) { output }.apply {
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(5) }
@@ -475,7 +529,7 @@ class BuildStepPresenterTest : DescribeSpec({
             RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
             RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
             scope = presenter.attachToTestScope(view)
-            presenter.logString.value shouldBe "first"
+            presenter.logLines() shouldBe emptyList()
 
             presenter.logSearchAvailable.value shouldBe false
             lifecycle.stop()
@@ -483,8 +537,13 @@ class BuildStepPresenterTest : DescribeSpec({
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
             verify(exactly = 1) { output.fetchRawOutput(any(), any()) }
 
+            formatting.triggerActions()
+            presenter.logLines() shouldBe emptyList()
+
             lifecycle.start()
-            presenter.logString.value shouldBe "first next"
+            verify(exactly = 1) { output.fetchRawOutput(url, beforeStop.size.toLong()) }
+            formatting.triggerActions()
+            presenter.logLines() shouldBe listOf("first next")
             verify(exactly = 2) { api.getBuild("github", "owner", "repo", 42) }
             scheduler.advanceTimeBy(1, SECONDS)
             verify(exactly = 3) { output.fetchRawOutput(any(), any()) }
@@ -501,7 +560,9 @@ class BuildStepPresenterTest : DescribeSpec({
             lifecycle.start()
             verify(exactly = 1) { view.showStep(finishedStep) }
             verify(exactly = 1) { output.fetchFinalRawOutput(url, finalOffset, any()) }
-            presenter.logString.value shouldBe "first next done"
+            formatting.triggerActions()
+            presenter.logLines() shouldBe listOf("first next done")
+            presenter.log[0].map { it.color }.distinct() shouldBe listOf(0xFF00F000.toInt())
             presenter.logSearchAvailable.value shouldBe true
             scheduler.advanceTimeBy(30, SECONDS)
             verify(exactly = 4) { api.getBuild("github", "owner", "repo", 42) }
@@ -564,7 +625,8 @@ class BuildStepPresenterTest : DescribeSpec({
             verify(exactly = 1) { view.showStep(selectedStep) }
             failures.assertValues(false, true, false)
             presenter.canRetryStepLoad.value shouldBe false
-            presenter.logString.value shouldBe "Selected step output"
+            scheduler.triggerActions()
+            presenter.logLines() shouldBe listOf("Selected step output")
             presenter.logSearchAvailable.value shouldBe true
         } finally {
             scope?.destroy()
@@ -574,3 +636,6 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 })
+
+private fun BuildStepPresenter.logLines(): List<String> =
+    (0 until log.lineCount).map { line -> log[line].joinToString("") { it.text } }

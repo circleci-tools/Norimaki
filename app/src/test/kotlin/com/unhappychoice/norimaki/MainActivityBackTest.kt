@@ -6,6 +6,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import androidx.core.view.children
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
@@ -95,7 +96,7 @@ class MainActivityBackTest {
             field.setText("replacement")
             assertTrue(submit.performClick())
             finishTransition()
-            assertEquals(listOf(BuildListScreen("")), Flow.get(activity).history.toList())
+            assertEquals(listOf(BuildListScreen(null)), Flow.get(activity).history.toList())
             assertTrue(activity.binding.containerView.children.single() is BuildListView)
             assertEquals(listOf("saved", "rejected", "replacement"), application.verifiedTokens)
         }
@@ -104,7 +105,7 @@ class MainActivityBackTest {
     private fun MainActivity.openTokenForm(): History {
         val flow = Flow.get(this)
         val history = flow.history.buildUpon()
-            .push(BuildListScreen("github/example/project"))
+            .push(BuildListScreen(ProjectId("github", "example", "project")))
             .push(APITokenScreen())
             .build()
         flow.setHistory(history, Direction.FORWARD)

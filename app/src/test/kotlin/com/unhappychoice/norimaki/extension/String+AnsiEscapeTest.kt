@@ -52,6 +52,14 @@ class StringAnsiEscapeTest : DescribeSpec({
             }
         }
 
+        it("should preserve combined color and reset codes across chunk boundaries") {
+            val log = "\u001B[1;31mred\u001B[m plain"
+            (0..log.length).forEach { split ->
+                val stream = AnsiEscapeStream()
+                (stream.strip(log.take(split)) + stream.strip(log.drop(split))) shouldBe log
+            }
+        }
+
         it(".replaceAnsiColorCodeToHtml() should escape literal tags and entities") {
             "expected <b>literal</b> &amp;".replaceAnsiColorCodeToHtml() shouldBe
                 "expected &lt;b&gt;literal&lt;/b&gt; &amp;amp;"

@@ -1,13 +1,10 @@
 package com.unhappychoice.norimaki.domain.model
 
-import android.graphics.Color
 import com.github.unhappychoice.circleci.v1.response.Build
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import java.util.Date
 
 class BuildTest : DescribeSpec({
@@ -139,24 +136,18 @@ class BuildTest : DescribeSpec({
         }
     }
 
-    describe("Build.statusColor()") {
-        beforeEach {
-            mockkStatic(Color::class)
-            every { Color.rgb(any<Int>(), any<Int>(), any<Int>()) } answers { (firstArg<Int>() shl 16) or (secondArg<Int>() shl 8) or thirdArg<Int>() }
+    describe("Build.buildStatus()") {
+        it("should be SUCCESS for successful builds") {
+            listOf("success", "fixed", "no_tests").forEach { build(buildStatus = it).buildStatus() shouldBe BuildStatus.SUCCESS }
         }
-        afterEach { unmockkStatic(Color::class) }
-
-        it("should be green for successful builds") {
-            listOf("success", "fixed", "no_tests").forEach { build(buildStatus = it).statusColor() shouldBe 0x42C88A }
+        it("should be CANCELED for canceled builds") {
+            build(buildStatus = "canceled").buildStatus() shouldBe BuildStatus.CANCELED
         }
-        it("should be gray for canceled builds") {
-            build(buildStatus = "canceled").statusColor() shouldBe 0x898989
+        it("should be FAILED for failed builds") {
+            listOf("infrastructure_fail", "timedout", "failed").forEach { build(buildStatus = it).buildStatus() shouldBe BuildStatus.FAILED }
         }
-        it("should be red for failed builds") {
-            listOf("infrastructure_fail", "timedout", "failed").forEach { build(buildStatus = it).statusColor() shouldBe 0xED5C5C }
-        }
-        it("should be blue for other builds") {
-            build(buildStatus = "running").statusColor() shouldBe 0x5CD3E4
+        it("should be ACTIVE for other builds") {
+            build(buildStatus = "running").buildStatus() shouldBe BuildStatus.ACTIVE
         }
     }
 })

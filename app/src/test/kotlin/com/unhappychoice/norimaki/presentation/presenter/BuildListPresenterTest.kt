@@ -8,7 +8,9 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Flow
@@ -60,12 +62,14 @@ class BuildListPresenterTest : DescribeSpec({
         api: CircleCIAPIClientV1_1,
         session: SessionService = testSession(api),
         view: BuildListView = mockk(),
-        projectName: String = "github/owner/repo"
+        projectId: ProjectId? = ProjectId("github", "owner", "repo"),
+        screen: BuildListScreen? = null
     ) = BuildListPresenter().apply {
         di = DI {
             bind<SessionService>() with singleton { session }
             bind<MainActivity>() with singleton { activity }
-            bind<String>() with singleton { projectName }
+            if (projectId != null) bind<ProjectId>() with singleton { projectId }
+            if (screen != null) bind<BuildListScreen>() with singleton { screen }
         }
         scope = attachToTestScope(view)
     }
@@ -176,7 +180,7 @@ class BuildListPresenterTest : DescribeSpec({
         it("keeps Recent Builds scoped to all projects") {
             val api = mockk<CircleCIAPIClientV1_1>()
             every { api.getRecentBuilds(offset = 0, limit = 20) } returns Observable.just(emptyList())
-            val presenter = presenter(api, projectName = "")
+            val presenter = presenter(api, projectId = null)
             presenter.canFilterByBranch shouldBe false
             presenter.selectBranch("main")
             scheduler.triggerActions()
@@ -210,6 +214,37 @@ class BuildListPresenterTest : DescribeSpec({
             presenter.page.value shouldBe 1
             verify(exactly = 1) { api.pageAt(0) }
             verify(exactly = 2) { api.branchPageAt(branch, 0) }
+        }
+
+        it("restores the branch saved on the navigation screen before the first request") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val branch = "release/Next"
+            every { api.branchPageAt(branch, 0) } returns Observable.just(emptyList())
+            val screen = BuildListScreen(ProjectId("github", "owner", "repo"), branch)
+            val presenter = presenter(api, screen = screen)
+            scheduler.triggerActions()
+
+            presenter.selectedBranch.test().assertValue(branch)
+            verify(exactly = 1) { api.branchPageAt(branch, 0) }
+            verify(exactly = 0) { api.pageAt(0) }
+        }
+
+        it("persists the selected branch onto the navigation screen for the next presenter") {
+            val api = mockk<CircleCIAPIClientV1_1>()
+            val branch = "release/Next"
+            every { api.pageAt(0) } returns Observable.just(emptyList())
+            every { api.branchPageAt(branch, 0) } returns Observable.just(emptyList())
+            val screen = BuildListScreen(ProjectId("github", "owner", "repo"))
+            val presenter = presenter(api, screen = screen)
+            scheduler.triggerActions()
+
+            presenter.selectBranch(branch)
+            scheduler.triggerActions()
+            screen.selectedBranch shouldBe branch
+
+            presenter.selectBranch(null)
+            scheduler.triggerActions()
+            screen.selectedBranch shouldBe ""
         }
     }
 

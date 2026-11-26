@@ -92,7 +92,7 @@ class BuildNavigationHistoryTest : DescribeSpec({
                     val savedBuild = Gson().toJson(incomplete)
                     val key = routes(build).first()
                     restore(key, """{"${BuildScreen::class.java.name}":{"build":$savedBuild}}""") shouldBe
-                        BuildListScreen("")
+                        BuildListScreen(null)
                 }
         }
 
