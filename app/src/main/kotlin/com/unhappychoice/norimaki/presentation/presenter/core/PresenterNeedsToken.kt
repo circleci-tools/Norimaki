@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.presenter.core
 
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -14,7 +15,6 @@ import flow.Flow
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposables
 import io.reactivex.rxkotlin.addTo
-import mortar.MortarScope
 import org.kodein.di.instance
 
 abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
@@ -26,12 +26,16 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
     @Volatile protected var account: VerifiedSession? = null
         private set
 
-    override fun onEnterScope(scope: MortarScope?) {
-        super.onEnterScope(scope)
+    override fun onLoad(savedInstanceState: Bundle?) {
+        super.onLoad(savedInstanceState)
         restoreSession()
     }
 
-    override fun dropView(view: T) {
+    final override fun dropView(view: T) {
+        if (view !== getView()) return
+        account = null
+        lifecycle.clear()
+        bag.clear()
         onViewDropped()
         super.dropView(view)
     }
@@ -42,23 +46,19 @@ abstract class PresenterNeedsToken<T : View> : Presenter<T>() {
         super.onExitScope()
     }
 
-    protected open fun onViewDropped() {
-        account = null
-        lifecycle.clear()
-        bag.clear()
-    }
+    protected open fun onViewDropped() {}
 
     protected abstract fun onAuthenticated()
     protected open fun onSessionEnded() {}
 
-    protected fun restoreSession() {
+    protected fun sessionEnded(verified: VerifiedSession) =
+        session.changes.filter { it.toNullable() !== verified }.take(1)
+
+    private fun restoreSession() {
         session.restore()
             .subscribe(::useAccount, { goToAPITokenView() })
             .addTo(lifecycle)
     }
-
-    protected fun sessionEnded(verified: VerifiedSession) =
-        session.changes.filter { it.toNullable() !== verified }.take(1)
 
     private fun useAccount(verified: VerifiedSession) {
         account = verified

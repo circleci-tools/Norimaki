@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.presentation.core
 
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.model.vcsTypeFromUrl
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.extension.subscribeNext
@@ -15,8 +16,8 @@ internal fun Flow.subscribeToProjectNavigation(
     eventBus.selectProject
         .filter { !isTokenScreenVisible() }
         .subscribeNext { selection ->
-            val projectName = selection.toNullable()?.let { project ->
-                "${vcsTypeFromUrl(project.vcsUrl)}/${project.username}/${project.reponame}"
-            }.orEmpty()
-            replaceHistory(BuildListScreen(projectName), Direction.REPLACE)
+            val projectId = selection.toNullable()?.let { project ->
+                ProjectId(vcsTypeFromUrl(project.vcsUrl), project.username.orEmpty(), project.reponame.orEmpty())
+            }
+            replaceHistory(BuildListScreen(projectId), Direction.REPLACE)
         }

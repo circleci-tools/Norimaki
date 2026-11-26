@@ -8,6 +8,8 @@ Fork and clone the repository, then install JDK 21, Android SDK Platform 37.0, a
 
 To try a change on an Android device or emulator, follow the [source installation instructions](README.md#installation) and use the [quick start](README.md#quick-start) to connect to CircleCI.
 
+See [Architecture](docs/architecture.md) for how the screens, presenters, and CircleCI clients fit together before making a change.
+
 ## Run the checks
 
 Run the debug unit tests from the repository root.
@@ -20,6 +22,7 @@ CircleCI runs the same unit tests with coverage. To reproduce that part of CI lo
 
 ```sh
 ./gradlew jacoco
+python3 scripts/ci/test-check-unit-test-results.py
 python3 scripts/ci/check-unit-test-results.py
 python3 scripts/ci/test-check-line-coverage.py
 python3 scripts/ci/check-line-coverage.py app/build/reports/coverage/test/debug/report.xml 89

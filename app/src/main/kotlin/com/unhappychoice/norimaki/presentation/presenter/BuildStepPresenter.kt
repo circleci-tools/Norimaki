@@ -62,7 +62,7 @@ class BuildStepPresenter internal constructor(
         val outputClient = createOutputClient(verified.token)
         logSearchAvailable.value = false
         log.clear()
-        stepPolling = StartedPolling { loadStep(verified.client, outputClient, output) }
+        stepPolling = StartedPolling(shouldSkip = { output.complete }) { loadStep(verified.client, outputClient, output) }
             .also { it.observe(activity.lifecycle, bag) }
     }
 

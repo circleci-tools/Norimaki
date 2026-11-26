@@ -19,18 +19,17 @@ import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsCursor
 import com.unhappychoice.norimaki.presentation.adapter.TestFailureAdapter
 import com.unhappychoice.norimaki.presentation.core.ScreenTransition
 import com.unhappychoice.norimaki.presentation.presenter.TestResultsPresenter
-import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.presenter.testSession
 import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.TestResultsScreen
 import flow.Flow
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
-import mortar.MortarScope
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -194,6 +193,7 @@ class TestResultsViewTest {
             container.addView(view)
             shadowOf(Looper.getMainLooper()).idle()
 
+            verify(exactly = 2) { client.fetch(buildId, null) }
             assertStatus(view, R.string.test_results_no_failures)
             assertEquals(null, view.findViewById<RecyclerView>(R.id.failures).adapter)
         }
@@ -299,24 +299,17 @@ class TestResultsViewTest {
     }
 
     @Test
-    fun skipsFetchingWhenAuthenticationFinishesBeforeAViewAttaches() {
+    fun restoresSessionAndFetchesResultsOnceOnFirstAttachment() {
         val session = testSession(mockk())
-        val errors = mutableListOf<Throwable>()
-        RxJavaPlugins.setErrorHandler { errors.add(it) }
-        val presenter = TestResultsPresenter().apply {
-            di = DI { bind<SessionService>() with singleton { session } }
-        }
-        val scope = MortarScope.buildRootScope().build("test-results")
-        try {
-            PresenterNeedsToken::class.java.getDeclaredMethod("onEnterScope", MortarScope::class.java)
-                .apply { isAccessible = true }
-                .invoke(presenter, scope)
+        var requests = 0
+        val response = Observable.just<TestResults>(TestResults.Unavailable)
+            .doOnSubscribe { requests++ }
+
+        assertFalse(session.hasVerifiedSession)
+        withResults(response, session = session) { view ->
             assertTrue(session.hasVerifiedSession)
-            assertTrue(errors.toString(), errors.isEmpty())
-        } finally {
-            PresenterNeedsToken::class.java.getDeclaredMethod("onExitScope")
-                .apply { isAccessible = true }
-                .invoke(presenter)
+            assertEquals(1, requests)
+            assertStatus(view, R.string.test_results_unavailable)
         }
     }
 

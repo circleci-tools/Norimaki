@@ -17,3 +17,9 @@ Install [Norimaki from Google Play](https://play.google.com/store/apps/details?i
 1. In **Recent Builds**, open a build you want to inspect. To narrow the list to one project, open the navigation menu and select that project. Select **Recent Builds** there to return to the combined list.
 2. In the build details, tap a step to read its log. If you're investigating a failed build, start with a step marked as failed.
 3. Go back to the build details. If **Show workflow jobs** appears in the overflow menu, select it to see the other jobs in the same workflow.
+
+## Next steps
+
+See [FAQ and troubleshooting](faq.md) if something didn't work as expected, or
+[Architecture](architecture.md) if you want to contribute a change and need an overview of the
+codebase.

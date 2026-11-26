@@ -17,11 +17,11 @@ class VariableTest : DescribeSpec({
 
             observer.values() shouldBe listOf(1, 2, 3)
         }
-        it("should complete on finalize") {
+        it("should complete when completed explicitly") {
             val variable = Variable("a")
             val observer = variable.asObservable().test()
 
-            variable.finalize()
+            variable.complete()
 
             observer.assertComplete()
         }

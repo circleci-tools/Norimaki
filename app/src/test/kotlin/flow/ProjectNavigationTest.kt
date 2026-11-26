@@ -5,6 +5,7 @@ import com.gojuno.koptional.None
 import com.gojuno.koptional.Some
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.BuildStepId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.presentation.core.subscribeToProjectNavigation
 import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
@@ -20,7 +21,7 @@ class ProjectNavigationTest : DescribeSpec({
     describe("Flow.subscribeToProjectNavigation()") {
         val eventBus = EventBusService()
         val previousBuildId = BuildId("github", "team", "previous", 1)
-        val previousHistory = History.single(BuildListScreen("github/team/previous")).buildUpon()
+        val previousHistory = History.single(BuildListScreen(ProjectId("github", "team", "previous"))).buildUpon()
             .push(BuildScreen(previousBuildId))
             .push(BuildStepScreen(previousBuildId, BuildStepId(0)))
             .build()
@@ -40,7 +41,7 @@ class ProjectNavigationTest : DescribeSpec({
         it("resets step detail history to Recent Builds") {
             eventBus.selectProject.onNext(None)
 
-            flow.assertBuildReturnsTo(BuildListScreen(""), previousBuildId)
+            flow.assertBuildReturnsTo(BuildListScreen(null), previousBuildId)
         }
 
         it("resets step detail history to the selected project") {
@@ -52,7 +53,10 @@ class ProjectNavigationTest : DescribeSpec({
 
             eventBus.selectProject.onNext(Some(project))
 
-            flow.assertBuildReturnsTo(BuildListScreen("bitbucket/team/repo"), BuildId("bitbucket", "team", "repo", 2))
+            flow.assertBuildReturnsTo(
+                BuildListScreen(ProjectId("bitbucket", "team", "repo")),
+                BuildId("bitbucket", "team", "repo", 2)
+            )
         }
 
         it("stops handling selections when the subscription is disposed") {
@@ -73,7 +77,7 @@ class ProjectNavigationTest : DescribeSpec({
             isTokenScreenVisible = false
             eventBus.selectProject.onNext(None)
 
-            flow.history.toList() shouldBe listOf(BuildListScreen(""))
+            flow.history.toList() shouldBe listOf(BuildListScreen(null))
         }
     }
 })
