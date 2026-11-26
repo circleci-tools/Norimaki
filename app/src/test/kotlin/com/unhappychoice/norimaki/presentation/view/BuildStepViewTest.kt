@@ -5,16 +5,16 @@ import android.app.Application
 import android.os.Looper
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.EditText
-import android.widget.HorizontalScrollView
-import android.widget.ScrollView
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.extension.Variable
 import com.unhappychoice.norimaki.extension.removeAnsiEscapeCode
-import com.unhappychoice.norimaki.extension.replaceAnsiColorCodeToHtml
 import com.unhappychoice.norimaki.infrastructure.output.RawOutputChunk
+import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.presenter.ActionSnapshot
 import com.unhappychoice.norimaki.presentation.presenter.BuildStepPresenter
 import com.unhappychoice.norimaki.presentation.presenter.completedActionLogs
@@ -24,8 +24,11 @@ import io.mockk.mockk
 import io.mockk.verify
 import io.reactivex.Observable
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
+import java.util.concurrent.TimeUnit.MILLISECONDS
+import java.util.concurrent.TimeUnit.SECONDS
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -40,14 +43,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.concurrent.TimeUnit.MILLISECONDS
-import java.util.concurrent.TimeUnit.SECONDS
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class BuildStepViewTest {
     private val scheduler = TestScheduler()
-    private val log = Variable("")
+    private val log = BuildLog()
     private val loadFailed = Variable(false)
     private val searchAvailable = Variable(false)
     private val canRetry = Variable(false)
@@ -64,16 +65,71 @@ class BuildStepViewTest {
     }
 
     @Test
-    fun searchesRetainedOutputWhileShowingTheLoadError() {
-        withView { activity, view ->
-            val output = view.findViewById<TextView>(R.id.logText)
+    fun rendersBuildStepOutputAndShowsTheErrorWithoutClearingExistingLogs() {
+        val presenter = mockk<BuildStepPresenter>(relaxUnitFun = true) {
+            every { this@mockk.log } returns this@BuildStepViewTest.log
+            every { logSearchAvailable } returns searchAvailable
+            every { logLoadFailed } returns loadFailed
+            every { canRetryStepLoad } returns canRetry
+        }
+
+        Robolectric.buildActivity(Activity::class.java).use { controller ->
+            val activity = controller.setup().get()
+            val view = activity.layoutInflater.inflate(R.layout.build_step_view, null) as BuildStepView
+            view.di = DI { bind<BuildStepPresenter>() with singleton { presenter } }
+            activity.setContentView(view)
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
             val retry = view.findViewById<View>(R.id.retryStepLoad)
             val error = view.findViewById<TextView>(R.id.logLoadError)
 
-            log.value = "<b>Build output</b>"
+            val chunks = PublishSubject.create<String>()
+            val subscription = log.render(chunks, Schedulers.trampoline())
+            try {
+                chunks.onNext("Build out")
+                assertEquals("Build out", renderOutput(output))
+                chunks.onNext("put")
+                assertEquals("Build output", renderOutput(output))
+                assertEquals(View.GONE, error.visibility)
+                assertEquals(View.GONE, retry.visibility)
+
+                loadFailed.value = true
+
+                assertEquals(View.VISIBLE, error.visibility)
+                assertEquals(activity.getString(R.string.build_log_load_error), error.text.toString())
+                assertEquals("Build output", renderOutput(output))
+                assertEquals(View.GONE, retry.visibility)
+
+                canRetry.value = true
+
+                assertEquals(View.VISIBLE, retry.visibility)
+                retry.performClick()
+                verify(exactly = 1) { presenter.retryStepLoad() }
+
+                canRetry.value = false
+                loadFailed.value = false
+
+                assertEquals(View.GONE, retry.visibility)
+                assertEquals(View.GONE, error.visibility)
+
+                log.clear()
+                assertEquals(0, output.adapter?.itemCount)
+            } finally {
+                subscription.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun searchesRetainedOutputWhileShowingTheLoadError() {
+        withView { activity, view ->
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
+            val retry = view.findViewById<View>(R.id.retryStepLoad)
+            val error = view.findViewById<TextView>(R.id.logLoadError)
+
+            replaceLog("Build output")
             renderUpdates()
 
-            assertEquals("Build output", output.text.toString())
+            assertEquals("Build output", renderOutput(output))
             assertEquals(View.GONE, error.visibility)
             assertEquals(View.GONE, retry.visibility)
 
@@ -83,7 +139,7 @@ class BuildStepViewTest {
 
             assertEquals(View.VISIBLE, error.visibility)
             assertEquals(activity.getString(R.string.build_log_load_error), error.text.toString())
-            assertEquals("Build output", output.text.toString())
+            assertEquals("Build output", renderOutput(output))
 
             val find = view.findViewById<View>(R.id.logFind)
             assertEquals(View.VISIBLE, find.visibility)
@@ -115,12 +171,11 @@ class BuildStepViewTest {
             val find = view.findViewById<View>(R.id.logFind)
             val query = view.findViewById<EditText>(R.id.logQuery)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
-            val output = view.findViewById<TextView>(R.id.logText)
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
             val previous = view.findViewById<View>(R.id.logPrevious)
             val next = view.findViewById<View>(R.id.logNext)
 
-            log.value = "😀 \u001b[31m[ERR]\u001b[0m <tag>\n\u001b[1;31m[err]".removeAnsiEscapeCode()
-                .replaceAnsiColorCodeToHtml()
+            replaceLog("😀 \u001b[31m[ER\u001b[0mR] <tag>\n\u001b[1;31m[err]".removeAnsiEscapeCode())
             renderUpdates()
             assertEquals(View.GONE, find.visibility)
 
@@ -131,13 +186,17 @@ class BuildStepViewTest {
             query.setText("[err]")
             assertEquals(activity.getString(R.string.build_log_searching), count.text.toString())
             finishSearch()
-            assertEquals("😀 [ERR] <tag>\n[err]", output.text.toString())
+            assertEquals("😀 [ERR] <tag>", lineText(output, 0).toString())
+            val secondLine = lineText(output, 1) as Spanned
+            assertEquals("[err]", secondLine.toString())
+            val color = secondLine.getSpans(0, secondLine.length, ForegroundColorSpan::class.java).single()
+            assertEquals(0xFFF00000.toInt(), color.foregroundColor)
             assertEquals(activity.getString(R.string.build_log_match_count, 1, 2), count.text.toString())
             assertEquals(3 until 8, highlightedRange(output))
 
             previous.performClick()
             assertEquals(activity.getString(R.string.build_log_match_count, 2, 2), count.text.toString())
-            assertEquals(15 until 20, highlightedRange(output))
+            assertEquals(0 until 5, highlightedRange(output, 1))
             next.performClick()
             assertEquals(3 until 8, highlightedRange(output))
 
@@ -161,11 +220,13 @@ class BuildStepViewTest {
     fun searchesAndWrapsThroughNearlyOneMebibyteOfMatches() {
         withView { activity, view ->
             val count = view.findViewById<TextView>(R.id.logMatchCount)
-            val output = view.findViewById<TextView>(R.id.logText)
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
             val previous = view.findViewById<View>(R.id.logPrevious)
             val next = view.findViewById<View>(R.id.logNext)
-            val matchCount = 1024 * 1024 - 1
-            log.value = "x".repeat(matchCount)
+            val lineLength = 1023
+            val lineCount = 1024
+            val matchCount = lineLength * lineCount
+            replaceLog(List(lineCount) { "x".repeat(lineLength) }.joinToString("\n"))
             searchAvailable.value = true
             renderUpdates()
 
@@ -180,7 +241,7 @@ class BuildStepViewTest {
                 activity.getString(R.string.build_log_match_count, matchCount, matchCount),
                 count.text.toString()
             )
-            assertEquals((matchCount - 1) until matchCount, highlightedRange(output))
+            assertEquals((lineLength - 1) until lineLength, highlightedRange(output, lineCount - 1))
             next.performClick()
             assertEquals(activity.getString(R.string.build_log_match_count, 1, matchCount), count.text.toString())
             assertEquals(0 until 1, highlightedRange(output))
@@ -195,8 +256,8 @@ class BuildStepViewTest {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
-            val output = view.findViewById<TextView>(R.id.logText)
-            log.value = "old output"
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
+            replaceLog("old output")
             searchAvailable.value = true
             renderUpdates()
 
@@ -207,7 +268,7 @@ class BuildStepViewTest {
 
             query.setText("old")
             activity.setContentView(View(activity))
-            log.value = "new output new"
+            replaceLog("new output new")
             finishSearch()
             assertEquals(null, highlightedRange(output))
 
@@ -228,8 +289,8 @@ class BuildStepViewTest {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
-            val output = view.findViewById<TextView>(R.id.logText)
-            log.value = "Échec"
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
+            replaceLog("Échec")
             searchAvailable.value = true
             renderUpdates()
 
@@ -292,9 +353,9 @@ class BuildStepViewTest {
         withView { activity, view ->
             val find = view.findViewById<View>(R.id.logFind)
             val query = view.findViewById<EditText>(R.id.logQuery)
-            val output = view.findViewById<TextView>(R.id.logText)
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
-            log.value = "needle needle"
+            replaceLog("needle needle")
             searchAvailable.value = true
             renderUpdates()
 
@@ -303,10 +364,9 @@ class BuildStepViewTest {
             finishSearch()
             assertEquals(0 until 6, highlightedRange(output))
 
-            log.value = "new needle"
-            scheduler.triggerActions()
             view.findViewById<View>(R.id.logNext).performClick()
             assertEquals(7 until 13, highlightedRange(output))
+            replaceLog("new needle")
             renderUpdates()
             finishSearch()
             assertEquals(4 until 10, highlightedRange(output))
@@ -323,9 +383,9 @@ class BuildStepViewTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun bringsAMatchBelowAndToTheRightOfTheViewportIntoView() {
+    fun bringsAMatchInAnOffscreenLogRowIntoView() {
         withView { _, view ->
-            log.value = "needle<br>" + "line<br>".repeat(80) + "X".repeat(200) + "needle" + "X".repeat(100)
+            replaceLog("needle\n" + "line\n".repeat(80) + "X".repeat(200) + "needle")
             searchAvailable.value = true
             renderUpdates()
 
@@ -337,26 +397,18 @@ class BuildStepViewTest {
             view.layout(0, 0, 400, 500)
             finishSearch()
 
-            val output = view.findViewById<TextView>(R.id.logText)
-            val horizontal = output.parent as HorizontalScrollView
-            val vertical = horizontal.parent as ScrollView
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
+            assertEquals(null, output.findViewHolderForAdapterPosition(81))
             view.findViewById<View>(R.id.logNext).performClick()
-            renderUpdates()
-
-            val match = checkNotNull(highlightedRange(output))
-            val matchLeft = output.left + output.totalPaddingLeft + output.layout.getPrimaryHorizontal(match.first)
-            val matchRight = output.left + output.totalPaddingLeft + output.layout.getPrimaryHorizontal(match.last + 1)
-            assertTrue(matchLeft > horizontal.width)
-            assertTrue(matchLeft >= horizontal.scrollX + horizontal.paddingLeft)
-            assertTrue(matchRight <= horizontal.scrollX + horizontal.width - horizontal.paddingRight)
-            assertTrue(vertical.scrollY > 0)
+            assertEquals(200 until 206, highlightedRange(output, 81))
+            assertTrue(output.canScrollVertically(-1))
         }
     }
 
     private fun assertSearchOmitsHyperlinkControls(readLog: (List<String>) -> List<String>) {
         withView { activity, view ->
             val query = view.findViewById<EditText>(R.id.logQuery)
-            val output = view.findViewById<TextView>(R.id.logText)
+            val output = view.findViewById<RecyclerView>(R.id.logLines)
             val count = view.findViewById<TextView>(R.id.logMatchCount)
             val links = listOf("\u001B]" to "\u0007", "\u001B]" to "\u001B\\", "\u009D" to "\u009C")
             val chunks = links.flatMapIndexed { index, (osc, terminator) ->
@@ -366,11 +418,11 @@ class BuildStepViewTest {
                     "${terminator.last()}\u001B[31mReport & details\u001B[0m${osc}8;;${terminator}"
                 )
             }
-            log.value = readLog(chunks).joinToString("") { it.replaceAnsiColorCodeToHtml() }
+            renderLog(readLog(chunks))
             searchAvailable.value = true
             renderUpdates()
 
-            assertEquals(List(links.size) { "Report & details" }.joinToString("\n"), output.text.toString())
+            assertEquals(List(links.size) { "Report & details" }, links.indices.map { lineText(output, it).toString() })
             view.findViewById<View>(R.id.logFind).performClick()
             query.setText("report & details")
             finishSearch()
@@ -386,15 +438,34 @@ class BuildStepViewTest {
         }
     }
 
-    private fun highlightedRange(output: TextView): IntRange? {
-        val text = output.text as Spanned
+    private fun highlightedRange(output: RecyclerView, position: Int = 0): IntRange? {
+        val text = lineText(output, position) as? Spanned ?: return null
         val span = text.getSpans(0, text.length, BackgroundColorSpan::class.java).singleOrNull() ?: return null
         return text.getSpanStart(span) until text.getSpanEnd(span)
     }
 
+    private fun replaceLog(text: String) {
+        log.clear()
+        renderLog(listOf(text))
+    }
+
+    private fun renderLog(chunks: List<String>) {
+        log.render(Observable.fromIterable(chunks), Schedulers.trampoline())
+    }
+
+    private fun renderOutput(output: RecyclerView): String = lineText(output, 0).toString()
+
+    private fun lineText(output: RecyclerView, position: Int): CharSequence? {
+        val width = View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.EXACTLY)
+        val height = View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY)
+        output.measure(width, height)
+        output.layout(0, 0, 480, 320)
+        return (output.findViewHolderForAdapterPosition(position)?.itemView as? TextView)?.text
+    }
+
     private fun withView(test: (Activity, BuildStepView) -> Unit) {
         val presenter = mockk<BuildStepPresenter>(relaxUnitFun = true) {
-            every { logString } returns log
+            every { log } returns this@BuildStepViewTest.log
             every { logLoadFailed } returns loadFailed
             every { logSearchAvailable } returns searchAvailable
             every { canRetryStepLoad } returns canRetry

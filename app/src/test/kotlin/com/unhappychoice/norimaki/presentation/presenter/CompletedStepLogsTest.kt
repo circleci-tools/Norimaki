@@ -16,13 +16,18 @@ import io.reactivex.Observable
 import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.TestScheduler
 import mortar.MortarScope
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import java.util.Date
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit.SECONDS
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.kodein.di.DI
@@ -41,7 +46,15 @@ class CompletedStepLogsTest {
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.just(build)
         }
-        val presenter = BuildStepPresenter(::outputClient).apply {
+        val display = TestScheduler()
+        val formatting = TestScheduler()
+        val executor = Executors.newSingleThreadExecutor()
+        val displayThread = Thread.currentThread()
+        val formattingThreads = mutableListOf<Thread>()
+        val presenter = BuildStepPresenter({ formatting }, { formatter, chunk ->
+            formattingThreads.add(Thread.currentThread())
+            formatter.format(chunk)
+        }, ::outputClient).apply {
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(null, legacyName = step.name) }
@@ -52,21 +65,44 @@ class CompletedStepLogsTest {
             }
         }
         val previousIo = RxJavaPlugins.getIoSchedulerHandler()
+        val previousComputation = RxJavaPlugins.getComputationSchedulerHandler()
         val previousMain = RxAndroidPlugins.getOnMainThreadSchedulerHandler()
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { display }
         var scope: MortarScope? = null
         try {
             scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))
 
+            val log = presenter.log
+            val updates = log.changes.doOnNext { assertSame(displayThread, Thread.currentThread()) }.test()
+            display.triggerActions()
+            assertEquals(0, log.lineCount)
+            val worker = executor.submit<Thread> {
+                formatting.triggerActions()
+                Thread.currentThread()
+            }.get(5, SECONDS)
+            assertNotSame(displayThread, worker)
+            assertEquals(List(4) { worker }, formattingThreads)
+            assertEquals(0, log.lineCount)
+            display.triggerActions()
+            updates.assertValueCount(4).assertNoErrors().dispose()
             assertEquals(
-                "first output<br>[Some output could not be loaded.]<br>" +
-                    "accepted<br>[Action output limit reached.]<br>last output",
-                presenter.logString.value
+                listOf(
+                    "first output",
+                    "[Some output could not be loaded.]",
+                    "accepted",
+                    "[Action output limit reached.]",
+                    "last output"
+                ),
+                (0 until log.lineCount).map { line -> log[line].joinToString("") { it.text } }
             )
+            assertEquals(false, presenter.logLoadFailed.value)
         } finally {
             scope?.destroy()
+            executor.shutdownNow()
             RxAndroidPlugins.setMainThreadSchedulerHandler(previousMain)
+            RxJavaPlugins.setComputationSchedulerHandler(previousComputation)
             RxJavaPlugins.setIoSchedulerHandler(previousIo)
         }
     }
