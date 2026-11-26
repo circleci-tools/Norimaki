@@ -66,7 +66,7 @@ class GsonParceler : KeyParceler {
     private fun decodeBuildScreen(json: JsonObject, type: Class<out Screen>): Screen {
         if (!json.has("build")) return gson.fromJson(json, type)
         val build = gson.fromJson(json.get("build"), Build::class.java)
-        val buildId = BuildId.from(build) ?: return BuildListScreen("")
+        val buildId = BuildId.from(build) ?: return BuildListScreen(null)
         return when (type) {
             TestResultsScreen::class.java -> TestResultsScreen(buildId)
             BuildStepScreen::class.java -> {

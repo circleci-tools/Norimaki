@@ -13,6 +13,8 @@ internal class WorkflowApprovals {
         !it.pending && requestId !in it.submitted
     }
 
+    fun isIdle(): Boolean = state.value == WorkflowApprovalState()
+
     fun submit(job: WorkflowJob, request: () -> Completable) {
         val requestId = job.pendingApprovalId ?: return
         synchronized(this) {

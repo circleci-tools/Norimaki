@@ -61,7 +61,9 @@ jobs:
           path: app/build/test-results/testDebugUnitTest
       - run:
           name: Verify Kotest and Vintage execution
-          command: python3 scripts/ci/check-unit-test-results.py
+          command: |
+            python3 scripts/ci/test-check-unit-test-results.py
+            python3 scripts/ci/check-unit-test-results.py
       - run:
           name: Enforce JaCoCo line coverage
           command: |

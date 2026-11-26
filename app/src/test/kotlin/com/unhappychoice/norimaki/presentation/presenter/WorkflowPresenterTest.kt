@@ -4,6 +4,7 @@ import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
@@ -63,7 +64,7 @@ class WorkflowPresenterTest : DescribeSpec({
         expectedToken: String = "test-token",
         view: WorkflowView = mockk()
     ) =
-        WorkflowPresenter(WorkflowScreen("github/owner/repo", "run", "deploy")) { token ->
+        WorkflowPresenter(WorkflowScreen(ProjectId("github", "owner", "repo"), "run", "deploy")) { token ->
             token shouldBe expectedToken
             client
         }.apply {
@@ -192,6 +193,32 @@ class WorkflowPresenterTest : DescribeSpec({
             )
             recreated.canApprove(hold) shouldBe false
             verify(exactly = 1) { client.approve("run", "request") }
+        }
+
+        it("releases retained approval state once an unapproved workflow screen closes") {
+            val session = testSession(mockk())
+            val client = mockk<WorkflowClient> {
+                every { jobs(any()) } returns Single.just(listOf(hold))
+            }
+            val verified = session.restore().blockingGet()
+
+            repeat(50) { index ->
+                val view = mockk<WorkflowView>()
+                val visited = WorkflowPresenter(
+                    WorkflowScreen(ProjectId("github", "owner", "repo"), "workflow-$index", "deploy")
+                ) { client }
+                    .apply {
+                        di = DI {
+                            bind<MainActivity>() with singleton { mockk<MainActivity>() }
+                            bind<SessionService>() with singleton { session }
+                        }
+                    }
+                val visitScope = visited.attachToTestScope(view)
+                visited.dropView(view)
+                visitScope.destroy()
+            }
+
+            verified.workflowApprovalCount shouldBe 0
         }
 
         it("retries a failed refresh without resubmitting an accepted approval") {
