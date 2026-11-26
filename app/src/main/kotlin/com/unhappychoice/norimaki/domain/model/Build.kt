@@ -1,6 +1,5 @@
 package com.unhappychoice.norimaki.domain.model
 
-import android.graphics.Color
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -8,11 +7,11 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 fun Build.repositoryString(): String = "$username / $reponame"
 fun Build.revisionString(): String = "$branch #$buildNum (${vcsRevision?.take(6)})"
 
-fun Build.statusColor(): Int = when (status) {
-    "success", "fixed", "no_tests" -> Color.rgb(66, 200, 138)
-    "canceled" -> Color.rgb(137, 137, 137)
-    "infrastructure_fail", "timedout", "failed" -> Color.rgb(237, 92, 92)
-    else -> Color.rgb(92, 211, 228)
+fun Build.buildStatus(): BuildStatus = when (status) {
+    "success", "fixed", "no_tests" -> BuildStatus.SUCCESS
+    "canceled" -> BuildStatus.CANCELED
+    "infrastructure_fail", "timedout", "failed" -> BuildStatus.FAILED
+    else -> BuildStatus.ACTIVE
 }
 
 fun Build.avatarUrl(): String? {
@@ -34,6 +33,8 @@ fun Build.workflowString(): String? =
     listOfNotNull(workflows?.workflowName, workflows?.jobName).joinToString(" / ").ifEmpty { null }
 
 fun Build.projectName(): String = "${vcsType()}/$username/$reponame"
+
+fun Build.projectId(): ProjectId = ProjectId(vcsType(), username.orEmpty(), reponame.orEmpty())
 
 fun Build.uniqueId(): String = "${projectName()}/$buildNum"
 

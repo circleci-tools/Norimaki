@@ -82,7 +82,7 @@ private fun verifyDownloadCancellation(
             if (call.isCanceled()) canceledCallFailed.countDown()
         }
     }).build()
-    val url = if (redirect) "https://circleci.com/redirect" else localUrl.toString()
+    val url = if (redirect) "https://circleci.com/redirect" else "https://circleci.com/log"
     val observer = fetch(BuildOutputClient("token", httpClient), url).test()
 
     try {

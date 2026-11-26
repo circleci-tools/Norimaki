@@ -1,14 +1,11 @@
 package com.unhappychoice.norimaki.domain.model
 
-import android.graphics.Color
 import com.github.unhappychoice.circleci.v1.response.BuildAction
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
-import io.mockk.unmockkStatic
 import java.util.Date
 
 class BuildStepTest : DescribeSpec({
@@ -48,34 +45,28 @@ class BuildStepTest : DescribeSpec({
         }
     }
 
-    describe("BuildStep.statusColor()") {
-        beforeEach {
-            mockkStatic(Color::class)
-            every { Color.rgb(any<Int>(), any<Int>(), any<Int>()) } answers { (firstArg<Int>() shl 16) or (secondArg<Int>() shl 8) or thirdArg<Int>() }
+    describe("BuildStep.buildStatus()") {
+        it("should be CANCELED when an action is canceled") {
+            BuildStep("test", listOf(action(isCanceled = true, isFailed = true))).buildStatus() shouldBe BuildStatus.CANCELED
         }
-        afterEach { unmockkStatic(Color::class) }
-
-        it("should be gray when an action is canceled") {
-            BuildStep("test", listOf(action(isCanceled = true, isFailed = true))).statusColor() shouldBe 0x898989
+        it("should be FAILED when an action failed or timed out") {
+            BuildStep("test", listOf(action(isFailed = true))).buildStatus() shouldBe BuildStatus.FAILED
+            BuildStep("test", listOf(action(isTimedout = true))).buildStatus() shouldBe BuildStatus.FAILED
         }
-        it("should be red when an action failed or timed out") {
-            BuildStep("test", listOf(action(isFailed = true))).statusColor() shouldBe 0xED5C5C
-            BuildStep("test", listOf(action(isTimedout = true))).statusColor() shouldBe 0xED5C5C
+        it("should be SUCCESS when every action finished") {
+            BuildStep("test", listOf(action(), action())).buildStatus() shouldBe BuildStatus.SUCCESS
         }
-        it("should be red when an action is an infrastructure failure") {
-            BuildStep("test", listOf(action(isInfrastructureFail = true))).statusColor() shouldBe 0xED5C5C
+        it("should be FAILED when an action is an infrastructure failure") {
+            BuildStep("test", listOf(action(isInfrastructureFail = true))).buildStatus() shouldBe BuildStatus.FAILED
         }
-        it("should be gray when an action is canceled and infrastructure failed") {
+        it("should be CANCELED when an action is canceled and infrastructure failed") {
             BuildStep(
                 "test",
                 listOf(action(isCanceled = true, isInfrastructureFail = true))
-            ).statusColor() shouldBe 0x898989
+            ).buildStatus() shouldBe BuildStatus.CANCELED
         }
-        it("should be green when every action finished") {
-            BuildStep("test", listOf(action(), action())).statusColor() shouldBe 0x42C88A
-        }
-        it("should be blue while an action is running") {
-            BuildStep("test", listOf(action(), action(end = null))).statusColor() shouldBe 0x5CD3E4
+        it("should be ACTIVE while an action is running") {
+            BuildStep("test", listOf(action(), action(end = null))).buildStatus() shouldBe BuildStatus.ACTIVE
         }
     }
 })

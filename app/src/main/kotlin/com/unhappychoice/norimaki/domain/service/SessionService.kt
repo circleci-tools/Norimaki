@@ -36,6 +36,12 @@ class VerifiedSession(
     internal fun workflowApprovals(workflowId: String): WorkflowApprovals =
         approvals.getOrPut(workflowId, ::WorkflowApprovals)
 
+    internal fun releaseWorkflowApprovals(workflowId: String) {
+        approvals.computeIfPresent(workflowId) { _, current -> current.takeUnless { it.isIdle() } }
+    }
+
+    internal val workflowApprovalCount: Int get() = approvals.size
+
     private val approvals = ConcurrentHashMap<String, WorkflowApprovals>()
     private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
 }
