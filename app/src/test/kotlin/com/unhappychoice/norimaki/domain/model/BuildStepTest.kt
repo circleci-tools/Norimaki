@@ -15,7 +15,8 @@ class BuildStepTest : DescribeSpec({
         end: Date? = Date(),
         isCanceled: Boolean? = null,
         isFailed: Boolean? = null,
-        isTimedout: Boolean? = null
+        isTimedout: Boolean? = null,
+        isInfrastructureFail: Boolean? = null
     ): BuildAction = mockk {
         every { runTimeMillis } returns millis
         every { step } returns stepNumber
@@ -23,6 +24,7 @@ class BuildStepTest : DescribeSpec({
         every { canceled } returns isCanceled
         every { failed } returns isFailed
         every { timedout } returns isTimedout
+        every { infrastructureFail } returns isInfrastructureFail
     }
 
     describe("BuildStep.runTime()") {
@@ -53,6 +55,15 @@ class BuildStepTest : DescribeSpec({
         }
         it("should be SUCCESS when every action finished") {
             BuildStep("test", listOf(action(), action())).buildStatus() shouldBe BuildStatus.SUCCESS
+        }
+        it("should be FAILED when an action is an infrastructure failure") {
+            BuildStep("test", listOf(action(isInfrastructureFail = true))).buildStatus() shouldBe BuildStatus.FAILED
+        }
+        it("should be CANCELED when an action is canceled and infrastructure failed") {
+            BuildStep(
+                "test",
+                listOf(action(isCanceled = true, isInfrastructureFail = true))
+            ).buildStatus() shouldBe BuildStatus.CANCELED
         }
         it("should be ACTIVE while an action is running") {
             BuildStep("test", listOf(action(), action(end = null))).buildStatus() shouldBe BuildStatus.ACTIVE
