@@ -167,6 +167,22 @@ class BuildViewTest {
         verify(exactly = 0) { presenter.rebuild() }
     }
 
+    @Test
+    fun isCurrentlyDisplayedReflectsAttachmentAndSoleChildStatus() = withBuildView { activity, view ->
+        assertTrue(view.isCurrentlyDisplayed())
+
+        val sibling = View(activity)
+        (view.parent as ViewGroup).addView(sibling)
+        assertFalse(view.isCurrentlyDisplayed())
+
+        (view.parent as ViewGroup).removeView(sibling)
+        assertTrue(view.isCurrentlyDisplayed())
+
+        (view.parent as ViewGroup).removeView(view)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(view.isCurrentlyDisplayed())
+    }
+
     private fun withCacheClearDialog(check: (BuildView, MenuItem, AlertDialog) -> Unit) =
         withBuildView { activity, view ->
             val menu = PopupMenu(activity, view).menu
