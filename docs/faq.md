@@ -19,6 +19,11 @@ This is expected: Norimaki excludes the saved token from Android backups and dev
 it is never written to a backup in the first place. Enter your token again on the new device or
 after a restore.
 
+### Is my API token stored securely?
+
+Yes. Norimaki encrypts the token at rest with a key generated in the Android Keystore before
+writing it to disk, so the stored value is not readable as plain text.
+
 ## Projects and builds
 
 ### "Could not load projects." / "Could not load the build details."

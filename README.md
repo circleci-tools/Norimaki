@@ -39,7 +39,7 @@ See [Getting started with Norimaki](docs/getting-started.md) for a walkthrough o
 
 To replace your CircleCI personal API token, open the build list's overflow menu, select **Change API Token**, enter the new token, and tap **Apply**. Norimaki verifies the token with CircleCI before saving it on the device. If verification fails, check your connection and confirm that the token is still valid, then try again.
 
-Norimaki excludes the saved token from Android backups and device transfers. Enter your token again after restoring the app from a backup or moving to another device.
+Norimaki encrypts the saved token at rest using a key from the Android Keystore, and excludes it from Android backups and device transfers. Enter your token again after restoring the app from a backup or moving to another device.
 
 ## Running tests
 
