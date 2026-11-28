@@ -2,7 +2,6 @@ package com.unhappychoice.norimaki.extension
 
 import android.util.Log
 import io.reactivex.Observable
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
@@ -30,7 +29,7 @@ fun <T : Any> Observable<T>.subscribeCompleted(fn: () -> Unit): Disposable =
     )
 
 fun <T> Observable<T>.subscribeOnIoObserveOnUI(): Observable<T> =
-    subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
+    subscribeOn(Schedulers.io()).observeOn(androidMainScheduler())
 
 fun <T> Observable<T?>.filterNotNull(): Observable<T> =
     filter { it != null }.map { it!! }

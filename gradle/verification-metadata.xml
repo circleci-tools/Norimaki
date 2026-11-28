@@ -1069,6 +1069,14 @@
             <sha256 value="0bedc2947dae72ebdf8c0efa5346a03e467b8e1c79c6798e1fdcba1c7feca98d" origin="Verified against Google Maven"/>
          </artifact>
       </component>
+      <component group="com.github.akarnokd" name="rxjava3-bridge" version="3.0.2">
+         <artifact name="rxjava3-bridge-3.0.2.jar">
+            <sha256 value="b394283c6c3db5118613da796049622200a600660e991237a0cc83750d7d288d" origin="Verified against Maven Central"/>
+         </artifact>
+         <artifact name="rxjava3-bridge-3.0.2.module">
+            <sha256 value="1fc0b33d08500b6510c46cc49d248c6f374d52101e409db71f5e4ea477440a75" origin="Verified against Maven Central"/>
+         </artifact>
+      </component>
       <component group="com.github.bumptech.glide" name="annotations" version="5.0.10">
          <artifact name="annotations-5.0.10.jar">
             <sha256 value="dfea200e7481a7a1c4e77a8f6286a6b5a6acbc7b86ae4d3d4ab48f4c5f259893" origin="Verified against Maven Central"/>
@@ -2176,6 +2184,27 @@
          </artifact>
          <artifact name="rxkotlin-2.4.0.pom">
             <sha256 value="f08ac6a2caae6043a74972ff3b65a3ccb04ab814b81d137f1ad3940aca14dfce" origin="Verified against Maven Central"/>
+         </artifact>
+      </component>
+      <component group="io.reactivex.rxjava3" name="rxandroid" version="3.0.2">
+         <artifact name="rxandroid-3.0.2.aar">
+            <sha256 value="18fc3d5a89e83df8b7cd4a5a4eb42a9ee525ce6477e1302794b3449f1d75cb02" origin="Verified against Maven Central"/>
+         </artifact>
+         <artifact name="rxandroid-3.0.2.module">
+            <sha256 value="8282fc42f5aaaa5927ffbbd561ddb7b8b380cf0c4ed753c40c7ce3bd8312f05a" origin="Verified against Maven Central"/>
+         </artifact>
+      </component>
+      <component group="io.reactivex.rxjava3" name="rxjava" version="3.1.2">
+         <artifact name="rxjava-3.1.2.module">
+            <sha256 value="8ff01c5d0030dda283e8b80b23499d4d6a832bc7385d9d33050b646cb892f5fb" origin="Verified against Maven Central"/>
+         </artifact>
+      </component>
+      <component group="io.reactivex.rxjava3" name="rxjava" version="3.1.5">
+         <artifact name="rxjava-3.1.5.jar">
+            <sha256 value="cb4caa9b13fb3e33cbfa47e5e20d15891f8b8ab7ef0b49d527f6511f216ce72e" origin="Verified against Maven Central"/>
+         </artifact>
+         <artifact name="rxjava-3.1.5.module">
+            <sha256 value="0dd28de3159de714cb651fe957a0fe1b1f67547450ec4c7bda2f01ed187987f9" origin="Verified against Maven Central"/>
          </artifact>
       </component>
       <component group="jakarta.activation" name="jakarta.activation-api" version="1.2.1">
@@ -3372,6 +3401,11 @@
          </artifact>
          <artifact name="reactive-streams-1.0.2.pom">
             <sha256 value="5b626a99e5734ba8d0c0c8c3fc6258afa0624f4ce61ae1192247d03c57463ded" origin="Verified against Maven Central"/>
+         </artifact>
+      </component>
+      <component group="org.reactivestreams" name="reactive-streams" version="1.0.3">
+         <artifact name="reactive-streams-1.0.3.pom">
+            <sha256 value="cced467175f4257833f6cb07510ff97b3c75a06e1a58d882a39d79853d51c602" origin="Verified against Maven Central"/>
          </artifact>
       </component>
       <component group="org.reactivestreams" name="reactive-streams" version="1.0.4">

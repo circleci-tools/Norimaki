@@ -17,6 +17,7 @@ import flow.Flow
 import flow.History
 import io.mockk.every
 import io.mockk.mockk
+import io.reactivex.schedulers.TestScheduler
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,6 +33,33 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = BackTestApplication::class, sdk = [34])
 class MainActivityBackTest {
+    @Test
+    fun backKeepsTokenFormWhileReplacementIoIsQueued() {
+        val scheduler = TestScheduler()
+        Robolectric.buildActivity(MainActivity::class.java).use { controller ->
+            val activity = controller.get()
+            val application = activity.application as BackTestApplication
+            application.credentialScheduler = scheduler
+            controller.setup()
+            scheduler.triggerActions()
+            val history = activity.openTokenForm()
+            val form = activity.binding.containerView.children.single() as APITokenView
+            form.findViewById<EditText>(R.id.accessTokenTextView).setText("replacement")
+            assertTrue(form.findViewById<Button>(R.id.submitButton).performClick())
+            assertEquals(listOf("saved"), application.verifiedTokens)
+            assertEquals("saved", application.savedToken)
+
+            activity.onBackPressedDispatcher.onBackPressed()
+            assertTokenFormStayed(activity, form, history)
+
+            scheduler.triggerActions()
+            finishTransition()
+            assertEquals(listOf("saved", "replacement"), application.verifiedTokens)
+            assertEquals("replacement", application.savedToken)
+            assertEquals(listOf(BuildListScreen(null)), Flow.get(activity).history.toList())
+        }
+    }
+
     @Test
     fun systemBackKeepsTokenFormDuringVerificationAndAfterRejection() =
         assertBackKeepsTokenForm { onBackPressedDispatcher.onBackPressed() }

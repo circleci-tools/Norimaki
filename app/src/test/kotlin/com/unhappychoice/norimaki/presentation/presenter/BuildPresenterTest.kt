@@ -20,8 +20,8 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.*
 import io.reactivex.Observable
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
@@ -30,6 +30,7 @@ import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.util.concurrent.TimeUnit
+import io.reactivex.rxjava3.schedulers.Schedulers as RxJava3Schedulers
 
 class BuildPresenterTest : DescribeSpec({
     lateinit var scope: MortarScope
@@ -53,8 +54,8 @@ class BuildPresenterTest : DescribeSpec({
 
     beforeEach {
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
         initialBuild = PublishSubject.create()
         retry = PublishSubject.create()
@@ -373,8 +374,8 @@ class BuildPresenterWorkflowTest : DescribeSpec({
 
     beforeEach {
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
         activity = mockk(relaxUnitFun = true)
         PollingLifecycle(activity).start()
@@ -467,8 +468,8 @@ class BuildPresenterPollingTest : DescribeSpec({
         try {
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
-            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
             val loadedBuilds = mutableListOf<Build>()
             val view = mockk<BuildView>()

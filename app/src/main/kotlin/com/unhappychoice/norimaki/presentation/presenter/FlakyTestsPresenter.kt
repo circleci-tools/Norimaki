@@ -1,11 +1,11 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.unhappychoice.norimaki.domain.model.ProjectId
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.infrastructure.flakytests.FlakyTestSummary
 import com.unhappychoice.norimaki.infrastructure.flakytests.FlakyTestsClient
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.FlakyTestsView
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import org.kodein.di.factory
@@ -31,7 +31,7 @@ class FlakyTestsPresenter : PresenterNeedsToken<FlakyTestsView>() {
         bag.clear()
         show(FlakyTestsState.Loading)
         createClient(verified.token).fetch(projectId)
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(androidMainScheduler())
             .takeUntil(sessionEnded(verified))
             .subscribeBy(
                 onNext = { show(FlakyTestsState.Loaded(it)) },

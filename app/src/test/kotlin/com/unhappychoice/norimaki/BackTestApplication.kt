@@ -7,13 +7,22 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
+import io.reactivex.Scheduler
 import io.reactivex.Single
+import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.SingleSubject
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 
 class BackTestApplication : NorimakiApplication() {
+    var credentialScheduler: Scheduler = Schedulers.trampoline()
+    var sessionObserverScheduler: Scheduler = Schedulers.trampoline()
+    var beforeReadToken = {}
+    var beforeWriteToken = {}
+    var savedToken = "saved"
+        private set
+
     var projects: Observable<List<Project>> = Observable.never()
     val projectBuildRequests = mutableListOf<Triple<String, String, String>>()
     val verifiedTokens = mutableListOf<String>()
@@ -27,7 +36,6 @@ class BackTestApplication : NorimakiApplication() {
     }
 
     private fun createSession(): SessionService {
-        var savedToken = "saved"
         val user = mockk<User>(relaxed = true)
         val clients = listOf("saved", "rejected", "replacement").associateWith {
             mockk<CircleCIAPIClientV1_1> {
@@ -39,10 +47,23 @@ class BackTestApplication : NorimakiApplication() {
                 }
             }
         }
-        return SessionService({ savedToken }, { savedToken = it }, clients::getValue) { client ->
-            val token = clients.entries.single { it.value === client }.key
-            verifiedTokens.add(token)
-            if (token == "rejected") rejection else Single.just(user)
-        }
+        return SessionService(
+            readToken = {
+                beforeReadToken()
+                savedToken
+            },
+            writeToken = {
+                beforeWriteToken()
+                savedToken = it
+            },
+            createClient = clients::getValue,
+            verify = { client ->
+                val token = clients.entries.single { it.value === client }.key
+                verifiedTokens.add(token)
+                if (token == "rejected") rejection else Single.just(user)
+            },
+            ioScheduler = credentialScheduler,
+            observerScheduler = sessionObserverScheduler
+        )
     }
 }
