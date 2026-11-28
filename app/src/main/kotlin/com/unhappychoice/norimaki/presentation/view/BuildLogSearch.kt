@@ -7,12 +7,12 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.BuildStepViewBinding
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.adapter.BuildLogAdapter
 import com.unhappychoice.norimaki.presentation.log.BuildLog
 import com.unhappychoice.norimaki.presentation.log.LogMatch
 import io.reactivex.Observable
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposables
 import io.reactivex.disposables.SerialDisposable
@@ -81,7 +81,7 @@ internal class BuildLogSearch(
         search.set(
             Observable.timer(150, TimeUnit.MILLISECONDS, Schedulers.computation())
                 .flatMap { LogMatchIndex.find(snapshot, query) }
-                .observeOn(AndroidSchedulers.mainThread())
+                .observeOn(androidMainScheduler())
                 .subscribeNext {
                     matches = it
                     selected = 0

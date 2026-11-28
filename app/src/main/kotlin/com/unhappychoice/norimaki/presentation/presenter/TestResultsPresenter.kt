@@ -1,12 +1,12 @@
 package com.unhappychoice.norimaki.presentation.presenter
 
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResults
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsCursor
 import com.unhappychoice.norimaki.presentation.presenter.core.PresenterNeedsToken
 import com.unhappychoice.norimaki.presentation.view.TestResultsView
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import org.kodein.di.factory
@@ -29,7 +29,7 @@ class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
         bag.clear()
         view.showLoading()
         createClient(verified.token).fetch(buildId, nextCursor)
-            .observeOn(AndroidSchedulers.mainThread(), true)
+            .observeOn(androidMainScheduler(), true)
             .takeUntil(sessionEnded(verified))
             .subscribeBy(
                 onNext = { results ->

@@ -14,6 +14,7 @@ import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import flow.Flow
+import hu.akarnokd.rxjava3.bridge.RxJavaBridge.toV3Scheduler
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.clearMocks
@@ -23,8 +24,8 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.reactivex.Observable
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
@@ -35,6 +36,7 @@ import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.util.Date
 import java.util.concurrent.TimeUnit
+import io.reactivex.rxjava3.schedulers.Schedulers as RxJava3Schedulers
 
 class BuildListPresenterTest : DescribeSpec({
     lateinit var scope: MortarScope
@@ -47,8 +49,8 @@ class BuildListPresenterTest : DescribeSpec({
         activity = mockk()
         RxJavaPlugins.setComputationSchedulerHandler { scheduler }
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { scheduler }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { toV3Scheduler(scheduler) }
     }
 
     afterEach { scope.destroy() }

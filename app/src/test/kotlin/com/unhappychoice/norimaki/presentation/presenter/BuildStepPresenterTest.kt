@@ -19,8 +19,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import io.reactivex.Observable
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.PublishSubject
@@ -32,6 +32,7 @@ import java.util.Date
 import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.TimeUnit.SECONDS
 import mortar.MortarScope
+import io.reactivex.rxjava3.schedulers.Schedulers as RxJava3Schedulers
 
 class BuildStepPresenterTest : DescribeSpec({
     fun action(number: Int, end: Date?, actionIndex: Int = 0): BuildAction = mockk {
@@ -152,8 +153,8 @@ class BuildStepPresenterTest : DescribeSpec({
                 try {
                     RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                     RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-                    RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-                    RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+                    RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+                    RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
                     scope = presenter.attachToTestScope(view)
 
@@ -303,8 +304,8 @@ class BuildStepPresenterTest : DescribeSpec({
         try {
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
             scope = presenter.attachToTestScope(view)
 
             scheduler.triggerActions()
@@ -359,8 +360,8 @@ class BuildStepPresenterTest : DescribeSpec({
 
         try {
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
             scope = presenter.attachToTestScope(view)
             formatting.triggerActions()
@@ -430,8 +431,8 @@ class BuildStepPresenterTest : DescribeSpec({
             try {
                 RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
                 RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
-                RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-                RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+                RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+                RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
                 scope = presenter.attachToTestScope(view)
 
@@ -485,8 +486,8 @@ class BuildStepPresenterTest : DescribeSpec({
             try {
                 RxJavaPlugins.setComputationSchedulerHandler { scheduler }
                 RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-                RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-                RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+                RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+                RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
                 scope = presenter.attachToTestScope(view)
                 verify(exactly = 1) { view.showStep(runningStep) }
@@ -550,8 +551,8 @@ class BuildStepPresenterTest : DescribeSpec({
         try {
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
             scope = presenter.attachToTestScope(view)
             presenter.logLines() shouldBe emptyList()
 
@@ -631,8 +632,8 @@ class BuildStepPresenterTest : DescribeSpec({
         try {
             RxJavaPlugins.setComputationSchedulerHandler { scheduler }
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
             scope = presenter.attachToTestScope(view)
 
