@@ -15,6 +15,59 @@ import java.util.concurrent.TimeUnit.SECONDS
 
 class BuildListRequestsTest : DescribeSpec({
     describe("Build list requests") {
+        listOf(0, 1).forEach { initialCount ->
+            it("bounds polling and reopens pagination after loading $initialCount initial builds") {
+                val scheduler = TestScheduler()
+                val template = Gson().fromJson(
+                    """{"username":"circleci-tools","reponame":"Norimaki","lifecycle":"finished","status":"success"}""",
+                    Build::class.java
+                )
+                val offsets = mutableListOf<Int>()
+                var feed = 1..initialCount
+                var rowsFetched = 0
+                val requests = BuildListRequests(scheduler, scheduler, scheduler, { Observable.empty() }) { offset ->
+                    offsets.add(offset)
+                    val first = feed.last - offset
+                    val rows = (first downTo maxOf(feed.first, first - BUILD_LIST_PAGE_SIZE + 1)).map { number ->
+                        template.copy(buildNum = number, queuedAt = Date(number.toLong()))
+                    }
+                    rowsFetched += rows.size
+                    Observable.just(rows)
+                }
+                val builds = requests.builds.test()
+                val initialLoad = requests.start()
+                val polling = requests.poll(10, resuming = false, clock = scheduler)
+                try {
+                    scheduler.triggerActions()
+                    if (initialCount > 0) {
+                        checkNotNull(requests.loadNextPage())
+                        scheduler.triggerActions()
+                    }
+                    requests.hasMore.value shouldBe false
+                    feed = 2..10_001
+                    offsets.clear()
+                    rowsFetched = 0
+                    scheduler.advanceTimeBy(10, SECONDS)
+
+                    offsets shouldBe listOf(0, 20, 40, 60, 80)
+                    rowsFetched shouldBe 100
+                    builds.values().last().map { it.buildNum } shouldBe (10_001 downTo 9_902).toList()
+
+                    checkNotNull(requests.loadNextPage())
+                    scheduler.triggerActions()
+                    builds.values().last().map { it.buildNum } shouldBe (9_981 downTo 9_882).toList()
+
+                    offsets.clear()
+                    scheduler.advanceTimeBy(10, SECONDS)
+                    offsets shouldBe listOf(0)
+                } finally {
+                    polling.dispose()
+                    initialLoad.dispose()
+                    builds.dispose()
+                }
+            }
+        }
+
         it("bounds polling history and pages through evicted builds while new builds arrive") {
             val scheduler = TestScheduler()
             val template = Gson().fromJson(
