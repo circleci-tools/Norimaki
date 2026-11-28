@@ -97,7 +97,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     private fun submitRebuild(clearCache: Boolean) {
         val verified = account ?: return
         val origin = view
-        val result = verified.startRebuild(buildId, clearCache, sessionEnded(verified)) ?: return
+        val result = verified.startRebuild(buildId, clearCache) ?: return
         rebuildFailed.value = false
 
         result

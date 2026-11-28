@@ -11,6 +11,8 @@ import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
+import io.reactivex.subjects.CompletableSubject
+import io.reactivex.subjects.ReplaySubject
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
@@ -19,19 +21,26 @@ class VerifiedSession(
     val user: User,
     val client: CircleCIAPIClientV1_1
 ) {
-    internal fun startRebuild(buildId: BuildId, clearCache: Boolean, cancel: Observable<*>): Observable<Build>? {
-        if (!pendingRebuilds.add(buildId)) return null
-        val release: () -> Unit = { pendingRebuilds.remove(buildId) }
-        if (clearCache) return client.rebuildWithoutCache(buildId, cancel = cancel, onFinished = release)
-
-        return Observable.defer {
-            client.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
+    internal fun startRebuild(buildId: BuildId, clearCache: Boolean): Observable<Build>? {
+        if (ended.hasComplete() || !pendingRebuilds.add(buildId)) return null
+        // The session subscribes immediately, and the initiating view observes only the result.
+        val result = ReplaySubject.createWithSize<Build>(1)
+        Observable.defer {
+            when {
+                ended.hasComplete() -> Observable.empty<Build>()
+                clearCache -> client.rebuildWithoutCache(buildId)
+                else -> client.retryBuild(buildId.vcsType, buildId.owner, buildId.repository, buildId.number)
+            }
         }
             .subscribeOn(Schedulers.io())
-            .takeUntil(cancel)
+            .takeUntil(ended.toObservable<Unit>())
             .doOnError { it.printStackTrace() }
-            .doFinally(release)
+            .doOnTerminate { pendingRebuilds.remove(buildId) }
+            .subscribe(result)
+        return result.hide()
     }
+
+    internal fun end() = ended.onComplete()
 
     internal fun workflowApprovals(workflowId: String): WorkflowApprovals =
         approvals.getOrPut(workflowId, ::WorkflowApprovals)
@@ -43,6 +52,7 @@ class VerifiedSession(
     internal val workflowApprovalCount: Int get() = approvals.size
 
     private val approvals = ConcurrentHashMap<String, WorkflowApprovals>()
+    private val ended = CompletableSubject.create()
     private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
 }
 
@@ -90,6 +100,7 @@ class SessionService(
     private fun authenticate(token: String, currentAttempt: Int): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             check(currentAttempt == attempt) { "Authentication was superseded" }
+            active.value?.toNullable()?.end()
             active.onNext(None)
         }
         require(token.isNotBlank()) { "Enter an API token" }

@@ -219,6 +219,50 @@ class BuildPresenterTest : DescribeSpec({
             verify { activity wasNot Called }
         }
 
+        it("blocks both actions after reopening a build until the regular retry completes") {
+            every { view.isCurrentlyDisplayed() } returns true
+            presenter.rebuild()
+            verify(exactly = 1) { api.retryBuild("github", "owner", "repo", 123) }
+            presenter.dropView(view)
+
+            val reopened = createPresenter()
+            val reopenedView = mockk<BuildView>(relaxUnitFun = true)
+            every { reopenedView.isCurrentlyDisplayed() } returns true
+            val reopenedScope = reopened.attachToTestScope(reopenedView)
+            val flow = mockk<Flow>(relaxed = true)
+            mockkStatic(Flow::class)
+            try {
+                every { Flow.get(activity) } returns flow
+                reopened.rebuild()
+                reopened.rebuildWithoutCache()
+
+                retry.hasObservers() shouldBe true
+                verify(exactly = 1) { api.retryBuild("github", "owner", "repo", 123) }
+                verify(exactly = 0) { api.deleteCache(any(), any(), any()) }
+
+                retry.onNext(mockk())
+                retry.onComplete()
+
+                verify(exactly = 0) { flow.goBack() }
+                reopened.rebuildWithoutCache()
+                verify(exactly = 1) { api.deleteCache("github", "owner", "repo") }
+                deleteCache.onComplete()
+            } finally {
+                unmockkStatic(Flow::class)
+                reopenedScope.destroy()
+            }
+        }
+
+        it("cancels a pending regular retry when the session ends after detachment") {
+            presenter.rebuild()
+            presenter.dropView(view)
+            retry.hasObservers() shouldBe true
+
+            session.replace("replacement-token").test().assertComplete()
+
+            retry.hasObservers() shouldBe false
+        }
+
         it("identifies the cache project before build details load") {
             presenter.projectId shouldBe ProjectId("github", "owner", "repo")
             verify(exactly = 0) { view.showBuild(any()) }
