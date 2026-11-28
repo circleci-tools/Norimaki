@@ -23,7 +23,7 @@ class APITokenPreference internal constructor(
 
     var token: String
         get() {
-            val stored = preferences.getString(TOKEN_KEY, null) ?: return ""
+            val stored = synchronized(preferences) { preferences.getString(TOKEN_KEY, null) } ?: return ""
             val key = secretKey ?: return stored
             return try {
                 decrypt(stored, key)
@@ -37,10 +37,19 @@ class APITokenPreference internal constructor(
         set(value) {
             val key = secretKey
             val toStore = if (key == null) value else encrypt(value, key)
-            if (!preferences.edit().putString(TOKEN_KEY, toStore).commit()) {
+            saveToken(toStore)
+        }
+
+    private fun saveToken(stored: String) {
+        synchronized(preferences) {
+            val previous = preferences.getString(TOKEN_KEY, null)
+            if (!preferences.edit().putString(TOKEN_KEY, stored).commit()) {
+                // A failed commit still updates the in-memory preferences.
+                preferences.edit().putString(TOKEN_KEY, previous).commit()
                 throw IOException("Could not save the API token")
             }
         }
+    }
 
     private fun encrypt(value: String, key: SecretKey): String {
         val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key) }
