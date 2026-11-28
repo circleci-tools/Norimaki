@@ -121,7 +121,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         cancelFailed.value = false
 
         result
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(androidMainScheduler())
             .subscribeBy(
                 onError = { cancelFailed.value = true },
                 onNext = { pollBuild() }
