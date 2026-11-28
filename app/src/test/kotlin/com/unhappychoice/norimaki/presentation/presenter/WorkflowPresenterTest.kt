@@ -241,7 +241,9 @@ class WorkflowPresenterTest : DescribeSpec({
 
             presenter.refresh()
 
-            updates.values().last() shouldBe WorkflowState(listOf(resolved))
+            updates.values().last() shouldBe WorkflowState(
+                listOf(resolved), message = R.string.workflow_approval_submitted
+            )
             verify(exactly = 3) { client.jobs("run") }
             verify(exactly = 1) { client.approve("run", "request") }
         }
@@ -279,6 +281,31 @@ class WorkflowPresenterTest : DescribeSpec({
                 listOf(hold), message = R.string.workflow_approval_error, refreshFailed = true
             )
             presenter.canApprove(hold) shouldBe true
+        }
+
+        it("reconciles a resolved hold on manual refresh after the automatic refresh fails") {
+            val client = mockk<WorkflowClient> {
+                every { jobs("run") } returnsMany listOf(
+                    Single.just(listOf(hold)),
+                    Single.error(IOException()),
+                    Single.just(listOf(resolved))
+                )
+                every { approve("run", "request") } returns Completable.error(WorkflowHttpException(400))
+            }
+            val presenter = presenter(client)
+            val updates = presenter.updates.test()
+
+            presenter.approve(hold)
+
+            updates.values().last() shouldBe WorkflowState(
+                listOf(hold), message = R.string.workflow_approval_error, refreshFailed = true
+            )
+
+            presenter.refresh()
+
+            updates.values().last() shouldBe WorkflowState(listOf(resolved), message = R.string.workflow_approval_resolved)
+            verify(exactly = 3) { client.jobs("run") }
+            verify(exactly = 1) { client.approve("run", "request") }
         }
 
         listOf(

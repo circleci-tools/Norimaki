@@ -6,8 +6,6 @@ commands:
       - restore_cache:
           keys:
             - &gradle_cache_key gradle-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}-{{ checksum "settings.gradle" }}-{{ checksum "build.gradle" }}-{{ checksum "app/build.gradle" }}-{{ checksum "app/gradle.lockfile" }}
-            - builds-{{ .Revision }}
-            - app-builds-{{ .Revision }}
 jobs:
   build:
     working_directory: ~/norimaki
@@ -21,6 +19,9 @@ jobs:
           name: Test Gradle Wrapper checksum verification
           command: python3 scripts/test-gradle-wrapper.py
       - restore_gradle_cache
+      - run:
+          name: Test Gradle dependency verification
+          command: python3 scripts/ci/test-gradle-dependency-verification.py
       - run:
           name: Download Dependencies
           command: ./gradlew dependencies
@@ -51,6 +52,12 @@ jobs:
     steps:
       - checkout
       - restore_gradle_cache
+      - restore_cache:
+          keys:
+            - builds-{{ .Revision }}
+      - restore_cache:
+          keys:
+            - app-builds-{{ .Revision }}
       - run:
           name: Build Debug APK
           command: ./gradlew assembleDebug
@@ -108,14 +115,18 @@ jobs:
       - run:
           name: Create release Gradle user home
           command: |
+            if [[ ! -s gradle/verification-metadata.xml ]]; then
+              echo "Missing Gradle dependency verification metadata." >&2
+              exit 1
+            fi
             release_gradle_home=$(mktemp -d)
             printf 'export GRADLE_USER_HOME=%q\n' "$release_gradle_home" >> "$BASH_ENV"
       - run:
           name: Validate release tag
-          command: ./gradlew :app:validateReleaseTag
+          command: ./gradlew --dependency-verification strict :app:validateReleaseTag
       - run:
           name: Publish APK
-          command: ./gradlew publishReleaseApk --track internal
+          command: ./gradlew --dependency-verification strict publishReleaseApk --track internal
 
 workflows:
   test-and-deploy:

@@ -39,7 +39,7 @@ See [Getting started with Norimaki](docs/getting-started.md) for a walkthrough o
 
 To replace your CircleCI personal API token, open the build list's overflow menu, select **Change API Token**, enter the new token, and tap **Apply**. Norimaki verifies the token with CircleCI before saving it on the device. If verification fails, check your connection and confirm that the token is still valid, then try again.
 
-Norimaki excludes the saved token from Android backups and device transfers. Enter your token again after restoring the app from a backup or moving to another device.
+Norimaki encrypts the saved token at rest using a key from the Android Keystore, and excludes it from Android backups and device transfers. Enter your token again after restoring the app from a backup or moving to another device.
 
 ## Running tests
 
@@ -51,12 +51,20 @@ With JDK 21, Android SDK Platform 37.0, and Android SDK Build Tools 37.0.0 insta
 
 Run `python3 scripts/test-gradle-wrapper.py` to verify that the Wrapper rejects a ZIP with a mismatched checksum. This test uses a local ZIP and requires a JDK and Python 3.
 
+Run `python3 scripts/ci/test-gradle-dependency-verification.py` to check that Gradle rejects a modified buildscript JAR at the same version before loading it.
+The fixture resolves dependencies offline once the Wrapper distribution is installed.
+
 Set `CODECOV_TOKEN` in the CircleCI project environment variables. The test job requires a successful Codecov upload and fails if the token is unset or empty.
 
 ## Release checklist
 
 - Add an entry to [CHANGELOG.md](CHANGELOG.md) for the new version before tagging it.
 - When upgrading the Gradle Wrapper, update `distributionSha256Sum` in `gradle/wrapper/gradle-wrapper.properties` with the [official SHA-256 checksum](https://gradle.org/release-checksums/) for the exact distribution in `distributionUrl`.
+- When changing dependencies, update `gradle/verification-metadata.xml` with
+  `./gradlew --write-verification-metadata sha256 :app:assembleRelease :app:jacoco`.
+  Review new hashes against official repositories or publisher checksums before committing them.
+  For Android Gradle Plugin upgrades, include the AAPT2 checksums for Linux, macOS, and Windows from Google Maven.
+  The tagged deploy job validates the tag and publishes with strict dependency verification.
 - When updating `versionName` in `app/build.gradle`, update `app/src/main/play/release-notes/en-US/production.txt` with the user-facing changes for that version before tagging it.
 - Before pushing the tag, create a [CircleCI context](https://circleci.com/docs/guides/security/contexts/) named `norimaki-release`, restrict it to this project and to the maintainers authorized to cut a release, and set these environment variables on that context:
 
