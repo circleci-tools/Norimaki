@@ -1,5 +1,6 @@
 package com.unhappychoice.norimaki.infrastructure.workflow
 
+import com.google.gson.JsonSyntaxException
 import com.unhappychoice.norimaki.domain.model.WorkflowJob
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -102,6 +103,24 @@ class WorkflowClientTest : DescribeSpec({
             val client = workflowClient { response(it, 200, """{"items":[],"next_page_token":"same"}""") }
 
             client.jobs("run").test().assertFailure(IOException::class.java)
+        }
+
+        it("fails without returning partial jobs when a later page contains invalid JSON") {
+            val requests = mutableListOf<String?>()
+            val client = workflowClient { request ->
+                val pageToken = request.url.queryParameter("page-token")
+                requests.add(pageToken)
+                val body = if (pageToken == null) {
+                    """{"items":[{"id":"build","name":"test","job_number":42,"status":"success","type":"build"}],
+                       "next_page_token":"next"}""".trimIndent()
+                } else {
+                    """{"items":["""
+                }
+                response(request, 200, body)
+            }
+
+            client.jobs("run").test().assertFailure(JsonSyntaxException::class.java)
+            requests shouldBe listOf(null, "next")
         }
     }
 
