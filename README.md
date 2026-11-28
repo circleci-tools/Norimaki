@@ -54,7 +54,7 @@ Run `python3 scripts/test-gradle-wrapper.py` to verify that the Wrapper rejects 
 Run `python3 scripts/ci/test-gradle-dependency-verification.py` to check that Gradle rejects a modified buildscript JAR at the same version before loading it.
 The fixture resolves dependencies offline once the Wrapper distribution is installed.
 
-Set `CODECOV_TOKEN` in the CircleCI project environment variables to enable coverage uploads. The test job logs a skip when the token is unset or empty.
+Set `CODECOV_TOKEN` in the CircleCI project environment variables. The test job requires a successful Codecov upload and fails if the token is unset or empty.
 
 ## Release checklist
 
