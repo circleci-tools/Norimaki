@@ -63,4 +63,7 @@
     <string name="clear_project_cache_and_rebuild">Clear project cache and rebuild</string>
     <string name="clear_project_cache_message">This clears the cache for the entire %1$s project before retrying the selected build. Other builds can be affected even if the retry fails.</string>
     <string name="clear_cache_and_rebuild">Clear cache and rebuild</string>
+    <string name="flaky_tests_empty">No flaky tests reported for this project.</string>
+    <string name="flaky_tests_load_error">Could not load flaky tests.</string>
+    <string name="flaky_tests_occurrences">Flaky %1$d times</string>
 </resources>
