@@ -18,16 +18,16 @@ class FlakyTestsClientTest : DescribeSpec({
             val client = client { request ->
                 requests.add(request)
                 200 to """{"flaky-tests":[
-                    {"test-name":"testA","classname":"ExampleTest"},
-                    {"test-name":"testA","classname":"ExampleTest"},
-                    {"test-name":"testB","classname":null}
+                    {"test-name":"testA","classname":"ExampleTest","times-flaked":2},
+                    {"test-name":"testA","classname":"ExampleTest","times-flaked":3},
+                    {"test-name":"testB","classname":null,"times-flaked":7}
                 ]}"""
             }
 
             client.fetch(projectId).test().awaitDone(5, SECONDS).assertResult(
                 listOf(
-                    FlakyTestSummary("testA", "ExampleTest", 2),
-                    FlakyTestSummary("testB", null, 1)
+                    FlakyTestSummary("testB", null, 7),
+                    FlakyTestSummary("testA", "ExampleTest", 5)
                 )
             )
             requests.map { it.url.encodedPath } shouldBe listOf("/api/v2/insights/gh/org/repo/flaky-tests")

@@ -25,7 +25,10 @@ internal class FlakyTestsClient(
             val tests = body.getAsJsonArray("flaky-tests") ?: JsonArray()
             tests.map { it.asJsonObject }
                 .groupBy { it.get("test-name").asString to it.stringOrNull("classname") }
-                .map { (identity, occurrences) -> FlakyTestSummary(identity.first, identity.second, occurrences.size) }
+                .map { (identity, rows) ->
+                    val occurrences = rows.sumOf { it.get("times-flaked").asInt }
+                    FlakyTestSummary(identity.first, identity.second, occurrences)
+                }
                 .sortedByDescending { it.occurrences }
         }
     }.subscribeOn(Schedulers.io())
