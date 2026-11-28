@@ -8,9 +8,11 @@ import android.view.LayoutInflater
 import android.view.View.MeasureSpec
 import android.widget.AutoCompleteTextView
 import android.widget.FrameLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
 import com.github.unhappychoice.circleci.CircleCIAPIClientV1_1
@@ -146,6 +148,49 @@ class BuildListViewTest {
             (ShadowDialog.getLatestDialog() as AlertDialog).getButton(DialogInterface.BUTTON_NEUTRAL).performClick()
             shadowOf(Looper.getMainLooper()).idle()
             verify(exactly = 1) { presenter.selectBranch(null) }
+        }
+    }
+
+    @Test
+    fun showsFlakyTestsMenuItemOnlyForASpecificProjectAndNavigatesOnSelection() {
+        val presenter = mockk<BuildListPresenter>(relaxed = true)
+        every { presenter.canFilterByBranch } returns true
+        every { presenter.builds } returns Observable.empty()
+        every { presenter.canRetryPage } returns Observable.empty()
+        every { presenter.selectedBranch } returns Variable("").asObservable()
+        every { presenter.recentBranches } returns emptyList()
+
+        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
+            val binding = BuildListViewBinding.inflate(activity.layoutInflater)
+            binding.root.di = DI { bind<BuildListPresenter>() with singleton { presenter } }
+            activity.setContentView(binding.root)
+
+            val menu = PopupMenu(activity, binding.root).menu
+            binding.root.onCreateOptionsMenu(menu)
+            val flakyTests = menu.findItem(2)
+            assertEquals("Flaky Tests", flakyTests.title.toString())
+            binding.root.onOptionsItemSelected(flakyTests)
+            verify(exactly = 1) { presenter.goToFlakyTests() }
+        }
+    }
+
+    @Test
+    fun hidesFlakyTestsMenuItemForTheAggregatedRecentBuildsFeed() {
+        val presenter = mockk<BuildListPresenter>(relaxed = true)
+        every { presenter.canFilterByBranch } returns false
+        every { presenter.builds } returns Observable.empty()
+        every { presenter.canRetryPage } returns Observable.empty()
+
+        Robolectric.buildActivity(Activity::class.java).setup().use { controller ->
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
+            val binding = BuildListViewBinding.inflate(activity.layoutInflater)
+            binding.root.di = DI { bind<BuildListPresenter>() with singleton { presenter } }
+            activity.setContentView(binding.root)
+
+            val menu = PopupMenu(activity, binding.root).menu
+            binding.root.onCreateOptionsMenu(menu)
+            assertTrue(menu.children.none { it.title == "Flaky Tests" })
         }
     }
 
