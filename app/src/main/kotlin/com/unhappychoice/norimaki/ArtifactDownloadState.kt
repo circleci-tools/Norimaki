@@ -7,9 +7,9 @@ import androidx.lifecycle.ViewModel
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.presentation.presenter.ArtifactSelection
 import io.reactivex.Observable
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
@@ -56,7 +56,7 @@ internal class ArtifactDownloadState : ViewModel() {
                     .takeUntil(sessionEnded)
             }
             .doFinally(destination::discard)
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(androidMainScheduler())
             .subscribeBy(
                 onNext = transfer::onNext,
                 onComplete = { transfer.onNext(Transfer.Idle) },
