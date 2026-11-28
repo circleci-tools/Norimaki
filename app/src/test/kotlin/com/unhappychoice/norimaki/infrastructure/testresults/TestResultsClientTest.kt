@@ -32,7 +32,7 @@ class TestResultsClientTest : DescribeSpec({
             }
 
             val second = TestResultsCursor("a+/=", true, null)
-            val last = TestResultsCursor("last", true, second)
+            val last = TestResultsCursor("last", true, second, 165)
             client.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(
                 TestResults.FailurePage(emptyList(), second),
                 TestResults.FailurePage(listOf(TestFailure("asserts", "Example", "Expected <a>\nActual <b>")), last),
@@ -44,6 +44,45 @@ class TestResultsClientTest : DescribeSpec({
             requests.map { it.url.port }.distinct() shouldBe listOf(443)
             requests.map { it.header("Circle-Token") } shouldBe List(3) { "session-token" }
             requests.map { it.url.queryParameter("page-token") } shouldBe listOf(null, "a+/=", "last")
+        }
+
+        it("accepts a response at the byte limit and rejects one byte over before parsing") {
+            val body = """{"items":[{"result":"success","name":"café"}]}"""
+            val bytes = body.toByteArray().size.toLong()
+            client(maxResponseBytes = bytes) { 200 to body }
+                .fetch(buildId).test().awaitDone(5, SECONDS).assertResult(TestResults.Reported)
+            client(maxResponseBytes = bytes - 1) { 200 to body }
+                .fetch(buildId).test().awaitDone(5, SECONDS).assertResult(TestResults.LimitReached)
+        }
+
+        it("keeps failures within the cumulative budget when resuming pagination") {
+            val first = TestFailure("a", null, "1234")
+            val client = client(maxFailureCost = 262) { request ->
+                when (request.url.queryParameter("page-token")) {
+                    null -> 200 to """{"items":[{"result":"failure","name":"a","message":"1234"}],"next_page_token":"next"}"""
+                    "next" -> 200 to """{"items":[{"result":"error","name":"b"},{"result":"failure","name":"c"}],"next_page_token":"unused"}"""
+                    else -> error("Unexpected page request")
+                }
+            }
+            val cursor = TestResultsCursor("next", true, null, 133)
+            val next = TestResults.FailurePage(listOf(TestFailure("b", null, null)))
+            client.fetch(buildId).test().awaitDone(5, SECONDS).assertResult(
+                TestResults.FailurePage(listOf(first), cursor), next, TestResults.LimitReached
+            )
+            client.fetch(buildId, cursor).test().awaitDone(5, SECONDS)
+                .assertResult(next, TestResults.LimitReached)
+        }
+
+        it("limits pagination even when pages contain no failures") {
+            var requests = 0
+            val results = client {
+                requests++
+                200 to """{"items":[],"next_page_token":"page-$requests"}"""
+            }.fetch(buildId).test().awaitDone(5, SECONDS)
+                .assertComplete().assertNoErrors().values()
+
+            requests shouldBe 100
+            results.last() shouldBe TestResults.LimitReached
         }
 
         it("rejects an off-origin redirect on the first page") {
@@ -122,7 +161,7 @@ class TestResultsClientTest : DescribeSpec({
                 200 to body
             }.fetch(buildId).test().awaitDone(5, SECONDS).assertFailure(
                 JsonSyntaxException::class.java,
-                TestResults.FailurePage(listOf(TestFailure("asserts", null, null)), TestResultsCursor("next", true, null))
+                TestResults.FailurePage(listOf(TestFailure("asserts", null, null)), TestResultsCursor("next", true, null, 135))
             )
         }
     }
@@ -170,10 +209,14 @@ private fun verifyRedirectRejected(redirectOnFirstPage: Boolean) {
     }
 }
 
-private fun client(respond: (Request) -> Pair<Int, String>): TestResultsClient =
+private fun client(
+    maxResponseBytes: Long = 1024L * 1024,
+    maxFailureCost: Int = 512 * 1024,
+    respond: (Request) -> Pair<Int, String>
+): TestResultsClient =
     TestResultsClient("session-token", OkHttpClient.Builder().addInterceptor { chain ->
         val request = chain.request()
         val (status, body) = respond(request)
         Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
             .code(status).message("Test response").body(body.toResponseBody()).build()
-    }.build())
+    }.build(), maxResponseBytes, maxFailureCost)
