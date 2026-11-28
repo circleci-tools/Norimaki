@@ -173,6 +173,32 @@ class TestResultsViewTest {
     }
 
     @Test
+    fun displaysEarlierFailuresAndAnIncompleteStatusWhenEitherLimitIsReached() {
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            val body = when (request.url.queryParameter("page-token")) {
+                null -> """{"items":[{"result":"failure","name":"first"}],"next_page_token":"next"}"""
+                "next" -> """{"items":[{"result":"failure","name":"second","message":"A longer failure message"}]}"""
+                else -> error("Unexpected page request")
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(body.toResponseBody()).build()
+        }.build()
+        listOf(
+            { token: String -> TestResultsClient(token, http, maxResponseBytes = 80) },
+            { token: String -> TestResultsClient(token, http, maxFailureCost = 133) }
+        ).forEach { createClient ->
+            withClient(createClient) { view ->
+                scheduler.triggerActions()
+                shadowOf(Looper.getMainLooper()).idle()
+                assertStatus(view, R.string.test_results_limit_reached)
+                assertEquals(1, view.findViewById<RecyclerView>(R.id.failures).adapter?.itemCount)
+                assertEquals(View.GONE, view.findViewById<Button>(R.id.retry).visibility)
+            }
+        }
+    }
+
+    @Test
     fun startsFromTheFirstPageWhenReattachingAfterSessionReplacement() {
         val pages = PublishSubject.create<TestResults>()
         val session = testSession(mockk())
