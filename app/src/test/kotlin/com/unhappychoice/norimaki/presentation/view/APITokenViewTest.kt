@@ -33,9 +33,10 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class APITokenViewTest {
+    private val scheduler = TestScheduler()
+
     @Before
     fun pauseNetworkSubscriptions() {
-        val scheduler = TestScheduler()
         RxJavaPlugins.setIoSchedulerHandler { scheduler }
     }
 
@@ -49,13 +50,15 @@ class APITokenViewTest {
         val preference = APITokenPreference(RuntimeEnvironment.getApplication())
         val savedToken = "saved-dummy-token"
         val replacement = "replacement_Dummy-Token.123"
-        preference.token = savedToken
 
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
             val activity = controller.setup().get()
             val flow = Flow.get(activity)
             assertEquals(BuildListScreen(null), flow.history.top<Any>())
+            scheduler.triggerActions()
+            preference.token = savedToken
             flow.set(APITokenScreen())
+            scheduler.triggerActions()
             shadowOf(Looper.getMainLooper()).idle()
             val field = activity.findViewById<EditText>(R.id.accessTokenTextView)
 
