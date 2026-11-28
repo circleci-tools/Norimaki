@@ -34,17 +34,13 @@ class APITokenPreference internal constructor(
             }
         }
         set(value) {
-            val key = secretKey
-            val toStore = if (key == null) {
-                value
-            } else {
-                try {
-                    encrypt(value, key)
-                } catch (e: Exception) {
-                    return
-                }
+            val toStore = secretKey?.let { encrypt(value, it) } ?: value
+            val previous = preferences.getString(TOKEN_KEY, null)
+            if (!preferences.edit().putString(TOKEN_KEY, toStore).commit()) {
+                // A failed commit can still update the in-memory preference.
+                preferences.edit().putString(TOKEN_KEY, previous).apply()
+                error("Could not persist the API token")
             }
-            preferences.edit().putString(TOKEN_KEY, toStore).apply()
         }
 
     private fun encrypt(value: String, key: SecretKey): String {

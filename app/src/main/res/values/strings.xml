@@ -5,6 +5,7 @@
     <string name="drawer_open">Open</string>
     <string name="drawer_close">Close</string>
     <string name="api_token_required">Enter an API token.</string>
+    <string name="api_token_save_failed">Could not save the verified API token on this device. Try again. If the problem persists, restart the app and re-enter your token.</string>
     <string name="api_token_verification_failed">Could not verify this API token. Check the token and try again.</string>
     <string name="project_picker_row">%1$s · %2$s/%3$s</string>
     <string name="project_provider_github" translatable="false">GitHub</string>

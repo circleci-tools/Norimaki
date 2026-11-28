@@ -2,12 +2,14 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Observer
 import com.github.unhappychoice.circleci.v1.response.User
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.databinding.ApiTokenViewBinding
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
 import com.unhappychoice.norimaki.presentation.viewmodel.APITokenViewModel
 import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
@@ -17,6 +19,7 @@ import io.mockk.verify
 import io.reactivex.subjects.SingleSubject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.kodein.di.DI
@@ -26,6 +29,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
+import javax.crypto.KeyGenerator
+import javax.crypto.spec.SecretKeySpec
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [28])
@@ -45,13 +50,7 @@ class APITokenViewLoggingTest {
         ))
         Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
             val activity = controller.get().apply { setTheme(R.style.AppTheme) }
-            val presenter = mockk<APITokenPresenter>(relaxed = true) {
-                every { this@mockk.model } returns model
-                every { observeVerification(any()) } answers {
-                    model.verification.observe(activity, firstArg<Observer<TokenVerification>>())
-                }
-                every { goToBuildList() } answers { model.reset() }
-            }
+            val presenter = presenterFor(activity, model)
             val form = showForm(activity, presenter)
             val input = form.accessTokenTextView
             assertEquals(storedToken, input.text.toString())
@@ -78,6 +77,51 @@ class APITokenViewLoggingTest {
             assertFalse("Token text appeared in the Android log", tokenWasLogged)
         }
     }
+
+    @Test
+    fun showsSaveErrorAndStaysOnFormWhenEncryptionFailsAfterVerification() {
+        Robolectric.buildActivity(ComponentActivity::class.java).setup().use { controller ->
+            val activity = controller.get().apply { setTheme(R.style.AppTheme) }
+            val preferences = activity.getSharedPreferences("token-replacement", Context.MODE_PRIVATE)
+            val key = KeyGenerator.getInstance("AES").generateKey()
+            val readable = APITokenPreference(preferences, key).apply { token = "saved-token" }
+            val unwritable = APITokenPreference(preferences, SecretKeySpec(ByteArray(5), "AES"))
+            val verification = SingleSubject.create<User>()
+            val session = SessionService(
+                readToken = { readable.token },
+                writeToken = { unwritable.token = it },
+                createClient = { mockk() },
+                verify = { verification }
+            )
+            val model = APITokenViewModel(session)
+            val presenter = presenterFor(activity, model)
+            val form = showForm(activity, presenter)
+
+            form.accessTokenTextView.setText("replacement-token")
+            form.submitButton.performClick()
+
+            assertFalse(form.submitButton.isEnabled)
+            verification.onSuccess(mockk())
+
+            assertEquals(TokenVerification.SAVE_FAILED, model.verification.value)
+            assertEquals(activity.getString(R.string.api_token_save_failed), form.accessTokenTextView.error.toString())
+            assertEquals("replacement-token", form.accessTokenTextView.text.toString())
+            assertTrue(form.submitButton.isEnabled)
+            assertTrue(form.accessTokenTextView.isEnabled)
+            assertFalse(session.hasVerifiedSession)
+            assertEquals("saved-token", readable.token)
+            verify(exactly = 0) { presenter.goToBuildList() }
+        }
+    }
+
+    private fun presenterFor(activity: ComponentActivity, model: APITokenViewModel): APITokenPresenter =
+        mockk<APITokenPresenter>(relaxed = true) {
+            every { this@mockk.model } returns model
+            every { observeVerification(any()) } answers {
+                model.verification.observe(activity, firstArg<Observer<TokenVerification>>())
+            }
+            every { goToBuildList() } answers { model.reset() }
+        }
 
     private fun showForm(activity: Activity, presenter: APITokenPresenter): ApiTokenViewBinding =
         ApiTokenViewBinding.inflate(activity.layoutInflater).apply {

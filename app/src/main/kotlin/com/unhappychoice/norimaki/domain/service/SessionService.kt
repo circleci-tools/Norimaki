@@ -46,6 +46,8 @@ class VerifiedSession(
     private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
 }
 
+class TokenSaveException(cause: Exception) : RuntimeException("Could not save the API token", cause)
+
 class SessionService(
     private val readToken: () -> String,
     private val writeToken: (String) -> Unit,
@@ -70,14 +72,14 @@ class SessionService(
     fun replace(token: String): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             pendingRestore = null
-            authenticate(token, ++attempt)
+            authenticate(token, ++attempt, save = true)
         }
     }
 
     private fun startRestore(): Single<VerifiedSession> {
         val token = savedToken
         val currentAttempt = ++attempt
-        return authenticate(token, currentAttempt)
+        return authenticate(token, currentAttempt, save = false)
             .doOnEvent { _, _ ->
                 synchronized(lock) {
                     if (currentAttempt == attempt) pendingRestore = null
@@ -87,7 +89,7 @@ class SessionService(
             .also { pendingRestore = it }
     }
 
-    private fun authenticate(token: String, currentAttempt: Int): Single<VerifiedSession> = Single.defer {
+    private fun authenticate(token: String, currentAttempt: Int, save: Boolean): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             check(currentAttempt == attempt) { "Authentication was superseded" }
             active.onNext(None)
@@ -97,11 +99,17 @@ class SessionService(
         verify(client).map { user ->
             synchronized(lock) {
                 check(currentAttempt == attempt) { "Authentication was superseded" }
-                VerifiedSession(token, user, client).also {
-                    writeToken(token)
-                    active.onNext(Some(it))
-                }
+                if (save) saveToken(token)
+                VerifiedSession(token, user, client).also { active.onNext(Some(it)) }
             }
+        }
+    }
+
+    private fun saveToken(token: String) {
+        try {
+            writeToken(token)
+        } catch (e: Exception) {
+            throw TokenSaveException(e)
         }
     }
 }
