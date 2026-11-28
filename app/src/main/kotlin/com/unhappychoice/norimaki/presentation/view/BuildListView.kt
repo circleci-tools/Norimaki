@@ -44,17 +44,22 @@ class BuildListView(context: Context, attr: AttributeSet) : BaseView<BuildListVi
 
     private enum class MenuResource(val id: Int) {
         LogOut(0),
-        ShowLatest(1)
+        ShowLatest(1),
+        FlakyTests(2)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?) {
         menu?.add(Menu.NONE, MenuResource.ShowLatest.id, Menu.NONE, "Show Latest Builds")
+        if (presenter.canFilterByBranch) {
+            menu?.add(Menu.NONE, MenuResource.FlakyTests.id, Menu.NONE, "Flaky Tests")
+        }
         menu?.add(Menu.NONE, MenuResource.LogOut.id, Menu.NONE, "Change API Token")
     }
 
     override fun onOptionsItemSelected(item: MenuItem?) {
         when (item?.itemId) {
             MenuResource.LogOut.id -> presenter.changeAPIToken()
+            MenuResource.FlakyTests.id -> presenter.goToFlakyTests()
             MenuResource.ShowLatest.id -> {
                 presenter.showLatestBuilds()
                 binding.buildsView.scrollToPosition(0)
