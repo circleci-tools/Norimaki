@@ -206,8 +206,11 @@ class MainActivity : AppCompatActivity() {
         flowBackCallback.isEnabled = true
     }
 
-    private fun goBackFromCurrentScreen(): Boolean =
-        Flow.get(this).goBackFromScreen(session, isTokenScreenVisible())
+    private fun goBackFromCurrentScreen(): Boolean {
+        val tokenViews = binding.containerView.children.filterIsInstance<APITokenView>()
+        if (tokenViews.any { it.isSubmissionPending }) return true
+        return Flow.get(this).goBackFromScreen(session, tokenViews.any())
+    }
 
     private fun isTokenScreenVisible(): Boolean =
         binding.containerView.children.any { it is APITokenView }
