@@ -22,6 +22,7 @@ dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'androidx.appcompat:appcompat:1.8.0'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    implementation 'com.github.akarnokd:rxjava3-bridge:3.0.2'
     implementation 'com.github.bumptech.glide:glide:5.0.10'
     implementation 'com.github.gojuno.koptional:koptional:1.7.0'
     implementation 'com.github.rahatarmanahmed:circularprogressview:2.5.0'
@@ -35,8 +36,9 @@ dependencies {
     implementation 'com.squareup.mortar:mortar:0.20'
     implementation 'com.squareup.okhttp3:okhttp:5.5.1'
     implementation 'de.hdodenhof:circleimageview:3.1.0'
-    implementation 'io.reactivex.rxjava2:rxandroid:2.1.1'
     implementation 'io.reactivex.rxjava2:rxkotlin:2.4.0'
+    // Adapt the RxAndroid scheduler for the CircleCI client's RxJava 2 streams.
+    implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
     implementation 'org.jetbrains.kotlin:kotlin-reflect:2.4.21'
     implementation 'org.kodein.di:kodein-di:7.33.0'
     testImplementation platform('org.junit:junit-bom:6.1.3')

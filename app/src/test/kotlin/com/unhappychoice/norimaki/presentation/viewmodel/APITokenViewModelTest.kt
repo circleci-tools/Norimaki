@@ -50,7 +50,7 @@ class APITokenViewModelTest : DescribeSpec({
 
         fixture.pending.onError(IllegalStateException("Rejected token"))
 
-        fixture.model.token shouldBe "candidate"
+        fixture.model.token().blockingGet() shouldBe "candidate"
         fixture.savedToken shouldBe "saved"
         fixture.pending = SingleSubject.create()
         fixture.model.submit("retry")
