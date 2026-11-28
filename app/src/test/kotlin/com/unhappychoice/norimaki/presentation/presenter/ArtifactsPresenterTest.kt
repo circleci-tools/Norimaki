@@ -10,19 +10,20 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verifyOrder
 import io.reactivex.Observable
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.io.IOException
+import io.reactivex.rxjava3.schedulers.Schedulers as RxJava3Schedulers
 
 class ArtifactsPresenterTest : DescribeSpec({
     it("loads artifacts for the current job and retries that job after a request failure") {
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
         val build = BuildId("bitbucket", "team", "repo", 42)
         val artifact = Artifact(0, "reports/check.txt", "check.txt", "https://dl.circleci.com/file")

@@ -8,6 +8,7 @@ import com.github.unhappychoice.circleci.v1.response.Build
 import com.unhappychoice.norimaki.domain.model.BuildId
 import com.unhappychoice.norimaki.domain.model.ProjectId
 import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.presenter.core.Loadable
@@ -18,7 +19,6 @@ import com.unhappychoice.norimaki.presentation.screen.BuildListScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.view.BuildListView
 import io.reactivex.Observable
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
 import io.reactivex.disposables.Disposables
@@ -33,7 +33,7 @@ class BuildListPresenter : PresenterNeedsToken<BuildListView>(), Loadable, Pagin
     private val restoredBranch get() = screen?.selectedBranch?.takeIf(String::isNotEmpty)
     private val buildList by lazy {
         BuildListRequests(
-            Schedulers.io(), Schedulers.computation(), AndroidSchedulers.mainThread(),
+            Schedulers.io(), Schedulers.computation(), androidMainScheduler(),
             ::getBuildDetails, projectBuilds(branch = restoredBranch)
         )
     }
