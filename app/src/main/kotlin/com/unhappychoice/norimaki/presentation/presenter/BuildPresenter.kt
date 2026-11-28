@@ -60,11 +60,12 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
             .subscribeBy(
                 onNext = { loadedBuild ->
                     val hadWorkflow = hasWorkflow()
+                    val wasActive = isActive()
                     build = loadedBuild
                     view?.showBuild(loadedBuild)
                     val snapshot = loadedBuild.steps.orEmpty()
                     if (steps.value != snapshot) steps.value = snapshot
-                    if (hasWorkflow() != hadWorkflow) activity.invalidateOptionsMenu()
+                    if (hasWorkflow() != hadWorkflow || isActive() != wasActive) activity.invalidateOptionsMenu()
                 },
                 onError = { buildLoadFailed.value = true }
             )
@@ -115,6 +116,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     }
 
     fun cancel() {
+        if (!isActive()) return
         val verified = account ?: return
         val result = verified.startCancel(buildId, sessionEnded(verified)) ?: return
         cancelFailed.value = false
