@@ -142,6 +142,43 @@ class SessionServiceTest : DescribeSpec({
             fixture.session.restore().blockingGet() shouldBe latest
             fixture.savedToken shouldBe "first"
         }
+
+        it("rejects an earlier verification that completes before a queued replacement starts") {
+            val io = TestScheduler()
+            val fixture = SessionFixture(ioScheduler = io)
+            val accounts = fixture.session.changes.test()
+            val earlier = fixture.session.replace("second").test()
+            io.triggerActions()
+
+            fixture.secondVerification.onSuccess(fixture.secondUser)
+            val latest = fixture.session.replace("first").test()
+            io.triggerActions()
+
+            earlier.assertError(IllegalStateException::class.java)
+            latest.assertComplete()
+            fixture.writtenTokens shouldBe listOf("first")
+            accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("first")
+        }
+
+        it("rejects a restore that completes before a queued replacement starts") {
+            val io = TestScheduler()
+            val verification = SingleSubject.create<User>()
+            val fixture = SessionFixture(verification, ioScheduler = io)
+            val accounts = fixture.session.changes.test()
+            val restore = fixture.session.restore().test()
+            io.triggerActions()
+
+            verification.onSuccess(fixture.firstUser)
+            val replacement = fixture.session.replace("second").test()
+            io.triggerActions()
+            fixture.secondVerification.onSuccess(fixture.secondUser)
+            io.triggerActions()
+
+            restore.assertError(IllegalStateException::class.java)
+            replacement.assertComplete()
+            fixture.writtenTokens shouldBe listOf("second")
+            accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("second")
+        }
     }
 })
 

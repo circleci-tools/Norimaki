@@ -84,15 +84,16 @@ class SessionService(
         synchronized(lock) {
             check(request == replacementRequests.get()) { "Authentication was superseded" }
             pendingRestore = null
-            authenticate(token, ++attempt, persistToken = true)
+            authenticate(token, ++attempt, request, persistToken = true)
         }
     }
 
     private fun startRestore(): Single<VerifiedSession> {
+        val request = replacementRequests.get()
         val currentAttempt = ++attempt
         return Single.fromCallable { readToken() }
             .subscribeOn(ioScheduler)
-            .flatMap { authenticate(it, currentAttempt, persistToken = false) }
+            .flatMap { authenticate(it, currentAttempt, request, persistToken = false) }
             .doOnEvent { _, _ ->
                 synchronized(lock) {
                     if (currentAttempt == attempt) pendingRestore = null
@@ -102,21 +103,33 @@ class SessionService(
             .also { pendingRestore = it }
     }
 
-    private fun authenticate(token: String, currentAttempt: Int, persistToken: Boolean): Single<VerifiedSession> = Single.defer {
+    private fun authenticate(
+        token: String,
+        currentAttempt: Int,
+        request: Int,
+        persistToken: Boolean
+    ): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
-            check(currentAttempt == attempt) { "Authentication was superseded" }
+            checkCurrentAuthentication(currentAttempt, request)
             active.onNext(None)
         }
         require(token.isNotBlank()) { "Enter an API token" }
         val client = createClient(token)
         verify(client).observeOn(ioScheduler).map { user ->
             synchronized(lock) {
-                check(currentAttempt == attempt) { "Authentication was superseded" }
                 VerifiedSession(token, user, client).also {
-                    if (persistToken) writeToken(token)
+                    if (persistToken) {
+                        checkCurrentAuthentication(currentAttempt, request)
+                        writeToken(token)
+                    }
+                    checkCurrentAuthentication(currentAttempt, request)
                     active.onNext(Some(it))
                 }
             }
         }
+    }
+
+    private fun checkCurrentAuthentication(currentAttempt: Int, request: Int) {
+        check(currentAttempt == attempt && request == replacementRequests.get()) { "Authentication was superseded" }
     }
 }
