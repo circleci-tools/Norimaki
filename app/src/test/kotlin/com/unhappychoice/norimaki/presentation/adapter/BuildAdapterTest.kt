@@ -1,5 +1,8 @@
 package com.unhappychoice.norimaki.presentation.adapter
 
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -20,6 +23,29 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class BuildAdapterTest {
+    @Test
+    fun rendersBuildIndicatorsFromStatusLifecycleAndOutcome() {
+        val context = RuntimeEnvironment.getApplication()
+        val adapter = BuildAdapter(context)
+        val parent = FrameLayout(context)
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create()
+        val cases = listOf(
+            """{"status":"not_run","lifecycle":"not_run"}""" to Color.rgb(137, 137, 137),
+            """{"status":"retried","lifecycle":"finished","outcome":"failed"}""" to Color.rgb(237, 92, 92),
+            """{"status":"retried","lifecycle":"finished","outcome":"success"}""" to Color.rgb(66, 200, 138),
+            """{"status":"retried","lifecycle":"finished"}""" to Color.rgb(137, 137, 137),
+            """{"status":"running","lifecycle":"running"}""" to Color.rgb(92, 211, 228)
+        )
+        adapter.submitList(cases.map { (json, _) -> gson.fromJson(json, Build::class.java) })
+
+        cases.forEachIndexed { position, (json, expectedColor) ->
+            val holder = adapter.createViewHolder(parent, adapter.getItemViewType(position))
+            adapter.bindViewHolder(holder, position)
+            val indicator = holder.itemView.findViewById<View>(R.id.statusIndicator)
+            assertEquals(json, expectedColor, (indicator.background as ColorDrawable).color)
+        }
+    }
+
     @Test
     fun bindsBothRepositoriesWithoutAdvertisingStableIds() {
         val context = RuntimeEnvironment.getApplication()
