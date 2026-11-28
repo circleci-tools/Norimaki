@@ -20,6 +20,7 @@ Install [Norimaki from Google Play](https://play.google.com/store/apps/details?i
 
 ## Next steps
 
+See [Inspect a CircleCI build](usage.md) to search step logs, read test failures, and save artifacts.
 See [FAQ and troubleshooting](faq.md) if something didn't work as expected, or
 [Architecture](architecture.md) if you want to contribute a change and need an overview of the
 codebase.
