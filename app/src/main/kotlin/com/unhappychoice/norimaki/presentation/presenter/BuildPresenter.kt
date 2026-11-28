@@ -18,7 +18,6 @@ import com.unhappychoice.norimaki.presentation.view.BuildView
 import io.reactivex.Observable
 import io.reactivex.disposables.Disposable
 import io.reactivex.disposables.Disposables
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.rxkotlin.subscribeBy
 import java.util.concurrent.TimeUnit
@@ -101,7 +100,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
         rebuildFailed.value = false
 
         result
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(androidMainScheduler())
             .subscribeBy(
                 onError = { rebuildFailed.value = true },
                 onNext = { origin?.let(::goBackFrom) }
