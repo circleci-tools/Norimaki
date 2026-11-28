@@ -11,7 +11,8 @@ The source under `app/src/main/kotlin/com/unhappychoice/norimaki` is split into 
   (`SessionService`, `ArtifactDownloader`, `EventBusService`, ...) that hold app-wide state and
   business rules. Domain code does not depend on Android views.
 - `infrastructure` — clients that talk to CircleCI's HTTP APIs directly, such as `WorkflowClient`
-  (workflow jobs and approvals, CircleCI API v2) and `TestResultsClient`. Most other CircleCI
+  (workflow jobs and approvals, CircleCI API v2), `TestResultsClient`, and `FlakyTestsClient`
+  (project-level flaky-test insights, CircleCI API v2). Most other CircleCI
   calls (builds, rebuilds, artifacts) go through the `com.github.unhappychoice:circleci` library
   via `CircleCIAPIClientV1_1`, which `SessionService` creates and holds per verified session.
 - `presentation` — screens, views, and presenters, described below.
