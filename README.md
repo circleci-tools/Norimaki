@@ -16,6 +16,7 @@ Norimaki is a [CircleCI](https://circleci.com) client for Android.
 - Browse recent builds across projects or view builds for a specific project.
 - Inspect build steps, read their logs, and see other jobs in the same workflow.
 - Rebuild from the build details screen, with an option to clear the cache first.
+- Cancel a running build from the build details screen.
 
 ## Installation
 

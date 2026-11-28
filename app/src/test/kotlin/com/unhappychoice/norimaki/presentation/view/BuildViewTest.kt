@@ -40,9 +40,11 @@ import org.robolectric.shadows.ShadowDialog
 class BuildViewTest {
     private val presenter = mockk<BuildPresenter>(relaxUnitFun = true) {
         every { hasWorkflow() } returns false
+        every { isActive() } returns false
         every { steps } returns Variable(emptyList())
         every { projectId } returns ProjectId("github", "owner", "repo")
         every { rebuildFailed } returns Variable(false)
+        every { cancelFailed } returns Variable(false)
         every { buildLoadFailed } returns Variable(false)
     }
 
@@ -59,6 +61,42 @@ class BuildViewTest {
 
         view.onOptionsItemSelected(artifacts)
         verify(exactly = 1) { presenter.goToArtifactsScreen() }
+    }
+
+    @Test
+    fun hidesTheCancelMenuItemWhenTheBuildIsNotActive() = withBuildView { activity, view ->
+        every { presenter.isActive() } returns false
+        val menu = PopupMenu(activity, view).menu
+        view.onCreateOptionsMenu(menu)
+
+        val items = (0 until menu.size()).map(menu::getItem)
+        assertTrue(items.none { it.title == activity.getString(R.string.cancel_build) })
+    }
+
+    @Test
+    fun dispatchesCancelWhenTheCancelMenuItemIsSelected() = withBuildView { activity, view ->
+        every { presenter.isActive() } returns true
+        val menu = PopupMenu(activity, view).menu
+        view.onCreateOptionsMenu(menu)
+
+        val items = (0 until menu.size()).map(menu::getItem)
+        val cancel = items.single { it.title == activity.getString(R.string.cancel_build) }
+
+        view.onOptionsItemSelected(cancel)
+        verify(exactly = 1) { presenter.cancel() }
+    }
+
+    @Test
+    fun showsAndHidesTheCancelErrorMessage() = withBuildView { _, view ->
+        val failed = presenter.cancelFailed
+        val error = view.findViewById<View>(R.id.cancelError)
+        assertEquals(View.GONE, error.visibility)
+
+        failed.value = true
+        assertEquals(View.VISIBLE, error.visibility)
+
+        failed.value = false
+        assertEquals(View.GONE, error.visibility)
     }
 
     @Test

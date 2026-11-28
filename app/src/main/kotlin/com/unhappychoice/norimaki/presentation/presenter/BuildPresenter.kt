@@ -3,8 +3,10 @@ package com.unhappychoice.norimaki.presentation.presenter
 import com.github.unhappychoice.circleci.v1.response.Build
 import com.github.unhappychoice.circleci.v1.response.BuildStep
 import com.unhappychoice.norimaki.domain.model.BuildId
+import com.unhappychoice.norimaki.domain.model.BuildStatus
 import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.model.ProjectId
+import com.unhappychoice.norimaki.domain.model.buildStatus
 import com.unhappychoice.norimaki.domain.model.isFinished
 import com.unhappychoice.norimaki.domain.model.projectId
 import com.unhappychoice.norimaki.extension.*
@@ -31,6 +33,7 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
     val steps = Variable<List<BuildStep>>(listOf())
     val buildLoadFailed = Variable(false)
     val rebuildFailed = Variable(false)
+    val cancelFailed = Variable(false)
 
     private var buildPolling: StartedPolling? = null
 
@@ -56,11 +59,12 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
             .subscribeBy(
                 onNext = { loadedBuild ->
                     val hadWorkflow = hasWorkflow()
+                    val wasActive = isActive()
                     build = loadedBuild
                     view?.showBuild(loadedBuild)
                     val snapshot = loadedBuild.steps.orEmpty()
                     if (steps.value != snapshot) steps.value = snapshot
-                    if (hasWorkflow() != hadWorkflow) activity.invalidateOptionsMenu()
+                    if (hasWorkflow() != hadWorkflow || isActive() != wasActive) activity.invalidateOptionsMenu()
                 },
                 onError = { buildLoadFailed.value = true }
             )
@@ -83,6 +87,8 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
 
     fun hasWorkflow(): Boolean = build?.nonBlankWorkflowId != null
 
+    fun isActive(): Boolean = build?.buildStatus() == BuildStatus.ACTIVE
+
     fun goToWorkflowScreen() {
         val build = build ?: return
         val workflowId = build.nonBlankWorkflowId ?: return
@@ -104,6 +110,21 @@ class BuildPresenter : PresenterNeedsToken<BuildView>() {
             .subscribeBy(
                 onError = { rebuildFailed.value = true },
                 onNext = { origin?.let(::goBackFrom) }
+            )
+            .addTo(bag)
+    }
+
+    fun cancel() {
+        if (!isActive()) return
+        val verified = account ?: return
+        val result = verified.startCancel(buildId, sessionEnded(verified)) ?: return
+        cancelFailed.value = false
+
+        result
+            .observeOn(androidMainScheduler())
+            .subscribeBy(
+                onError = { cancelFailed.value = true },
+                onNext = { pollBuild() }
             )
             .addTo(bag)
     }
