@@ -7,6 +7,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import io.reactivex.Scheduler
 import io.reactivex.Single
+import io.reactivex.observers.TestObserver
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.SingleSubject
@@ -160,6 +161,31 @@ class SessionServiceTest : DescribeSpec({
             accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("first")
         }
 
+        it("commits a saved replacement when a newer request arrives during the write and fails") {
+            val io = TestScheduler()
+            val failure = IllegalStateException("Rejected token")
+            val fixture = SessionFixture(Single.error(failure), ioScheduler = io)
+            val accounts = fixture.session.changes.test()
+            val latest = TestObserver<VerifiedSession>()
+            fixture.onWrite = { fixture.session.replace("first").subscribe(latest) }
+
+            val earlier = fixture.session.replace("second").test()
+            io.triggerActions()
+            fixture.secondVerification.onSuccess(fixture.secondUser)
+            io.triggerActions()
+
+            earlier.assertComplete()
+            latest.assertError(failure)
+            accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("second")
+            fixture.session.hasVerifiedSession shouldBe false
+            fixture.writtenTokens shouldBe listOf("second")
+            fixture.savedToken shouldBe "second"
+
+            val restored = fixture.session.restore().test()
+            io.triggerActions()
+            restored.assertComplete().assertNoErrors().assertValue { it.token == "second" }
+        }
+
         it("rejects a restore that completes before a queued replacement starts") {
             val io = TestScheduler()
             val verification = SingleSubject.create<User>()
@@ -188,6 +214,7 @@ private class SessionFixture(
     ioScheduler: Scheduler = Schedulers.trampoline()
 ) {
     var savedToken = "first"
+    var onWrite: () -> Unit = {}
     val writtenTokens = mutableListOf<String>()
     val firstClient = mockk<CircleCIAPIClientV1_1>()
     val secondClient = mockk<CircleCIAPIClientV1_1>()
@@ -200,6 +227,7 @@ private class SessionFixture(
         readToken = { savedToken },
         writeToken = {
             writeFailure?.let { throw it }
+            onWrite()
             writtenTokens.add(it)
             savedToken = it
         },

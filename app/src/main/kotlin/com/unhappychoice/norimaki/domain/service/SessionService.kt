@@ -117,12 +117,9 @@ class SessionService(
         val client = createClient(token)
         verify(client).observeOn(ioScheduler).map { user ->
             synchronized(lock) {
+                checkCurrentAuthentication(currentAttempt, request)
+                if (persistToken) writeToken(token)
                 VerifiedSession(token, user, client).also {
-                    if (persistToken) {
-                        checkCurrentAuthentication(currentAttempt, request)
-                        writeToken(token)
-                    }
-                    checkCurrentAuthentication(currentAttempt, request)
                     active.onNext(Some(it))
                 }
             }
