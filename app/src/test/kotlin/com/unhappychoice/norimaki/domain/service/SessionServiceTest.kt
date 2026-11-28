@@ -12,9 +12,12 @@ class SessionServiceTest : DescribeSpec({
     describe("SessionService") {
         it("restores a saved token once and associates the verified user with its client") {
             val fixture = SessionFixture()
+            val accounts = fixture.session.changes.test()
             val restored = fixture.session.restore().blockingGet()
 
             fixture.session.restore().blockingGet() shouldBe restored
+            accounts.values().map { it.toNullable() }.filterNotNull() shouldBe listOf(restored)
+            fixture.writtenTokens shouldBe emptyList<String>()
             fixture.verifiedClients shouldBe listOf(fixture.firstClient)
             restored.token shouldBe "first"
             restored.user shouldBe fixture.firstUser
@@ -52,16 +55,22 @@ class SessionServiceTest : DescribeSpec({
             fixture.verifiedClients shouldBe listOf(fixture.firstClient)
             fixture.session.restore().test().assertError(failure)
             fixture.verifiedClients shouldBe listOf(fixture.firstClient, fixture.firstClient)
+            fixture.writtenTokens shouldBe emptyList<String>()
         }
 
         it("clears the first account while verifying and publishes the second account on success") {
             val fixture = SessionFixture()
             val first = fixture.session.restore().blockingGet()
             val accounts = fixture.session.changes.test()
+            val writesAtPublication = fixture.session.changes
+                .filter { it.toNullable()?.token == "second" }
+                .map { fixture.writtenTokens.toList() }
+                .test()
             val replacement = fixture.session.replace("second").test()
 
             accounts.values().map { it.toNullable() } shouldBe listOf(first, null)
             fixture.savedToken shouldBe "first"
+            fixture.writtenTokens shouldBe emptyList<String>()
 
             fixture.secondVerification.onSuccess(fixture.secondUser)
 
@@ -69,6 +78,8 @@ class SessionServiceTest : DescribeSpec({
             val second = replacement.values().single()
             accounts.values().map { it.toNullable() } shouldBe listOf(first, null, second)
             fixture.savedToken shouldBe "second"
+            fixture.writtenTokens shouldBe listOf("second")
+            writesAtPublication.assertValue(listOf("second"))
             second.user shouldBe fixture.secondUser
             second.client shouldBe fixture.secondClient
         }
@@ -85,6 +96,7 @@ class SessionServiceTest : DescribeSpec({
             replacement.assertError(failure)
             accounts.values().map { it.toNullable() } shouldBe listOf(first, null)
             fixture.savedToken shouldBe "first"
+            fixture.writtenTokens shouldBe emptyList<String>()
             fixture.session.replace("first").test().assertComplete()
             fixture.verifiedClients shouldBe listOf(fixture.firstClient, fixture.secondClient, fixture.firstClient)
         }
@@ -105,6 +117,7 @@ class SessionServiceTest : DescribeSpec({
 
 private class SessionFixture(firstVerification: Single<User>? = null) {
     var savedToken = "first"
+    val writtenTokens = mutableListOf<String>()
     val firstClient = mockk<CircleCIAPIClientV1_1>()
     val secondClient = mockk<CircleCIAPIClientV1_1>()
     val firstUser = mockk<User>()
@@ -114,7 +127,10 @@ private class SessionFixture(firstVerification: Single<User>? = null) {
 
     val session = SessionService(
         readToken = { savedToken },
-        writeToken = { savedToken = it },
+        writeToken = {
+            writtenTokens.add(it)
+            savedToken = it
+        },
         createClient = { if (it == "first") firstClient else secondClient },
         verify = {
             verifiedClients.add(it)

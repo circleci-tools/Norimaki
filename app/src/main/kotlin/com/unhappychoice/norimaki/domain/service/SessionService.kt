@@ -84,14 +84,14 @@ class SessionService(
     fun replace(token: String): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             pendingRestore = null
-            authenticate(token, ++attempt)
+            authenticate(token, ++attempt, persistToken = true)
         }
     }
 
     private fun startRestore(): Single<VerifiedSession> {
         val token = savedToken
         val currentAttempt = ++attempt
-        return authenticate(token, currentAttempt)
+        return authenticate(token, currentAttempt, persistToken = false)
             .doOnEvent { _, _ ->
                 synchronized(lock) {
                     if (currentAttempt == attempt) pendingRestore = null
@@ -101,7 +101,7 @@ class SessionService(
             .also { pendingRestore = it }
     }
 
-    private fun authenticate(token: String, currentAttempt: Int): Single<VerifiedSession> = Single.defer {
+    private fun authenticate(token: String, currentAttempt: Int, persistToken: Boolean): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             check(currentAttempt == attempt) { "Authentication was superseded" }
             active.onNext(None)
@@ -112,7 +112,7 @@ class SessionService(
             synchronized(lock) {
                 check(currentAttempt == attempt) { "Authentication was superseded" }
                 VerifiedSession(token, user, client).also {
-                    writeToken(token)
+                    if (persistToken) writeToken(token)
                     active.onNext(Some(it))
                 }
             }

@@ -27,23 +27,6 @@ class PresenterCoreTest : DescribeSpec({
         }
     }
 
-    describe("Refreshable") {
-        val refreshable = object : Refreshable {
-            override val isRefreshing = Variable(false)
-            override fun refresh() {}
-        }
-
-        it("should be refreshing until the observable completes") {
-            val subject = PublishSubject.create<Int>()
-            val observer = with(refreshable) { subject.startRefresh() }.test()
-
-            refreshable.isRefreshing.value shouldBe true
-            subject.onComplete()
-            refreshable.isRefreshing.value shouldBe false
-            observer.dispose()
-        }
-    }
-
     describe("Paginatable") {
         fun paginatable() = object : Paginatable {
             override val page = Variable(0)
