@@ -33,7 +33,9 @@ fun applicationModule(application: NorimakiApplication) = DI.Module("application
             createClient = { CircleCIAPIClient(it).client1_1() },
             verify = { it.getMe().firstOrError() },
             ioScheduler = Schedulers.io(),
-            observerScheduler = androidMainScheduler()
+            observerScheduler = androidMainScheduler(),
+            // Disposing a screen subscription must not interrupt an in-flight preference commit.
+            persistenceScheduler = Schedulers.from { Schedulers.io().scheduleDirect(it) }
         )
     }
     bind<TestResultsClient>() with factory { token: String -> TestResultsClient(token) }

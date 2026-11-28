@@ -4,11 +4,12 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.domain.service.TokenSaveException
 import io.reactivex.Single
 import io.reactivex.disposables.SerialDisposable
 
 enum class TokenVerification {
-    IDLE, VERIFYING, VERIFIED, REQUIRED, REJECTED
+    IDLE, VERIFYING, VERIFIED, REQUIRED, REJECTED, SAVE_FAILED
 }
 
 class APITokenViewModel(private val session: SessionService) : ViewModel() {
@@ -26,7 +27,13 @@ class APITokenViewModel(private val session: SessionService) : ViewModel() {
         result.value = TokenVerification.VERIFYING
         request.set(session.replace(token).subscribe(
             { result.value = TokenVerification.VERIFIED },
-            { result.value = if (token.isBlank()) TokenVerification.REQUIRED else TokenVerification.REJECTED }
+            { error ->
+                result.value = when {
+                    error is TokenSaveException -> TokenVerification.SAVE_FAILED
+                    token.isBlank() -> TokenVerification.REQUIRED
+                    else -> TokenVerification.REJECTED
+                }
+            }
         ))
     }
 

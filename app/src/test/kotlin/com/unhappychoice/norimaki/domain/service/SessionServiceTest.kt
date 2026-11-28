@@ -108,14 +108,18 @@ class SessionServiceTest : DescribeSpec({
         it("does not publish a replacement when saving the token fails") {
             val failure = IllegalStateException("Credential store unavailable")
             val fixture = SessionFixture(writeFailure = failure)
-            fixture.session.restore().blockingGet()
+            val first = fixture.session.restore().blockingGet()
+            val accounts = fixture.session.changes.test()
 
             val replacement = fixture.session.replace("second").test()
             fixture.secondVerification.onSuccess(fixture.secondUser)
 
-            replacement.assertError(failure)
+            replacement.assertError { it is TokenSaveException && it.cause === failure }
+            replacement.assertNoValues()
+            accounts.values().map { it.toNullable() } shouldBe listOf(first, null)
             fixture.session.hasVerifiedSession shouldBe false
             fixture.savedToken shouldBe "first"
+            fixture.session.restore().blockingGet().token shouldBe "first"
         }
 
         it("skips an older replacement that is still queued when a newer one is requested") {

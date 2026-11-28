@@ -66,6 +66,7 @@ class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenVi
         binding.accessTokenTextView.error = when (state) {
             TokenVerification.REQUIRED -> context.getString(R.string.api_token_required)
             TokenVerification.REJECTED -> context.getString(R.string.api_token_verification_failed)
+            TokenVerification.SAVE_FAILED -> context.getString(R.string.api_token_save_failed)
             else -> null
         }
         if (state == TokenVerification.VERIFIED) presenter.goToBuildList()

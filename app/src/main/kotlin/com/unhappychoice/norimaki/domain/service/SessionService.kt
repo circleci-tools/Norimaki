@@ -48,13 +48,16 @@ class VerifiedSession(
     private val pendingRebuilds = Collections.newSetFromMap(ConcurrentHashMap<BuildId, Boolean>())
 }
 
+class TokenSaveException(cause: Exception) : RuntimeException("Could not save the API token", cause)
+
 class SessionService(
     private val readToken: () -> String,
     private val writeToken: (String) -> Unit,
     private val createClient: (String) -> CircleCIAPIClientV1_1,
     private val verify: (CircleCIAPIClientV1_1) -> Single<User>,
     private val ioScheduler: Scheduler = Schedulers.trampoline(),
-    private val observerScheduler: Scheduler = Schedulers.trampoline()
+    private val observerScheduler: Scheduler = Schedulers.trampoline(),
+    private val persistenceScheduler: Scheduler = ioScheduler
 ) {
     private val active = BehaviorSubject.createDefault<Optional<VerifiedSession>>(None)
     private val lock = Any()
@@ -115,14 +118,22 @@ class SessionService(
         }
         require(token.isNotBlank()) { "Enter an API token" }
         val client = createClient(token)
-        verify(client).observeOn(ioScheduler).map { user ->
+        verify(client).observeOn(if (persistToken) persistenceScheduler else ioScheduler).map { user ->
             synchronized(lock) {
                 checkCurrentAuthentication(currentAttempt, request)
-                if (persistToken) writeToken(token)
+                if (persistToken) saveToken(token)
                 VerifiedSession(token, user, client).also {
                     active.onNext(Some(it))
                 }
             }
+        }
+    }
+
+    private fun saveToken(token: String) {
+        try {
+            writeToken(token)
+        } catch (e: Exception) {
+            throw TokenSaveException(e)
         }
     }
 
