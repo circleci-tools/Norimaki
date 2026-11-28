@@ -39,11 +39,11 @@ class BackNavigationTest : DescribeSpec({
 
             verify(exactly = 0) { fixture.flow.goBack() }
             fixture.verifiedTokens shouldBe listOf("saved", "rejected")
-            fixture.session.savedToken shouldBe "saved"
+            fixture.session.savedToken().blockingGet() shouldBe "saved"
 
             val verified = fixture.session.replace("new").blockingGet()
             fixture.session.restore().blockingGet() shouldBe verified
-            fixture.session.savedToken shouldBe "new"
+            fixture.session.savedToken().blockingGet() shouldBe "new"
             fixture.verifiedTokens shouldBe listOf("saved", "rejected", "new")
         }
 
