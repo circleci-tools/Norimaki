@@ -7,11 +7,15 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 fun Build.repositoryString(): String = "$username / $reponame"
 fun Build.revisionString(): String = "$branch #$buildNum (${vcsRevision?.take(6)})"
 
-fun Build.buildStatus(): BuildStatus = when (status) {
-    "success", "fixed", "no_tests" -> BuildStatus.SUCCESS
-    "canceled" -> BuildStatus.CANCELED
-    "infrastructure_fail", "timedout", "failed" -> BuildStatus.FAILED
-    else -> BuildStatus.ACTIVE
+fun Build.buildStatus(): BuildStatus {
+    val effectiveStatus = if (status == "retried" && lifecycle == "finished") outcome else status
+    return when (effectiveStatus) {
+        "success", "fixed", "no_tests" -> BuildStatus.SUCCESS
+        "canceled" -> BuildStatus.CANCELED
+        "infrastructure_fail", "timedout", "failed" -> BuildStatus.FAILED
+        "not_run" -> BuildStatus.TERMINAL
+        else -> if (isFinished()) BuildStatus.TERMINAL else BuildStatus.ACTIVE
+    }
 }
 
 fun Build.avatarUrl(): String? {

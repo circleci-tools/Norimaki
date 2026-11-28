@@ -16,5 +16,6 @@ class BuildStatusColorTest {
         assertEquals(0xFF898989.toInt(), BuildStatus.CANCELED.color())
         assertEquals(0xFFED5C5C.toInt(), BuildStatus.FAILED.color())
         assertEquals(0xFF5CD3E4.toInt(), BuildStatus.ACTIVE.color())
+        assertEquals(0xFF898989.toInt(), BuildStatus.TERMINAL.color())
     }
 }
