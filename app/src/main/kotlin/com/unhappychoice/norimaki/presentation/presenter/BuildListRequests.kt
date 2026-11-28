@@ -144,7 +144,7 @@ internal class BuildListRequests(
             val added = eligible.count { it.uniqueId() !in current.ids }
             val overflow = current.builds.size + added > BUILD_HISTORY_LIMIT
             val merged = current.merge(eligible, BUILD_HISTORY_LIMIT, keepOldest = response.paginated)
-            Update(response, eligible, merged ?: current, overflow)
+            Update(response, eligible, merged ?: current, added, overflow)
         }.subscribeOn(computation).observeOn(ui)
     }
 
@@ -195,6 +195,7 @@ internal class BuildListRequests(
         val response: Response,
         val builds: List<Build>,
         val history: BuildHistory,
+        val added: Int,
         val overflow: Boolean
     )
 }
