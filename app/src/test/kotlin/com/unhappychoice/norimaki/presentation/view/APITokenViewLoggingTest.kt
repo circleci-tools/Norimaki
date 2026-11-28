@@ -86,10 +86,11 @@ class APITokenViewLoggingTest {
             val key = KeyGenerator.getInstance("AES").generateKey()
             val readable = APITokenPreference(preferences, key).apply { token = "saved-token" }
             val unwritable = APITokenPreference(preferences, SecretKeySpec(ByteArray(5), "AES"))
-            val verification = SingleSubject.create<User>()
+            var verification = SingleSubject.create<User>()
+            var destination = unwritable
             val session = SessionService(
                 readToken = { readable.token },
-                writeToken = { unwritable.token = it },
+                writeToken = { destination.token = it },
                 createClient = { mockk() },
                 verify = { verification }
             )
@@ -111,6 +112,19 @@ class APITokenViewLoggingTest {
             assertFalse(session.hasVerifiedSession)
             assertEquals("saved-token", readable.token)
             verify(exactly = 0) { presenter.goToBuildList() }
+
+            val reopened = showForm(activity, presenter)
+            assertEquals("replacement-token", reopened.accessTokenTextView.text.toString())
+            assertTrue(reopened.submitButton.isEnabled)
+
+            destination = readable
+            verification = SingleSubject.create()
+            reopened.submitButton.performClick()
+            verification.onSuccess(mockk())
+
+            assertTrue(session.hasVerifiedSession)
+            assertEquals("replacement-token", readable.token)
+            verify(exactly = 1) { presenter.goToBuildList() }
         }
     }
 

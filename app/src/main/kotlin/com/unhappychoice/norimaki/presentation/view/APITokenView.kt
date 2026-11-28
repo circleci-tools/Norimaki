@@ -2,6 +2,7 @@ package com.unhappychoice.norimaki.presentation.view
 
 import android.content.Context
 import android.util.AttributeSet
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Observer
 import com.jakewharton.rxbinding3.view.clicks
 import com.unhappychoice.norimaki.R
@@ -10,11 +11,15 @@ import com.unhappychoice.norimaki.extension.subscribeNext
 import com.unhappychoice.norimaki.presentation.presenter.APITokenPresenter
 import com.unhappychoice.norimaki.presentation.view.core.BaseView
 import com.unhappychoice.norimaki.presentation.viewmodel.TokenVerification
+import io.reactivex.disposables.Disposables
 import io.reactivex.rxkotlin.addTo
 import org.kodein.di.instance
 
 class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenView>(context, attr) {
     override val presenter: APITokenPresenter by instance()
+
+    internal val isSubmissionPending: Boolean
+        get() = presenter.model.verification.value == TokenVerification.VERIFYING
 
     private val verificationObserver = Observer<TokenVerification>(::renderVerification)
 
@@ -26,7 +31,7 @@ class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenVi
         super.onAttachedToWindow()
         presenter.takeView(this)
 
-        binding.accessTokenTextView.setText(presenter.model.token)
+        prefillToken()
         binding.submitButton.clicks()
             .subscribeNext { presenter.model.submit(binding.accessTokenTextView.text.toString().trim()) }
             .addTo(bag)
@@ -41,6 +46,17 @@ class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenVi
 
     fun onScreenLeft() {
         presenter.model.reset()
+    }
+
+    private fun prefillToken() {
+        val field = binding.accessTokenTextView
+        var edited = false
+        val watcher = field.doAfterTextChanged { edited = true }
+        Disposables.fromAction { field.removeTextChangedListener(watcher) }.addTo(bag)
+        presenter.model.token().onErrorReturnItem("").subscribe { token ->
+            field.removeTextChangedListener(watcher)
+            if (!edited) field.setText(token)
+        }.addTo(bag)
     }
 
     private fun renderVerification(state: TokenVerification) {

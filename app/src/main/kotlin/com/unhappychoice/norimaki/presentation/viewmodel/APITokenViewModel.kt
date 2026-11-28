@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.domain.service.TokenSaveException
+import io.reactivex.Single
 import io.reactivex.disposables.SerialDisposable
 
 enum class TokenVerification {
@@ -17,7 +18,7 @@ class APITokenViewModel(private val session: SessionService) : ViewModel() {
     private var submittedToken: String? = null
 
     val verification: LiveData<TokenVerification> = result
-    val token: String get() = submittedToken ?: session.savedToken
+    fun token(): Single<String> = submittedToken?.let { Single.just(it) } ?: session.savedToken()
 
     fun submit(token: String) {
         if (result.value == TokenVerification.VERIFYING || result.value == TokenVerification.VERIFIED) return

@@ -5,7 +5,11 @@ import com.github.unhappychoice.circleci.v1.response.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import io.reactivex.Scheduler
 import io.reactivex.Single
+import io.reactivex.observers.TestObserver
+import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.SingleSubject
 
 class SessionServiceTest : DescribeSpec({
@@ -101,14 +105,13 @@ class SessionServiceTest : DescribeSpec({
             fixture.verifiedClients shouldBe listOf(fixture.firstClient, fixture.secondClient, fixture.firstClient)
         }
 
-        it("reports a token write failure without publishing the replacement session") {
-            val fixture = SessionFixture()
+        it("does not publish a replacement when saving the token fails") {
+            val failure = IllegalStateException("Credential store unavailable")
+            val fixture = SessionFixture(writeFailure = failure)
             val first = fixture.session.restore().blockingGet()
             val accounts = fixture.session.changes.test()
-            val failure = IllegalStateException("Keystore unavailable")
-            fixture.writeFailure = failure
-            val replacement = fixture.session.replace("second").test()
 
+            val replacement = fixture.session.replace("second").test()
             fixture.secondVerification.onSuccess(fixture.secondUser)
 
             replacement.assertError { it is TokenSaveException && it.cause === failure }
@@ -117,6 +120,20 @@ class SessionServiceTest : DescribeSpec({
             fixture.session.hasVerifiedSession shouldBe false
             fixture.savedToken shouldBe "first"
             fixture.session.restore().blockingGet().token shouldBe "first"
+        }
+
+        it("skips an older replacement that is still queued when a newer one is requested") {
+            val io = TestScheduler()
+            val fixture = SessionFixture(ioScheduler = io)
+            val earlier = fixture.session.replace("second").test()
+            val latest = fixture.session.replace("first").test()
+
+            io.triggerActions()
+
+            earlier.assertError(IllegalStateException::class.java)
+            latest.assertComplete()
+            fixture.verifiedClients shouldBe listOf(fixture.firstClient)
+            fixture.writtenTokens shouldBe listOf("first")
         }
 
         it("keeps a superseded verification from activating its account") {
@@ -130,12 +147,78 @@ class SessionServiceTest : DescribeSpec({
             fixture.session.restore().blockingGet() shouldBe latest
             fixture.savedToken shouldBe "first"
         }
+
+        it("rejects an earlier verification that completes before a queued replacement starts") {
+            val io = TestScheduler()
+            val fixture = SessionFixture(ioScheduler = io)
+            val accounts = fixture.session.changes.test()
+            val earlier = fixture.session.replace("second").test()
+            io.triggerActions()
+
+            fixture.secondVerification.onSuccess(fixture.secondUser)
+            val latest = fixture.session.replace("first").test()
+            io.triggerActions()
+
+            earlier.assertError(IllegalStateException::class.java)
+            latest.assertComplete()
+            fixture.writtenTokens shouldBe listOf("first")
+            accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("first")
+        }
+
+        it("commits a saved replacement when a newer request arrives during the write and fails") {
+            val io = TestScheduler()
+            val failure = IllegalStateException("Rejected token")
+            val fixture = SessionFixture(Single.error(failure), ioScheduler = io)
+            val accounts = fixture.session.changes.test()
+            val latest = TestObserver<VerifiedSession>()
+            fixture.onWrite = { fixture.session.replace("first").subscribe(latest) }
+
+            val earlier = fixture.session.replace("second").test()
+            io.triggerActions()
+            fixture.secondVerification.onSuccess(fixture.secondUser)
+            io.triggerActions()
+
+            earlier.assertComplete()
+            latest.assertError(failure)
+            accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("second")
+            fixture.session.hasVerifiedSession shouldBe false
+            fixture.writtenTokens shouldBe listOf("second")
+            fixture.savedToken shouldBe "second"
+
+            val restored = fixture.session.restore().test()
+            io.triggerActions()
+            restored.assertComplete().assertNoErrors().assertValue { it.token == "second" }
+        }
+
+        it("rejects a restore that completes before a queued replacement starts") {
+            val io = TestScheduler()
+            val verification = SingleSubject.create<User>()
+            val fixture = SessionFixture(verification, ioScheduler = io)
+            val accounts = fixture.session.changes.test()
+            val restore = fixture.session.restore().test()
+            io.triggerActions()
+
+            verification.onSuccess(fixture.firstUser)
+            val replacement = fixture.session.replace("second").test()
+            io.triggerActions()
+            fixture.secondVerification.onSuccess(fixture.secondUser)
+            io.triggerActions()
+
+            restore.assertError(IllegalStateException::class.java)
+            replacement.assertComplete()
+            fixture.writtenTokens shouldBe listOf("second")
+            accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("second")
+        }
     }
 })
 
-private class SessionFixture(firstVerification: Single<User>? = null) {
+private class SessionFixture(
+    firstVerification: Single<User>? = null,
+    writeFailure: Throwable? = null,
+    ioScheduler: Scheduler = Schedulers.trampoline()
+) {
     var savedToken = "first"
-    var writeFailure: Exception? = null
+    var onWrite: () -> Unit = {}
     val writtenTokens = mutableListOf<String>()
     val firstClient = mockk<CircleCIAPIClientV1_1>()
     val secondClient = mockk<CircleCIAPIClientV1_1>()
@@ -148,6 +231,7 @@ private class SessionFixture(firstVerification: Single<User>? = null) {
         readToken = { savedToken },
         writeToken = {
             writeFailure?.let { throw it }
+            onWrite()
             writtenTokens.add(it)
             savedToken = it
         },
@@ -155,6 +239,7 @@ private class SessionFixture(firstVerification: Single<User>? = null) {
         verify = {
             verifiedClients.add(it)
             if (it === firstClient) firstVerification ?: Single.just(firstUser) else secondVerification
-        }
+        },
+        ioScheduler = ioScheduler
     )
 }

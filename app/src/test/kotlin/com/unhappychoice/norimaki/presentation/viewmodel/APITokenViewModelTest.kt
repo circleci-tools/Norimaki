@@ -26,7 +26,7 @@ class APITokenViewModelTest : DescribeSpec({
         ArchTaskExecutor.getInstance().setDelegate(null)
     }
 
-    it("saves on the persistence scheduler and delivers success between form observers on the UI scheduler") {
+    it("saves on the I/O scheduler and delivers success between form observers on the UI scheduler") {
         val persistence = TestScheduler()
         val ui = TestScheduler()
         val fixture = VerificationFixture(persistence, ui)
@@ -65,7 +65,7 @@ class APITokenViewModelTest : DescribeSpec({
 
         fixture.pending.onError(IllegalStateException("Rejected token"))
 
-        fixture.model.token shouldBe "candidate"
+        fixture.model.token().blockingGet() shouldBe "candidate"
         fixture.savedToken shouldBe "saved"
         fixture.pending = SingleSubject.create()
         fixture.model.submit("retry")
@@ -80,7 +80,7 @@ class APITokenViewModelTest : DescribeSpec({
 })
 
 private class VerificationFixture(
-    persistenceScheduler: Scheduler = Schedulers.trampoline(),
+    ioScheduler: Scheduler = Schedulers.trampoline(),
     observerScheduler: Scheduler = Schedulers.trampoline()
 ) {
     var savedToken = "saved"
@@ -92,7 +92,7 @@ private class VerificationFixture(
         readToken = { savedToken },
         writeToken = { savedToken = it },
         createClient = { mockk() },
-        persistenceScheduler = persistenceScheduler,
+        ioScheduler = ioScheduler,
         observerScheduler = observerScheduler,
         verify = {
             verifications++

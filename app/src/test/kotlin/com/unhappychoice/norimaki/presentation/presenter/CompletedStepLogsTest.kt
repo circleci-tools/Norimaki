@@ -10,11 +10,12 @@ import com.unhappychoice.norimaki.domain.model.BuildStepId
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
+import hu.akarnokd.rxjava3.bridge.RxJavaBridge.toV3Scheduler
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import mortar.MortarScope
@@ -35,6 +36,7 @@ import org.kodein.di.bind
 import org.kodein.di.singleton
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import io.reactivex.rxjava3.schedulers.Schedulers as RxJava3Schedulers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -69,7 +71,7 @@ class CompletedStepLogsTest {
         val previousMain = RxAndroidPlugins.getOnMainThreadSchedulerHandler()
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
         RxJavaPlugins.setComputationSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { display }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { toV3Scheduler(display) }
         var scope: MortarScope? = null
         try {
             scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))
@@ -139,7 +141,7 @@ class CompletedStepLogsTest {
             val previousIo = RxJavaPlugins.getIoSchedulerHandler()
             val previousMain = RxAndroidPlugins.getOnMainThreadSchedulerHandler()
             RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-            RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+            RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
             var scope: MortarScope? = null
             try {
                 scope = presenter.attachToTestScope(mockk<BuildStepView>(relaxUnitFun = true))

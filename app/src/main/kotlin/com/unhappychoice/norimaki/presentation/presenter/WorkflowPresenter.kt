@@ -7,6 +7,7 @@ import com.unhappychoice.norimaki.domain.service.VerifiedSession
 import com.unhappychoice.norimaki.domain.service.WorkflowApprovalOutcome
 import com.unhappychoice.norimaki.domain.service.WorkflowApprovals
 import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.extension.goTo
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowClient
 import com.unhappychoice.norimaki.infrastructure.workflow.WorkflowHttpException
@@ -15,7 +16,6 @@ import com.unhappychoice.norimaki.presentation.screen.APITokenScreen
 import com.unhappychoice.norimaki.presentation.screen.BuildScreen
 import com.unhappychoice.norimaki.presentation.screen.WorkflowScreen
 import com.unhappychoice.norimaki.presentation.view.WorkflowView
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.SerialDisposable
 import io.reactivex.rxkotlin.addTo
 import io.reactivex.schedulers.Schedulers
@@ -40,7 +40,7 @@ class WorkflowPresenter(
         client = createClient(verified.token)
         jobsRequest = SerialDisposable().also { it.addTo(bag) }
         workflowApprovals.updates
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(androidMainScheduler())
             .subscribe { approval ->
                 if (account !== verified) return@subscribe
                 if (approval.pending) {
@@ -95,7 +95,7 @@ class WorkflowPresenter(
         state.value = state.value.copy(busy = true, message = outcome?.let { approvalMessage(it) }, refreshFailed = false)
         val request = client.jobs(screen.workflowId)
             .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
+            .observeOn(androidMainScheduler())
             .subscribe({ jobs ->
                 pendingOutcome = null
                 state.value = WorkflowState(jobs, message = outcome?.let { approvalMessage(it, jobs) })
