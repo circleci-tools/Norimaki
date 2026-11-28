@@ -10,6 +10,7 @@ import com.unhappychoice.norimaki.domain.model.rawOutputUrl
 import com.unhappychoice.norimaki.extension.AnsiEscapeStream
 import com.unhappychoice.norimaki.extension.Utf8StreamDecoder
 import com.unhappychoice.norimaki.extension.Variable
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.extension.polling
 import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.infrastructure.output.BuildOutputClient
@@ -23,7 +24,6 @@ import com.unhappychoice.norimaki.presentation.presenter.core.StartedPolling
 import com.unhappychoice.norimaki.presentation.view.BuildStepView
 import io.reactivex.Observable
 import io.reactivex.Scheduler
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.subscribeBy
 import io.reactivex.schedulers.Schedulers
@@ -75,7 +75,7 @@ class BuildStepPresenter internal constructor(
         logLoadFailed.value = false
         canRetryStepLoad.value = false
         if (!progress.fetchComplete) logSearchAvailable.value = false
-        val display = AndroidSchedulers.mainThread()
+        val display = androidMainScheduler()
         val formatter = progress.formatter.copy()
         val output = if (progress.fetchComplete) Observable.empty() else fetchStepOutput(client, outputClient, progress, display)
         // Fetch progress includes pending chunks. Replay those chunks if delivery is cancelled.

@@ -23,8 +23,8 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import io.reactivex.Completable
 import io.reactivex.Single
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.CompletableSubject
 import io.reactivex.subjects.SingleSubject
@@ -33,6 +33,7 @@ import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
 import java.io.IOException
+import io.reactivex.rxjava3.schedulers.Schedulers as RxJava3Schedulers
 
 class WorkflowPresenterTest : DescribeSpec({
     val hold = WorkflowJob("job", "deploy", "approval", "on_hold", null, "request")
@@ -42,8 +43,8 @@ class WorkflowPresenterTest : DescribeSpec({
 
     beforeSpec {
         RxJavaPlugins.setIoSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setInitMainThreadSchedulerHandler { Schedulers.trampoline() }
-        RxAndroidPlugins.setMainThreadSchedulerHandler { Schedulers.trampoline() }
+        RxAndroidPlugins.setInitMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
+        RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
     }
 
     afterEach {
