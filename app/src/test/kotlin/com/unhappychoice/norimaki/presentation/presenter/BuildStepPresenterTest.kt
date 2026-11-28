@@ -23,6 +23,7 @@ import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
+import io.reactivex.subjects.PublishSubject
 import org.kodein.di.DI
 import org.kodein.di.bind
 import org.kodein.di.singleton
@@ -324,22 +325,29 @@ class BuildStepPresenterTest : DescribeSpec({
         }
     }
 
-    it("skips the automatic refresh when reopening a step with fully loaded logs") {
-        val expectedUrl = "https://circleci.com/output"
-        val finishedAction = action(5, Date()).apply {
-            every { outputUrl } returns expectedUrl
+    it("renders buffered final output on restart without fetching again") {
+        val formatting = TestScheduler()
+        val chunks = PublishSubject.create<String>()
+        val firstUrl = "https://circleci.com/first"
+        val finalUrl = "https://circleci.com/final"
+        val firstAction = action(5, Date()).apply {
+            every { outputUrl } returns firstUrl
         }
-        val finishedStep = BuildStep("Run tests", listOf(finishedAction))
+        val finishedAction = action(5, Date(), actionIndex = 1).apply {
+            every { outputUrl } returns finalUrl
+        }
+        val finishedStep = BuildStep("Run tests", listOf(firstAction, finishedAction))
         val finishedBuild = build("finished", listOf(finishedStep))
         val api = mockk<CircleCIAPIClientV1_1> {
             every { getBuild("github", "owner", "repo", 42) } returns Observable.just(finishedBuild)
         }
         val output = mockk<BuildOutputClient> {
-            every { fetchOutput(expectedUrl) } returns Observable.just("done")
+            every { fetchOutput(firstUrl) } returns Observable.just("first")
+            every { fetchOutput(finalUrl) } returns chunks
         }
         val activity = mockk<MainActivity>()
         val lifecycle = PollingLifecycle(activity).apply { start() }
-        val presenter = BuildStepPresenter { output }.apply {
+        val presenter = BuildStepPresenter({ formatting }) { output }.apply {
             di = DI {
                 bind<BuildId>() with singleton { BuildId("github", "owner", "repo", 42) }
                 bind<BuildStepId>() with singleton { BuildStepId(5) }
@@ -356,16 +364,32 @@ class BuildStepPresenterTest : DescribeSpec({
             RxAndroidPlugins.setMainThreadSchedulerHandler { RxJava3Schedulers.trampoline() }
 
             scope = presenter.attachToTestScope(view)
-            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
-            presenter.logLines() shouldBe listOf("done")
+            formatting.triggerActions()
+            presenter.logLines() shouldBe listOf("first")
+
+            chunks.onNext(" last")
+            chunks.onComplete()
+            lifecycle.stop()
+            formatting.triggerActions()
+            presenter.logLines() shouldBe listOf("first")
+            presenter.logSearchAvailable.value shouldBe false
+
+            lifecycle.start()
+            presenter.logSearchAvailable.value shouldBe false
+            formatting.triggerActions()
+            presenter.logLines() shouldBe listOf("first last")
+            presenter.logSearchAvailable.value shouldBe true
 
             lifecycle.stop()
             lifecycle.start()
+            formatting.triggerActions()
+            presenter.logLines() shouldBe listOf("first last")
+            presenter.logSearchAvailable.value shouldBe true
             verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
-
-            lifecycle.stop()
-            lifecycle.start()
-            verify(exactly = 1) { api.getBuild("github", "owner", "repo", 42) }
+            verify(exactly = 1) { output.fetchOutput(firstUrl) }
+            verify(exactly = 1) { output.fetchOutput(finalUrl) }
+            verify(exactly = 0) { output.fetchRawOutput(any(), any()) }
+            verify(exactly = 0) { output.fetchFinalRawOutput(any(), any(), any()) }
         } finally {
             scope?.destroy()
             RxAndroidPlugins.reset()

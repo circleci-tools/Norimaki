@@ -36,6 +36,10 @@ class TestResultsPresenter : PresenterNeedsToken<TestResultsView>() {
                     when (results) {
                         TestResults.Unavailable -> view.showUnavailable()
                         TestResults.Reported -> view.finishLoading()
+                        TestResults.LimitReached -> {
+                            nextCursor = null
+                            view.showLimitReached()
+                        }
                         is TestResults.FailurePage -> {
                             view.appendFailures(results.failures)
                             nextCursor = results.nextCursor

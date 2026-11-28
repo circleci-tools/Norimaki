@@ -36,6 +36,8 @@ class TestResultsView(context: Context, attr: AttributeSet) : BaseView<TestResul
 
     internal fun showUnavailable() = showStatus(R.string.test_results_unavailable)
 
+    internal fun showLimitReached() = showStatus(R.string.test_results_limit_reached)
+
     internal fun showLoadError() {
         val message = if (receivedPage) R.string.test_results_incomplete else R.string.test_results_load_error
         showStatus(message, retry = true)

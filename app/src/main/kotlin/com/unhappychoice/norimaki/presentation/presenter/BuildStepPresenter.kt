@@ -62,8 +62,9 @@ class BuildStepPresenter internal constructor(
         val outputClient = createOutputClient(verified.token)
         logSearchAvailable.value = false
         log.clear()
-        stepPolling = StartedPolling(shouldSkip = { output.complete }) { loadStep(verified.client, outputClient, output) }
-            .also { it.observe(activity.lifecycle, bag) }
+        stepPolling = StartedPolling(shouldSkip = { output.renderComplete }) {
+            loadStep(verified.client, outputClient, output)
+        }.also { it.observe(activity.lifecycle, bag) }
     }
 
     private fun loadStep(
@@ -73,22 +74,10 @@ class BuildStepPresenter internal constructor(
     ): Disposable {
         logLoadFailed.value = false
         canRetryStepLoad.value = false
-        if (!progress.complete) logSearchAvailable.value = false
+        if (!progress.fetchComplete) logSearchAvailable.value = false
         val display = androidMainScheduler()
         val formatter = progress.formatter.copy()
-        val output = pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
-            .subscribeOnIoObserveOnUI()
-            .doOnError { canRetryStepLoad.value = true }
-            .concatMap { (build, step) ->
-                view?.showStep(step)
-                progress.step = step
-                when {
-                    progress.complete -> Observable.empty()
-                    !progress.raw.started && step.isFinished() -> completedOutput(step, outputClient, progress)
-                    else -> runningOutput(build, step, client, outputClient, progress.raw, display)
-                }.doOnComplete { progress.complete = true }
-            }
-            .doOnNext { progress.pending.addLast(it) }
+        val output = if (progress.fetchComplete) Observable.empty() else fetchStepOutput(client, outputClient, progress, display)
         // Fetch progress includes pending chunks. Replay those chunks if delivery is cancelled.
         return Observable.fromIterable(progress.pending.toList())
             .concatWith(output)
@@ -101,13 +90,36 @@ class BuildStepPresenter internal constructor(
                     progress.formatter = nextFormatter
                     log.append(lines)
                 },
-                onComplete = ::allowLogSearch,
+                onComplete = {
+                    progress.renderComplete = true
+                    allowLogSearch()
+                },
                 onError = {
                     logLoadFailed.value = true
                     allowLogSearch()
                 }
             )
     }
+
+    private fun fetchStepOutput(
+        client: CircleCIAPIClientV1_1,
+        outputClient: BuildOutputClient,
+        progress: StepOutputProgress,
+        display: Scheduler
+    ): Observable<String> = pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
+        .subscribeOnIoObserveOnUI()
+        .doOnError { canRetryStepLoad.value = true }
+        .concatMap { (build, step) ->
+            view?.showStep(step)
+            progress.step = step
+            val output = if (!progress.raw.started && step.isFinished()) {
+                completedOutput(step, outputClient, progress)
+            } else {
+                runningOutput(build, step, client, outputClient, progress.raw, display)
+            }
+            output.doOnComplete { progress.fetchComplete = true }
+        }
+        .doOnNext { progress.pending.addLast(it) }
 
     private fun completedOutput(
         step: BuildStep,
@@ -211,7 +223,8 @@ private class StepOutputProgress {
     var formatter = LogChunkFormatter()
     val pending = ArrayDeque<String>()
     var step: BuildStep? = null
-    var complete = false
+    var fetchComplete = false
+    var renderComplete = false
     var completedActions = 0
     val raw = RawOutputProgress()
 }
