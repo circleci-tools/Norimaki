@@ -24,6 +24,7 @@ class BuildTest : DescribeSpec({
         every { user } returns author
         every { queuedAt } returns queued
         every { status } returns buildStatus
+        every { lifecycle } returns null
     }
 
     describe("Build.repositoryString()") {
