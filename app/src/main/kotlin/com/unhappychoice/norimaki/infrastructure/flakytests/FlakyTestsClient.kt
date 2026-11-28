@@ -24,10 +24,10 @@ internal class FlakyTestsClient(
             val body = JsonParser.parseString(response.body.string()).asJsonObject
             val tests = body.getAsJsonArray("flaky-tests") ?: JsonArray()
             tests.map { it.asJsonObject }
-                .groupBy { it.get("test-name").asString to it.stringOrNull("classname") }
+                .groupBy { it.testIdentity() }
                 .map { (identity, rows) ->
                     val occurrences = rows.sumOf { it.get("times-flaked").asInt }
-                    FlakyTestSummary(identity.first, identity.second, occurrences)
+                    FlakyTestSummary(identity.testName, identity.className, occurrences)
                 }
                 .sortedByDescending { it.occurrences }
         }
@@ -35,6 +35,11 @@ internal class FlakyTestsClient(
 }
 
 internal data class FlakyTestSummary(val testName: String, val className: String?, val occurrences: Int)
+
+private data class TestIdentity(val testName: String, val className: String?, val file: String?)
+
+private fun JsonObject.testIdentity() =
+    TestIdentity(get("test-name").asString, stringOrNull("classname"), stringOrNull("file"))
 
 private fun ProjectId.flakyTestsUrl() =
     "https://circleci.com/api/v2/insights/".toHttpUrl().newBuilder()

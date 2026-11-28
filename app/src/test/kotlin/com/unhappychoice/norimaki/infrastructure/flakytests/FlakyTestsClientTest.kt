@@ -35,6 +35,26 @@ class FlakyTestsClientTest : DescribeSpec({
             requests.map { it.header("Circle-Token") } shouldBe listOf("session-token")
         }
 
+        it("aggregates repeated tests within each file and keeps matching tests in other files separate") {
+            val client = client {
+                200 to """{"flaky-tests":[
+                    {"test-name":"testA","classname":"ExampleTest","file":"unit/example.kt","times-flaked":2},
+                    {"test-name":"testA","classname":"ExampleTest","file":"unit/example.kt","times-flaked":3},
+                    {"test-name":"testA","classname":"ExampleTest","file":"integration/example.kt","times-flaked":7},
+                    {"test-name":"testA","classname":"ExampleTest","file":null,"times-flaked":1},
+                    {"test-name":"testA","classname":"ExampleTest","times-flaked":3}
+                ]}"""
+            }
+
+            client.fetch(projectId).test().awaitDone(5, SECONDS).assertResult(
+                listOf(
+                    FlakyTestSummary("testA", "ExampleTest", 7),
+                    FlakyTestSummary("testA", "ExampleTest", 5),
+                    FlakyTestSummary("testA", "ExampleTest", 4)
+                )
+            )
+        }
+
         it("uses the bitbucket slug for bitbucket projects") {
             val client = client { request ->
                 request.url.encodedPath shouldBe "/api/v2/insights/bb/org/repo/flaky-tests"
