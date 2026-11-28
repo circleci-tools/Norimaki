@@ -9,6 +9,7 @@ import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.domain.service.SessionService
 import com.unhappychoice.norimaki.extension.androidMainScheduler
+import com.unhappychoice.norimaki.infrastructure.flakytests.FlakyTestsClient
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
 import io.reactivex.schedulers.Schedulers
@@ -36,4 +37,5 @@ fun applicationModule(application: NorimakiApplication) = DI.Module("application
         )
     }
     bind<TestResultsClient>() with factory { token: String -> TestResultsClient(token) }
+    bind<FlakyTestsClient>() with factory { token: String -> FlakyTestsClient(token) }
 }
