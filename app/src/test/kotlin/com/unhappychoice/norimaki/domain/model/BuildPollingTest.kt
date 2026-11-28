@@ -66,5 +66,23 @@ class BuildPollingTest : DescribeSpec({
 
             steps.findByStepNumber(null) shouldBe null
         }
+
+        it("should use the position to disambiguate duplicate step numbers") {
+            val first = BuildStep("Run tests", listOf(mockk { every { step } returns 1 }))
+            val second = BuildStep("Run tests", listOf(mockk { every { step } returns 1 }))
+            val steps = listOf(first, second)
+
+            steps.findByStepNumber(1, position = 0) shouldBe first
+            steps.findByStepNumber(1, position = 1) shouldBe second
+        }
+
+        it("should fall back to the first match when the position no longer identifies a duplicate") {
+            val first = BuildStep("Run tests", listOf(mockk { every { step } returns 1 }))
+            val second = BuildStep("Run tests", listOf(mockk { every { step } returns 1 }))
+            val steps = listOf(first, second)
+
+            steps.findByStepNumber(1, position = 5) shouldBe first
+            steps.findByStepNumber(1, position = null) shouldBe first
+        }
     }
 })
