@@ -40,7 +40,7 @@ internal class BuildListRequests(
     private var buildPolling = BuildListPolling(fetch)
     var browsingOlderBuilds = false
         private set
-    private var anchorOffset: Int? = null
+    private var anchorOffset = 0
     private var lastPollIds = emptySet<String>()
     private val latestRequestByBuild = mutableMapOf<String, Long>()
     private val incoming = PublishSubject.create<Response>().toSerialized()
@@ -62,14 +62,9 @@ internal class BuildListRequests(
     fun loadNextPage(): Disposable? {
         if (!initialLoadSettled.hasComplete() || isLoading.value || !hasMore.value) return null
         val current = history.value
-        val tail = current.builds.lastOrNull()
-        val startOffset = anchorOffset
-        if (startOffset == null || tail == null) {
-            return requestPage(page.value * BUILD_LIST_PAGE_SIZE).subscribeNext {}
-        }
-
-        var pageOffset = startOffset
-        val source = fetchOlderBuilds(fetch, tail, current.ids, startOffset)
+        val tail = current.builds.lastOrNull() ?: return requestPage(0).subscribeNext {}
+        var pageOffset = anchorOffset
+        val source = fetchOlderBuilds(fetch, tail, current.ids, anchorOffset)
             .map { page ->
                 pageOffset = page.offset
                 page.builds
@@ -83,7 +78,7 @@ internal class BuildListRequests(
         buildPolling = BuildListPolling(fetch)
         lastPollIds = emptySet()
         browsingOlderBuilds = false
-        anchorOffset = null
+        anchorOffset = 0
         latestRequestByBuild.clear()
         page.value = 0
         hasMore.value = true
@@ -166,9 +161,7 @@ internal class BuildListRequests(
         }
         if (!deferNewBuilds) {
             if (response.paginated && update.overflow) browsingOlderBuilds = true
-            if (update.overflow || (!response.paginated && update.added > 0)) {
-                if (anchorOffset == null || !response.paginated && update.overflow) anchorOffset = 0
-            }
+            if (!response.paginated && update.overflow) anchorOffset = 0
             val fullPollWindow = response.pollIds != null && update.added > 0 &&
                 response.builds.size == BUILD_POLL_PAGE_LIMIT * BUILD_LIST_PAGE_SIZE
             if (!response.paginated && (update.overflow || fullPollWindow)) hasMore.value = true

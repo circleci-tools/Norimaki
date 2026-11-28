@@ -155,6 +155,33 @@ class BuildListRequestsTest : DescribeSpec({
             }
         }
 
+        it("loads every older build once after a newer build disappears") {
+            val scheduler = TestScheduler()
+            val apiBuilds = (40 downTo 1).map { build(it, "success") }.toMutableList()
+            val requests = BuildListRequests(scheduler, scheduler, scheduler, { Observable.empty() }) { offset ->
+                Observable.just(apiBuilds.drop(offset).take(BUILD_LIST_PAGE_SIZE))
+            }
+            val builds = requests.builds.test()
+            val initialLoad = requests.start()
+            try {
+                scheduler.triggerActions()
+                builds.values().last().map { it.buildNum } shouldBe (40 downTo 21).toList()
+
+                apiBuilds.removeAt(0)
+                repeat(3) {
+                    requests.loadNextPage()
+                    scheduler.triggerActions()
+                }
+
+                builds.values().last().map { it.buildNum } shouldBe (40 downTo 1).toList()
+                requests.hasMore.value shouldBe false
+                requests.loadNextPage() shouldBe null
+            } finally {
+                initialLoad.dispose()
+                builds.dispose()
+            }
+        }
+
         it("recovers unseen builds at a deleted pagination anchor's queue time") {
             val tail = build(21, "success")
             val retained = (40 downTo 22).map { build(it, "success") } + tail
@@ -196,7 +223,7 @@ class BuildListRequestsTest : DescribeSpec({
             scheduler.triggerActions()
             requests.loadNextPage()
             scheduler.triggerActions()
-            offsets shouldBe listOf(0, 20)
+            offsets shouldBe listOf(0, 0)
             polling.dispose()
             initialLoad.dispose()
         }
@@ -209,7 +236,7 @@ class BuildListRequestsTest : DescribeSpec({
             val next = build(41, "success")
             val requests = BuildListRequests(scheduler, computation, scheduler, { Observable.empty() }) { offset ->
                 offsets.add(offset)
-                Observable.just(listOf(if (offset == 0) first else next))
+                Observable.just(if (offsets.size == 1) listOf(first) else listOf(first, next))
             }
 
             val builds = requests.builds.test()
@@ -233,7 +260,7 @@ class BuildListRequestsTest : DescribeSpec({
             scheduler.triggerActions()
             computation.triggerActions()
             scheduler.triggerActions()
-            offsets shouldBe listOf(0, 20, 20)
+            offsets shouldBe listOf(0, 0, 0)
             builds.assertValues(emptyList(), listOf(first), listOf(first, next))
             polling.dispose()
             initialLoad.dispose()
@@ -283,7 +310,7 @@ class BuildListRequestsTest : DescribeSpec({
                 offsets.add(offset)
                 when {
                     offsets.size == 1 -> Observable.just(listOf(running))
-                    offset == 0 -> Observable.just(listOf(successful))
+                    offsets.size == 3 -> Observable.just(listOf(successful))
                     else -> olderPage
                 }
             }
@@ -295,7 +322,7 @@ class BuildListRequestsTest : DescribeSpec({
             requests.loadNextPage()
             scheduler.triggerActions()
             scheduler.advanceTimeBy(10, SECONDS)
-            offsets shouldBe listOf(0, 20, 0)
+            offsets shouldBe listOf(0, 0, 0)
             builds.values().last().map { it.status } shouldBe listOf("success")
 
             olderPage.onNext(listOf(running, unseen))

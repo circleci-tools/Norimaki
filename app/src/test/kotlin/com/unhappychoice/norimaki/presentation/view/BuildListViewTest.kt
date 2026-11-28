@@ -71,9 +71,6 @@ class BuildListViewTest {
             .copy(queuedAt = queuedAt)
         val api = mockk<CircleCIAPIClientV1_1>()
         every { api.firstBuildPage() } returns Observable.just(listOf(build))
-        every {
-            api.getProjectBuilds(vcsType = "github", userName = "owner", project = "repo", offset = 20, limit = 20)
-        } returns Observable.just(emptyList())
         val scheduler = TestScheduler()
         val mainLooper = shadowOf(Looper.getMainLooper())
         val scope = MortarScope.buildRootScope()
@@ -101,7 +98,7 @@ class BuildListViewTest {
 
                 scheduler.advanceTimeBy(10, SECONDS)
                 drainRequests(scheduler)
-                verify(exactly = 2) { api.firstBuildPage() }
+                verify(exactly = 3) { api.firstBuildPage() }
                 mainLooper.idleFor(12, SECONDS)
 
                 assertEquals("2m ago", queuedAt.getTimeAgo())
@@ -262,7 +259,7 @@ class BuildListViewTest {
                 dispatchScroll(binding, 0, 0)
                 scheduler.advanceTimeBy(BuildListPresenter.BUILD_LIST_POLLING_SECONDS, SECONDS)
                 drainRequests(scheduler)
-                verify(exactly = 2) { api.historyPage(projectId, 0) }
+                verify(exactly = 3) { api.historyPage(projectId, 0) }
                 verify(exactly = 1) { api.historyPage(projectId, 20) }
                 assertTrue(binding.retryBuildPage.isVisible)
 
