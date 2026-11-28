@@ -18,6 +18,9 @@ import org.kodein.di.instance
 class APITokenView(context: Context?, attr: AttributeSet?) : BaseView<APITokenView>(context, attr) {
     override val presenter: APITokenPresenter by instance()
 
+    internal val isSubmissionPending: Boolean
+        get() = presenter.model.verification.value == TokenVerification.VERIFYING
+
     private val verificationObserver = Observer<TokenVerification>(::renderVerification)
 
     private val binding by lazy {
