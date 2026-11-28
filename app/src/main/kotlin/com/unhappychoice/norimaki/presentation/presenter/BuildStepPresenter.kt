@@ -95,6 +95,7 @@ class BuildStepPresenter internal constructor(
                     allowLogSearch()
                 },
                 onError = {
+                    canRetryStepLoad.value = true
                     logLoadFailed.value = true
                     allowLogSearch()
                 }
@@ -108,7 +109,6 @@ class BuildStepPresenter internal constructor(
         display: Scheduler
     ): Observable<String> = pollBuildStep(stepId, previousStep = progress.step) { buildId.load(client) }
         .subscribeOnIoObserveOnUI()
-        .doOnError { canRetryStepLoad.value = true }
         .concatMap { (build, step) ->
             view?.showStep(step)
             progress.step = step
