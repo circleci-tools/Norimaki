@@ -22,6 +22,9 @@ jobs:
           command: python3 scripts/test-gradle-wrapper.py
       - restore_gradle_cache
       - run:
+          name: Test Gradle dependency verification
+          command: python3 scripts/ci/test-gradle-dependency-verification.py
+      - run:
           name: Download Dependencies
           command: ./gradlew dependencies
       - run:
@@ -106,14 +109,18 @@ jobs:
       - run:
           name: Create release Gradle user home
           command: |
+            if [[ ! -s gradle/verification-metadata.xml ]]; then
+              echo "Missing Gradle dependency verification metadata." >&2
+              exit 1
+            fi
             release_gradle_home=$(mktemp -d)
             printf 'export GRADLE_USER_HOME=%q\n' "$release_gradle_home" >> "$BASH_ENV"
       - run:
           name: Validate release tag
-          command: ./gradlew :app:validateReleaseTag
+          command: ./gradlew --dependency-verification strict :app:validateReleaseTag
       - run:
           name: Publish APK
-          command: ./gradlew publishReleaseApk --track internal
+          command: ./gradlew --dependency-verification strict publishReleaseApk --track internal
 
 workflows:
   test-and-deploy:
