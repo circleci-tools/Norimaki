@@ -169,7 +169,9 @@ internal class BuildListRequests(
             if (update.overflow || (!response.paginated && update.added > 0)) {
                 if (anchorOffset == null || !response.paginated && update.overflow) anchorOffset = 0
             }
-            if (!response.paginated && update.overflow) hasMore.value = true
+            val fullPollWindow = response.pollIds != null && update.added > 0 &&
+                response.builds.size == BUILD_POLL_PAGE_LIMIT * BUILD_LIST_PAGE_SIZE
+            if (!response.paginated && (update.overflow || fullPollWindow)) hasMore.value = true
             response.pollIds?.let { lastPollIds = it }
         }
         latestRequestByBuild.keys.retainAll(retained.ids)
