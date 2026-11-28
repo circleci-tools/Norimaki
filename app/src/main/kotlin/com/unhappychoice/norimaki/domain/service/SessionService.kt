@@ -8,11 +8,13 @@ import com.gojuno.koptional.Optional
 import com.gojuno.koptional.Some
 import com.unhappychoice.norimaki.domain.model.BuildId
 import io.reactivex.Observable
+import io.reactivex.Scheduler
 import io.reactivex.Single
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 class VerifiedSession(
     val token: String,
@@ -50,34 +52,47 @@ class SessionService(
     private val readToken: () -> String,
     private val writeToken: (String) -> Unit,
     private val createClient: (String) -> CircleCIAPIClientV1_1,
-    private val verify: (CircleCIAPIClientV1_1) -> Single<User>
+    private val verify: (CircleCIAPIClientV1_1) -> Single<User>,
+    private val ioScheduler: Scheduler = Schedulers.trampoline(),
+    private val observerScheduler: Scheduler = Schedulers.trampoline()
 ) {
     private val active = BehaviorSubject.createDefault<Optional<VerifiedSession>>(None)
     private val lock = Any()
+    private val replacementRequests = AtomicInteger()
     private var attempt = 0
     private var pendingRestore: Single<VerifiedSession>? = null
 
-    val changes: Observable<Optional<VerifiedSession>> = active.hide()
+    val changes: Observable<Optional<VerifiedSession>> = active.observeOn(observerScheduler)
     val hasVerifiedSession: Boolean get() = active.value?.toNullable() != null
-    val savedToken: String get() = readToken()
+
+    fun savedToken(): Single<String> = Single.fromCallable { readToken() }
+        .subscribeOn(ioScheduler)
+        .observeOn(observerScheduler)
 
     fun restore(): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             active.value?.toNullable()?.let { Single.just(it) } ?: pendingRestore ?: startRestore()
         }
-    }
+    }.subscribeOn(ioScheduler).observeOn(observerScheduler)
 
     fun replace(token: String): Single<VerifiedSession> = Single.defer {
+        val request = replacementRequests.incrementAndGet()
+        startReplacement(token, request).subscribeOn(ioScheduler)
+    }.observeOn(observerScheduler)
+
+    private fun startReplacement(token: String, request: Int): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
+            check(request == replacementRequests.get()) { "Authentication was superseded" }
             pendingRestore = null
             authenticate(token, ++attempt, persistToken = true)
         }
     }
 
     private fun startRestore(): Single<VerifiedSession> {
-        val token = savedToken
         val currentAttempt = ++attempt
-        return authenticate(token, currentAttempt, persistToken = false)
+        return Single.fromCallable { readToken() }
+            .subscribeOn(ioScheduler)
+            .flatMap { authenticate(it, currentAttempt, persistToken = false) }
             .doOnEvent { _, _ ->
                 synchronized(lock) {
                     if (currentAttempt == attempt) pendingRestore = null
@@ -94,7 +109,7 @@ class SessionService(
         }
         require(token.isNotBlank()) { "Enter an API token" }
         val client = createClient(token)
-        verify(client).map { user ->
+        verify(client).observeOn(ioScheduler).map { user ->
             synchronized(lock) {
                 check(currentAttempt == attempt) { "Authentication was superseded" }
                 VerifiedSession(token, user, client).also {

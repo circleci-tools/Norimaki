@@ -8,9 +8,10 @@ import com.unhappychoice.norimaki.NorimakiApplication
 import com.unhappychoice.norimaki.domain.service.ArtifactDownloader
 import com.unhappychoice.norimaki.domain.service.EventBusService
 import com.unhappychoice.norimaki.domain.service.SessionService
-import com.unhappychoice.norimaki.extension.subscribeOnIoObserveOnUI
 import com.unhappychoice.norimaki.infrastructure.preference.APITokenPreference
 import com.unhappychoice.norimaki.infrastructure.testresults.TestResultsClient
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import org.kodein.di.*
 
 fun applicationModule(application: NorimakiApplication) = DI.Module("application") {
@@ -24,12 +25,14 @@ fun applicationModule(application: NorimakiApplication) = DI.Module("application
             .create()
     }
     bind<SessionService>() with singleton {
-        val preference = APITokenPreference(application)
+        val preference by lazy { APITokenPreference(application) }
         SessionService(
             readToken = { preference.token },
             writeToken = { preference.token = it },
             createClient = { CircleCIAPIClient(it).client1_1() },
-            verify = { it.getMe().subscribeOnIoObserveOnUI().firstOrError() }
+            verify = { it.getMe().firstOrError() },
+            ioScheduler = Schedulers.io(),
+            observerScheduler = AndroidSchedulers.mainThread()
         )
     }
     bind<TestResultsClient>() with factory { token: String -> TestResultsClient(token) }

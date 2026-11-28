@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import java.io.IOException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -35,16 +36,10 @@ class APITokenPreference internal constructor(
         }
         set(value) {
             val key = secretKey
-            val toStore = if (key == null) {
-                value
-            } else {
-                try {
-                    encrypt(value, key)
-                } catch (e: Exception) {
-                    return
-                }
+            val toStore = if (key == null) value else encrypt(value, key)
+            if (!preferences.edit().putString(TOKEN_KEY, toStore).commit()) {
+                throw IOException("Could not save the API token")
             }
-            preferences.edit().putString(TOKEN_KEY, toStore).apply()
         }
 
     private fun encrypt(value: String, key: SecretKey): String {
