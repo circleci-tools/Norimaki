@@ -11,11 +11,11 @@ import com.unhappychoice.norimaki.BackTestApplication
 import com.unhappychoice.norimaki.MainActivity
 import com.unhappychoice.norimaki.R
 import com.unhappychoice.norimaki.domain.service.SessionService
+import com.unhappychoice.norimaki.extension.androidMainScheduler
 import com.unhappychoice.norimaki.presentation.adapter.ProjectAdapter
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
-import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.plugins.RxJavaPlugins
 import io.reactivex.schedulers.Schedulers
 import java.io.IOException
@@ -60,7 +60,7 @@ class NavigationViewTest {
         val projects = listOf(mockk<Project>(relaxed = true))
         application.projects = Observable.just(projects)
         application.credentialScheduler = Schedulers.from(worker)
-        application.sessionObserverScheduler = AndroidSchedulers.mainThread()
+        application.sessionObserverScheduler = androidMainScheduler()
         application.beforeReadToken = {
             check(Looper.myLooper() != Looper.getMainLooper())
             readStarted.countDown()
@@ -96,7 +96,7 @@ class NavigationViewTest {
         val writeStarted = CountDownLatch(1)
         val releaseWrite = CountDownLatch(1)
         application.credentialScheduler = Schedulers.from(worker)
-        application.sessionObserverScheduler = AndroidSchedulers.mainThread()
+        application.sessionObserverScheduler = androidMainScheduler()
         application.beforeWriteToken = {
             check(Looper.myLooper() != Looper.getMainLooper())
             writeStarted.countDown()
