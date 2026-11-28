@@ -23,16 +23,30 @@ fixture=$(mktemp -d)
 trap 'rm -rf "$fixture"' EXIT
 mkdir "$fixture/shared"
 export TMPDIR="$fixture" BASH_ENV="$fixture/bash_env" GRADLE_USER_HOME="$fixture/shared"
+if output=$(cd "$fixture" && bash -eo pipefail -c "$setup_command" 2>&1); then
+    echo "Expected the deploy job to fail without dependency verification metadata." >&2
+    exit 1
+fi
+if [[ "$output" != *"Missing Gradle dependency verification metadata."* ]]; then
+    printf '%s\n' "$output" >&2
+    exit 1
+fi
 bash -eo pipefail -c "$setup_command"
 if ! bash -ec '[[ "$GRADLE_USER_HOME" == "$TMPDIR/"* && "$GRADLE_USER_HOME" != "$TMPDIR/shared" && -d "$GRADLE_USER_HOME" && -z "$(ls -A "$GRADLE_USER_HOME")" ]]'; then
     echo "Expected release Gradle steps to inherit a fresh Gradle user home." >&2
     exit 1
 fi
 
+validate_command=$(sed -n 's/^ *command: \(.*validateReleaseTag.*\)$/\1/p' <<< "$deploy_job")
+if [[ "$validate_command" != "./gradlew --dependency-verification strict :app:validateReleaseTag" ]]; then
+    echo "Expected strict dependency verification when validating the release tag." >&2
+    exit 1
+fi
+
 publish_command=$(sed -n 's/^ *command: \(.*publishReleaseApk.*\)$/\1/p' <<< "$deploy_job")
 
-if [[ "$publish_command" != "./gradlew publishReleaseApk --track internal" ]]; then
-    echo "Expected the deploy job to publish explicitly to the internal Play track." >&2
+if [[ "$publish_command" != "./gradlew --dependency-verification strict publishReleaseApk --track internal" ]]; then
+    echo "Expected the deploy job to publish to the internal Play track with strict dependency verification." >&2
     exit 1
 fi
 
