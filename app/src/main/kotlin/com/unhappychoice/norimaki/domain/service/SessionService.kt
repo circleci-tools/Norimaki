@@ -8,6 +8,7 @@ import com.gojuno.koptional.Optional
 import com.gojuno.koptional.Some
 import com.unhappychoice.norimaki.domain.model.BuildId
 import io.reactivex.Observable
+import io.reactivex.Scheduler
 import io.reactivex.Single
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
@@ -52,6 +53,8 @@ class SessionService(
     private val readToken: () -> String,
     private val writeToken: (String) -> Unit,
     private val createClient: (String) -> CircleCIAPIClientV1_1,
+    private val persistenceScheduler: Scheduler = Schedulers.trampoline(),
+    private val observerScheduler: Scheduler = Schedulers.trampoline(),
     private val verify: (CircleCIAPIClientV1_1) -> Single<User>
 ) {
     private val active = BehaviorSubject.createDefault<Optional<VerifiedSession>>(None)
@@ -59,7 +62,7 @@ class SessionService(
     private var attempt = 0
     private var pendingRestore: Single<VerifiedSession>? = null
 
-    val changes: Observable<Optional<VerifiedSession>> = active.hide()
+    val changes: Observable<Optional<VerifiedSession>> = active.hide().observeOn(observerScheduler)
     val hasVerifiedSession: Boolean get() = active.value?.toNullable() != null
     val savedToken: String get() = readToken()
 
@@ -67,14 +70,14 @@ class SessionService(
         synchronized(lock) {
             active.value?.toNullable()?.let { Single.just(it) } ?: pendingRestore ?: startRestore()
         }
-    }
+    }.subscribeOn(persistenceScheduler).observeOn(observerScheduler)
 
     fun replace(token: String): Single<VerifiedSession> = Single.defer {
         synchronized(lock) {
             pendingRestore = null
             authenticate(token, ++attempt, persistToken = true)
         }
-    }
+    }.subscribeOn(persistenceScheduler).observeOn(observerScheduler)
 
     private fun startRestore(): Single<VerifiedSession> {
         val token = savedToken
@@ -96,7 +99,7 @@ class SessionService(
         }
         require(token.isNotBlank()) { "Enter an API token" }
         val client = createClient(token)
-        verify(client).map { user ->
+        verify(client).observeOn(persistenceScheduler).map { user ->
             synchronized(lock) {
                 check(currentAttempt == attempt) { "Authentication was superseded" }
                 if (persistToken) saveToken(token)

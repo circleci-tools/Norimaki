@@ -8,6 +8,9 @@ import com.unhappychoice.norimaki.domain.service.SessionService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import io.reactivex.Scheduler
+import io.reactivex.schedulers.Schedulers
+import io.reactivex.schedulers.TestScheduler
 import io.reactivex.subjects.SingleSubject
 
 class APITokenViewModelTest : DescribeSpec({
@@ -23,20 +26,32 @@ class APITokenViewModelTest : DescribeSpec({
         ArchTaskExecutor.getInstance().setDelegate(null)
     }
 
-    it("delivers a verification that succeeds between form observers") {
-        val fixture = VerificationFixture()
+    it("saves on the persistence scheduler and delivers success between form observers on the UI scheduler") {
+        val persistence = TestScheduler()
+        val ui = TestScheduler()
+        val fixture = VerificationFixture(persistence, ui)
+        val accounts = fixture.session.changes.test()
         val originalStates = mutableListOf<TokenVerification>()
         val original = Observer<TokenVerification> { originalStates.add(it) }
         fixture.model.verification.observeForever(original)
 
         fixture.model.submit("candidate")
+        persistence.triggerActions()
+        ui.triggerActions()
         fixture.model.verification.removeObserver(original)
         fixture.pending.onSuccess(mockk())
+        fixture.savedToken shouldBe "saved"
+        persistence.triggerActions()
+        fixture.savedToken shouldBe "candidate"
+        fixture.model.verification.value shouldBe TokenVerification.VERIFYING
+        accounts.values().mapNotNull { it.toNullable()?.token } shouldBe emptyList<String>()
+
+        ui.triggerActions()
+        accounts.values().mapNotNull { it.toNullable()?.token } shouldBe listOf("candidate")
         fixture.model.verification.observeForever { fixture.states.add(it) }
 
         originalStates shouldBe listOf(TokenVerification.IDLE, TokenVerification.VERIFYING)
         fixture.states shouldBe listOf(TokenVerification.VERIFIED)
-        fixture.savedToken shouldBe "candidate"
         fixture.verifications shouldBe 1
     }
 
@@ -64,21 +79,25 @@ class APITokenViewModelTest : DescribeSpec({
     }
 })
 
-private class VerificationFixture {
+private class VerificationFixture(
+    persistenceScheduler: Scheduler = Schedulers.trampoline(),
+    observerScheduler: Scheduler = Schedulers.trampoline()
+) {
     var savedToken = "saved"
     var verifications = 0
     var pending = SingleSubject.create<User>()
     val states = mutableListOf<TokenVerification>()
 
-    val model = APITokenViewModel(
-        SessionService(
-            readToken = { savedToken },
-            writeToken = { savedToken = it },
-            createClient = { mockk() },
-            verify = {
-                verifications++
-                pending
-            }
-        )
+    val session = SessionService(
+        readToken = { savedToken },
+        writeToken = { savedToken = it },
+        createClient = { mockk() },
+        persistenceScheduler = persistenceScheduler,
+        observerScheduler = observerScheduler,
+        verify = {
+            verifications++
+            pending
+        }
     )
+    val model = APITokenViewModel(session)
 }

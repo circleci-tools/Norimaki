@@ -348,7 +348,7 @@ class BuildListPresenterTest : DescribeSpec({
         it("starts polling after authentication finishes while the view is started") {
             val api = mockk<CircleCIAPIClientV1_1>()
             val authentication = SingleSubject.create<User>()
-            val session = SessionService({ "test-token" }, {}, { api }, { authentication })
+            val session = SessionService({ "test-token" }, {}, { api }) { authentication }
             every { api.pageAt(0) } returns Observable.just(emptyList())
             val presenter = presenter(api, session = session)
             startPolling(presenter)
