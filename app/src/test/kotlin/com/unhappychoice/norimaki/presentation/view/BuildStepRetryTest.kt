@@ -20,9 +20,9 @@ import com.unhappychoice.norimaki.presentation.screen.BuildStepScreen
 import io.mockk.every
 import io.mockk.mockk
 import io.reactivex.Observable
-import io.reactivex.android.plugins.RxAndroidPlugins
 import io.reactivex.plugins.RxJavaPlugins
-import io.reactivex.schedulers.Schedulers
+import io.reactivex.rxjava3.android.plugins.RxAndroidPlugins
+import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.schedulers.TestScheduler
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
